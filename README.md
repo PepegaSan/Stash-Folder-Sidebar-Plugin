@@ -20,10 +20,21 @@ A [Stash](https://github.com/stashapp/stash) UI plugin: fixed sidebar with your 
 
 ## Installation
 
+### From Stash (plugin source URL)
+
+1. In Stash: **Settings → Plugins → Available Plugins**
+2. Add this **source URL** (after [GitHub Pages](#github-pages-one-time) is enabled on the repo):
+
+   ```
+   https://pepegasan.github.io/Stash-Folder-Sidebar-Plugin/main/index.yml
+   ```
+
+3. Install **Folder Sidebar** from the list, then reload plugins if prompted.
+
 ### Manual
 
 1. Download or clone this repository.
-2. Copy the plugin files into your Stash plugins directory as **`folderSidebar`**:
+2. Copy everything from **`plugins/folderSidebar/`** into your Stash plugins directory as **`folderSidebar`**:
 
    | OS | Path |
    |----|------|
@@ -45,11 +56,21 @@ A [Stash](https://github.com/stashapp/stash) UI plugin: fixed sidebar with your 
 
 ```bash
 git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
-cp -r Stash-Folder-Sidebar-Plugin/* ~/.stash/plugins/folderSidebar/
+cp -r Stash-Folder-Sidebar-Plugin/plugins/folderSidebar ~/.stash/plugins/folderSidebar
 cp ~/.stash/plugins/folderSidebar/folders.json.example ~/.stash/plugins/folderSidebar/folders.json
 ```
 
 Then reload plugins in Stash.
+
+## GitHub Pages (one-time)
+
+For the source URL above to work, enable Pages on this repository:
+
+1. GitHub repo → **Settings → Pages**
+2. **Build and deployment → Source:** GitHub Actions
+3. Push to `main` (or run the **Deploy repository to GitHub Pages** workflow manually)
+
+The workflow builds `index.yml` and plugin zips from `plugins/` using `build_site.sh` (same pattern as [stashapp/plugins-repo-template](https://github.com/stashapp/plugins-repo-template)).
 
 ## Configuration
 
