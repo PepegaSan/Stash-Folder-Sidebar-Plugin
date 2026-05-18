@@ -1,0 +1,336 @@
+.folder-sidebar-page {
+  display: flex;
+  min-height: calc(100vh - 56px);
+  margin: 0 -0.75rem;
+}
+
+.folder-sidebar-nav {
+  width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--bs-border-color, #444);
+  background: var(--bs-body-bg, #1a1a1a);
+  overflow-y: auto;
+  padding: 0.75rem 0;
+}
+
+.folder-sidebar-nav h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
+  padding: 0 1rem 0.5rem;
+  margin: 0;
+}
+
+.folder-sidebar-nav-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.folder-sidebar-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.folder-sidebar-nav-btn.active {
+  background: rgba(var(--bs-primary-rgb, 13, 110, 253), 0.2);
+  font-weight: 600;
+}
+
+.folder-sidebar-nav-path {
+  display: block;
+  font-size: 0.7rem;
+  opacity: 0.55;
+  margin-top: 0.15rem;
+  word-break: break-all;
+  line-height: 1.2;
+}
+
+.folder-sidebar-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+}
+
+.folder-sidebar-header {
+  margin-bottom: 1rem;
+}
+
+.folder-sidebar-header h1 {
+  font-size: 1.35rem;
+  margin: 0 0 0.25rem;
+}
+
+.folder-sidebar-header .text-muted {
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.folder-sidebar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.folder-sidebar-row {
+  border-bottom: 1px solid var(--bs-border-color, #333);
+}
+
+.folder-sidebar-row a {
+  display: block;
+  padding: 0.45rem 0.25rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.folder-sidebar-row a:hover {
+  color: var(--bs-link-hover-color, #6ea8fe);
+}
+
+.folder-sidebar-row-title {
+  font-weight: 500;
+}
+
+.folder-sidebar-row-meta {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin-top: 0.15rem;
+  word-break: break-all;
+}
+
+.folder-sidebar-empty,
+.folder-sidebar-hint {
+  opacity: 0.75;
+  font-size: 0.9rem;
+}
+
+.folder-sidebar-error {
+  color: var(--bs-danger, #dc3545);
+  margin-bottom: 1rem;
+}
+
+.folder-sidebar-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem;
+  margin-bottom: 0.35rem;
+}
+
+.folder-sidebar-crumb {
+  border: none;
+  background: transparent;
+  color: var(--bs-link-color, #6ea8fe);
+  padding: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.folder-sidebar-crumb:hover {
+  text-decoration: underline;
+}
+
+.folder-sidebar-crumb.active {
+  color: inherit;
+  cursor: default;
+  text-decoration: none;
+}
+
+.folder-sidebar-crumb-sep {
+  opacity: 0.5;
+  user-select: none;
+}
+
+.folder-sidebar-current-path {
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.folder-sidebar-up-btn {
+  display: inline-block;
+  margin-bottom: 1rem;
+  border: none;
+  background: transparent;
+  color: var(--bs-link-color, #6ea8fe);
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.folder-sidebar-up-btn:hover {
+  text-decoration: underline;
+}
+
+.folder-sidebar-section {
+  margin-bottom: 1.5rem;
+}
+
+.folder-sidebar-section-title {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.7;
+  margin: 0 0 0.6rem;
+}
+
+.folder-sidebar-subfolder-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.5rem;
+}
+
+.folder-sidebar-subfolder-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--bs-border-color, #444);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  padding: 0.55rem 0.65rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.folder-sidebar-subfolder-btn:hover {
+  background: rgba(var(--bs-primary-rgb, 13, 110, 253), 0.15);
+  border-color: rgba(var(--bs-primary-rgb, 13, 110, 253), 0.4);
+}
+
+.folder-sidebar-subfolder-icon {
+  flex-shrink: 0;
+}
+
+/* Plugin settings (Settings → Plugins → Folder Sidebar) */
+.folder-sidebar-plugin-settings {
+  max-width: 42rem;
+}
+
+.folder-sidebar-settings-intro {
+  margin-bottom: 0.75rem;
+}
+
+.folder-sidebar-settings-note {
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--bs-primary, #0d6efd);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.folder-sidebar-settings-list-section {
+  margin-bottom: 1rem;
+}
+
+.folder-sidebar-settings-list {
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--bs-border-color, #444);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.folder-sidebar-settings-list-header,
+.folder-sidebar-settings-list-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 0.75fr) minmax(0, 2fr) auto;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  align-items: center;
+}
+
+.folder-sidebar-settings-list-actions-hdr {
+  width: 4.5rem;
+}
+
+.folder-sidebar-settings-delete-btn {
+  white-space: nowrap;
+}
+
+.folder-sidebar-settings-list-header {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--bs-border-color, #444);
+}
+
+.folder-sidebar-settings-list-row {
+  border-bottom: 1px solid var(--bs-border-color, #333);
+  font-size: 0.9rem;
+}
+
+.folder-sidebar-settings-list-row:last-child {
+  border-bottom: none;
+}
+
+.folder-sidebar-settings-path {
+  word-break: break-all;
+  font-size: 0.8rem;
+  opacity: 0.9;
+}
+
+.folder-sidebar-settings-add {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--bs-border-color, #444);
+}
+
+.folder-sidebar-settings-toggle {
+  display: block;
+  text-align: left;
+}
+
+.folder-sidebar-settings-add-body {
+  padding-top: 0.25rem;
+}
+
+.folder-sidebar-settings-delete-hint {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.folder-sidebar-settings-json {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+/* Top nav: match stock menu item link wrapper */
+.top-nav .folder-sidebar-nav-link-wrap {
+  color: inherit;
+  display: block;
+  text-decoration: none;
+}
+
+.top-nav .folder-sidebar-nav-link-wrap:hover {
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (max-width: 768px) {
+  .folder-sidebar-page {
+    flex-direction: column;
+  }
+
+  .folder-sidebar-nav {
+    width: 100%;
+    max-height: 35vh;
+    border-right: none;
+    border-bottom: 1px solid var(--bs-border-color, #444);
+  }
+}
