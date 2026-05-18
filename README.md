@@ -1,58 +1,102 @@
-# Folder Sidebar (Stash UI plugin)
+# Stash Folder Sidebar
 
-Fixed sidebar with configurable root folders. Pick a folder, drill into subfolders, and see a plain list of scenes in the current directory only (no filter UI).
+A [Stash](https://github.com/stashapp/stash) UI plugin: fixed sidebar with your own root folders, drill into subfolders, and list scenes in the current directory only — no filter UI.
+
+![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
+![Version](https://img.shields.io/badge/version-1.4.0-informational)
+
+## Features
+
+- **Folder** entry in the main navigation (with icon)
+- Configurable **root folders** (sidebar + settings UI)
+- **Subfolders** per root, breadcrumb navigation, **up one level**
+- **Files in this folder** only (not recursive into subfolders)
+- Settings UI: add folders (label + path), **Delete** per row, collapsible sections, optional JSON editor
+
+## Requirements
+
+- Stash with UI plugin support (recent stable builds)
+- Scenes indexed under the paths you configure
 
 ## Installation
 
-1. Copy the `stash-folder-sidebar` folder to `%USERPROFILE%\.stash\plugins\folderSidebar`  
-   (or your Stash `plugins` directory next to `config.yml`).
-2. In Stash: **Settings → Plugins → Reload plugins**
-3. Enable **Folder Sidebar** if it is disabled
-4. Edit **`folders.json`** with your real paths
+### Manual
+
+1. Download or clone this repository.
+2. Copy the plugin files into your Stash plugins directory as **`folderSidebar`**:
+
+   | OS | Path |
+   |----|------|
+   | Windows | `%USERPROFILE%\.stash\plugins\folderSidebar\` |
+   | Linux / macOS | `~/.stash/plugins/folderSidebar/` |
+
+   Required files in that folder:
+
+   - `folderSidebar.yml`
+   - `folderSidebar.js`
+   - `folderSidebar.css`
+   - `folders.json` (copy from `folders.json.example`)
+
+3. In Stash: **Settings → Plugins → Reload plugins**
+4. Enable **Folder Sidebar** if needed
+5. Configure folders (see below)
+
+### Git clone (example)
+
+```bash
+git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
+cp -r Stash-Folder-Sidebar-Plugin/* ~/.stash/plugins/folderSidebar/
+cp ~/.stash/plugins/folderSidebar/folders.json.example ~/.stash/plugins/folderSidebar/folders.json
+```
+
+Then reload plugins in Stash.
 
 ## Configuration
 
-### `folders.json` (recommended)
+### Settings UI (recommended)
+
+**Settings → Plugins → Folder Sidebar**
+
+- **Root folders** — list of configured entries (collapsible)
+- **Add folder** — **Label** + **Path**, then **Add** (use normal paths: `D:\Media\AMV`, not JSON escaping)
+- **Delete** — removes a row (with confirmation)
+- **Edit JSON (advanced)** — bulk edit; in JSON files use `\\` for backslashes
+
+After you add a folder in the UI, settings are stored in Stash and override `folders.json`.
+
+### `folders.json` (optional file)
+
+Copy `folders.json.example` to `folders.json` and edit:
 
 ```json
 [
-  { "label": "Project A", "path": "D:\\Media\\Special\\ProjectA" },
+  { "label": "Project A", "path": "/data/Special/ProjectA" },
   { "label": "NAS PMV", "path": "\\\\NAS\\Videos\\PMV" }
 ]
 ```
 
-- **`label`**: Name shown in the sidebar  
-- **`path`**: Folder path as Stash stores it (double backslashes on Windows: `\\`)  
-- **Root folders** on the left → **Subfolders** in the main panel → **Files** lists only the current folder (not recursive)  
-- Breadcrumb and **Up one level** for navigation
-
-### Plugin settings UI
-
-Under **Settings → Plugins → Folder Sidebar**:
-
-- **Label** and **Path** fields plus **Add** append a root folder (saved automatically).
-- Configured folders are listed above the form.
-- **Remove:** click **Delete** on a row (confirmation dialog). Optional: **Edit JSON (advanced)** for bulk edits.
-
-Once you add a folder here, it is stored in plugin settings and overrides `folders.json`.
+- **`label`**: Name in the sidebar  
+- **`path`**: Exact path as shown in Stash **File info** for a scene in that tree  
+- In **JSON only**: double backslashes on Windows (`D:\\Media\\...`)
 
 ## Usage
 
-- Main navigation: **Folder**
-- Direct URL: `http://localhost:9999/plugin/folder-sidebar` (adjust port)
-- Query `?folder=0` selects the first entry in the JSON list
+- Click **Folder** in the top navigation  
+- Left: root folders from config  
+- Pick a subfolder or view files in the current folder  
+- Direct link (same Stash session): `http://localhost:9999/plugin/folder-sidebar`  
+  - Opening in a **new tab** or refresh may show **404** — [known Stash plugin route limitation](https://github.com/stashapp/stash/issues/4510)
 
 ## Notes
 
-- Lists **scenes** only (not images or galleries).  
-- Paths must match Stash-indexed file paths (copy from a scene’s **File info** tab).  
-- Large folders load all matches at once (`per_page: -1`); split roots if performance suffers.
+- **Scenes only** (not images/galleries)  
+- Paths must match Stash’s indexed paths (Docker: often `/data/...`, not `D:\...`)  
+- Very large folders load all scenes at once; split roots if needed  
 
-## Files
+## License
 
-| File | Purpose |
-|------|---------|
-| `folderSidebar.yml` | Plugin manifest |
-| `folderSidebar.js` | UI logic |
-| `folderSidebar.css` | Layout |
-| `folders.json` | Your folder list |
+MIT — see [LICENSE](LICENSE).
+
+## Author
+
+[PepegaSan](https://github.com/PepegaSan) — issues and PRs welcome on this repository.

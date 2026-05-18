@@ -1,7 +1,7 @@
 name: Folder Sidebar
 description: Sidebar with configurable folder shortcuts; browse subfolders and list scenes by path without filters
 version: 1.4.0
-url: https://github.com/stashapp/stash
+url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:
     - folderSidebar.js
@@ -12,5 +12,5 @@ ui:
 settings:
   foldersJson:
     displayName: Folder list (JSON storage)
-    description: "Managed by the folder editor in this settings panel. Do not edit unless you need to remove entries manually."
+    description: "Managed by the settings UI (Add/Delete) or Edit JSON (advanced)."
     type: STRING
