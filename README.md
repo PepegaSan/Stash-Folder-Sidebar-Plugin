@@ -204,6 +204,10 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 
 ## Changelog
 
+### Quick Markers 1.0.2
+
+- Fix plugin settings crash (`next is not a function`) when multiple UI plugins are installed
+
 ### Quick Markers 1.0.1
 
 - Plugin settings UI: preset list, add form, JSON editor in modal popup
@@ -211,6 +215,10 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 ### Quick Markers 1.0.0
 
 - Initial release: presets, Shift+I/O range, Shift+1–9 instant, on-scene panel
+
+### Folder Sidebar 1.4.2
+
+- Fix plugin settings patch when Folder Sidebar and Quick Markers are both installed
 
 ### Folder Sidebar 1.4.1
 

@@ -931,7 +931,7 @@
     );
   }
 
-  PluginApi.patch.instead("PluginSettings", function (props, _, next) {
+  PluginApi.patch.instead("PluginSettings", function (props, next) {
     if (props.pluginID !== PLUGIN_ID) {
       return next(props);
     }
