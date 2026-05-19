@@ -167,7 +167,13 @@ Markers are saved via GraphQL; open the **Markers** tab or refresh if the list d
 
 ## Configuration
 
-**Settings → Plugins → Quick Markers** — edit JSON:
+**Settings → Plugins → Quick Markers**
+
+- **Presets** list (collapsible) — view/delete presets, pick default for Shift+I/O
+- **Add preset** (collapsed) — label, tag name, hotkeys
+- **Edit JSON (advanced)…** — opens a **popup** for full JSON (hidden until you open it)
+
+JSON example (same as in the modal):
 
 ```json
 {
@@ -197,6 +203,10 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 ---
 
 ## Changelog
+
+### Quick Markers 1.0.1
+
+- Plugin settings UI: preset list, add form, JSON editor in modal popup
 
 ### Quick Markers 1.0.0
 
