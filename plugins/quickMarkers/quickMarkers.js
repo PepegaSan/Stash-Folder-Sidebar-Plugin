@@ -2,10 +2,42 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.0.5";
+  const PLUGIN_VERSION = "1.0.6";
   const ASSETS_PRESETS = "/plugin/" + PLUGIN_ID + "/assets/presets.json";
 
+  const DEFAULT_PRESETS_CONFIG = {
+    defaultPresetIndex: 0,
+    presets: [
+      {
+        id: "compilation",
+        label: "Compilation",
+        primaryTag: "Compilation",
+        title: "Compilation",
+        rangeInKey: "shift+i",
+        rangeOutKey: "shift+o",
+        instantKey: "shift+1",
+      },
+    ],
+  };
+
   console.info("[Quick Markers] loaded v" + PLUGIN_VERSION);
+
+  function getDefaultPresetsConfig() {
+    return {
+      defaultPresetIndex: DEFAULT_PRESETS_CONFIG.defaultPresetIndex,
+      presets: DEFAULT_PRESETS_CONFIG.presets.map(function (p) {
+        return {
+          id: p.id,
+          label: p.label,
+          primaryTag: p.primaryTag,
+          title: p.title,
+          rangeInKey: p.rangeInKey,
+          rangeOutKey: p.rangeOutKey,
+          instantKey: p.instantKey,
+        };
+      }),
+    };
+  }
 
   const PluginApi = window.PluginApi;
   if (!PluginApi) {
@@ -95,7 +127,7 @@
 
   async function loadPresetsFromFile() {
     const res = await fetch(ASSETS_PRESETS, { credentials: "same-origin" });
-    if (!res.ok) throw new Error("presets.json not found (" + res.status + ")");
+    if (!res.ok) return null;
     return parsePresetsJson(await res.text());
   }
 
@@ -113,11 +145,12 @@
             data && data.configuration ? data.configuration.plugins : null;
           let cfg = getPresetsFromSettings(plugins);
           if (!cfg) cfg = await loadPresetsFromFile();
+          if (!cfg) cfg = getDefaultPresetsConfig();
           if (!cancelled) setConfig(cfg);
         } catch (e) {
           if (!cancelled) {
             setError(e.message || String(e));
-            setConfig(null);
+            setConfig(getDefaultPresetsConfig());
           }
         }
       }
@@ -485,6 +518,7 @@
       presets: [],
     });
     const [usingFile, setUsingFile] = React.useState(false);
+    const [usingDefaults, setUsingDefaults] = React.useState(false);
     const [loadError, setLoadError] = React.useState(null);
     const [showPresetList, setShowPresetList] = React.useState(false);
     const [showAddForm, setShowAddForm] = React.useState(false);
@@ -509,31 +543,28 @@
               if (!cancelled) {
                 setConfig(fromSettings);
                 setUsingFile(false);
+                setUsingDefaults(false);
               }
               return;
             }
             const fromFile = await loadPresetsFromFile();
             if (!cancelled) {
-              setConfig(fromFile);
-              setUsingFile(true);
+              if (fromFile) {
+                setConfig(fromFile);
+                setUsingFile(true);
+                setUsingDefaults(false);
+              } else {
+                setConfig(getDefaultPresetsConfig());
+                setUsingFile(false);
+                setUsingDefaults(true);
+              }
             }
           } catch (e) {
             if (!cancelled) {
               setLoadError(e.message || String(e));
-              setConfig({
-                defaultPresetIndex: 0,
-                presets: [
-                  {
-                    id: "compilation",
-                    label: "Compilation",
-                    primaryTag: "Compilation",
-                    title: "Compilation",
-                    rangeInKey: "shift+i",
-                    rangeOutKey: "shift+o",
-                    instantKey: "shift+1",
-                  },
-                ],
-              });
+              setConfig(getDefaultPresetsConfig());
+              setUsingFile(false);
+              setUsingDefaults(true);
             }
           }
         }
@@ -551,6 +582,7 @@
       });
       setConfig(nextConfig);
       setUsingFile(false);
+      setUsingDefaults(false);
       tagIdCache.clear();
     }
 
@@ -656,7 +688,19 @@
             React.createElement("code", null, "presets.json"),
             ". Saving here overrides the file."
           )
-        : null,
+        : usingDefaults
+          ? React.createElement(
+              "p",
+              { className: "quick-markers-settings-note text-muted" },
+              "Using built-in defaults (no ",
+              React.createElement("code", null, "presets.json"),
+              " yet). Add a preset or click Save in JSON to store settings in Stash. Optional: copy ",
+              React.createElement("code", null, "presets.json.example"),
+              " → ",
+              React.createElement("code", null, "presets.json"),
+              " in the plugin folder."
+            )
+          : null,
       loadError
         ? React.createElement("p", { className: "text-warning" }, loadError)
         : null,

@@ -217,6 +217,10 @@ If the version line is missing or an old version number appears, the old `quickM
 
 ## Changelog
 
+### Quick Markers 1.0.6
+
+- Built-in default presets when `presets.json` is missing (no 404 error)
+
 ### Quick Markers 1.0.5
 
 - Safer `patch.instead` for settings; native HTML buttons; version line in settings for cache check
