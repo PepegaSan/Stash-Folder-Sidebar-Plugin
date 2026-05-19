@@ -945,9 +945,12 @@
     );
   }
 
-  PluginApi.patch.after("PluginSettings", function (props, result) {
-    if (props.pluginID !== PLUGIN_ID) {
-      return result;
+  PluginApi.patch.instead("PluginSettings", function () {
+    var args = Array.prototype.slice.call(arguments);
+    var next = args.pop();
+    var props = args[0];
+    if (!props || props.pluginID !== PLUGIN_ID) {
+      return next.apply(null, args);
     }
     return React.createElement(FolderPluginSettings, null);
   });

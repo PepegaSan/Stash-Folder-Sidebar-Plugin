@@ -198,11 +198,28 @@ JSON example (same as in the modal):
 
 ## Manual install
 
-Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.json` from the example, **Reload plugins**.
+Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.json` from the example, then reload (see below).
+
+### Reload plugins in Stash (important)
+
+`Ctrl+F5` alone is **not** enough — Stash loads plugin JavaScript separately from the main UI bundle.
+
+1. Replace files under `~/.stash/plugins/quickMarkers/` (all of them).
+2. **Settings → Plugins → Reload plugins** (wait until it finishes).
+3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
+4. Optional (Docker): restart the Stash container.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.0.5`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.0.5**.
+
+If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
 ---
 
 ## Changelog
+
+### Quick Markers 1.0.5
+
+- Safer `patch.instead` for settings; native HTML buttons; version line in settings for cache check
 
 ### Quick Markers 1.0.4
 
@@ -224,6 +241,10 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 ### Quick Markers 1.0.0
 
 - Initial release: presets, Shift+I/O range, Shift+1–9 instant, on-scene panel
+
+### Folder Sidebar 1.4.4
+
+- Safer `patch.instead` for plugin settings (works with Quick Markers)
 
 ### Folder Sidebar 1.4.3
 

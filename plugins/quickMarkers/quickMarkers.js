@@ -2,7 +2,10 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
+  const PLUGIN_VERSION = "1.0.5";
   const ASSETS_PRESETS = "/plugin/" + PLUGIN_ID + "/assets/presets.json";
+
+  console.info("[Quick Markers] loaded v" + PLUGIN_VERSION);
 
   const PluginApi = window.PluginApi;
   if (!PluginApi) {
@@ -460,8 +463,11 @@
     );
   }
 
-  PluginApi.patch.after("ScenePage", function (props, result) {
-    if (!props.scene) return result;
+  PluginApi.patch.after("ScenePage", function () {
+    var args = Array.prototype.slice.call(arguments);
+    var result = args[args.length - 1];
+    var props = args[0];
+    if (!props || !props.scene) return result;
     return React.createElement(
       React.Fragment,
       null,
@@ -473,7 +479,6 @@
   function QuickMarkersSettings() {
     const { plugins, savePluginSettings, loading } = PluginApi.hooks.useSettings();
     const Toast = PluginApi.hooks.useToast();
-    const { Button } = PluginApi.libraries.Bootstrap;
 
     const [config, setConfig] = React.useState({
       defaultPresetIndex: 0,
@@ -627,6 +632,11 @@
       { className: "plugin-settings quick-markers-settings" },
       React.createElement(
         "p",
+        { className: "quick-markers-settings-version text-muted" },
+        "Quick Markers v" + PLUGIN_VERSION + " — if you do not see this version, Stash is still using old plugin files."
+      ),
+      React.createElement(
+        "p",
         { className: "quick-markers-settings-intro text-muted" },
         "Hotkeys on the scene page. Active preset uses ",
         React.createElement("kbd", null, "shift+i"),
@@ -683,12 +693,11 @@
         "div",
         { className: "quick-markers-settings-list-section" },
         React.createElement(
-          Button,
+          "button",
           {
-            variant: "secondary",
-            size: "sm",
+            type: "button",
             className:
-              "quick-markers-settings-toggle mb-2" +
+              "btn btn-secondary btn-sm quick-markers-settings-toggle mb-2" +
               (showPresetList ? " quick-markers-settings-toggle-open" : ""),
             onClick: function () {
               setShowPresetList(!showPresetList);
@@ -738,10 +747,10 @@
                       keys || "—"
                     ),
                     React.createElement(
-                      Button,
+                      "button",
                       {
-                        variant: "danger",
-                        size: "sm",
+                        type: "button",
+                        className: "btn btn-danger btn-sm",
                         onClick: function () {
                           onRemovePreset(preset);
                         },
@@ -762,12 +771,11 @@
         "div",
         { className: "quick-markers-settings-add" },
         React.createElement(
-          Button,
+          "button",
           {
-            variant: "secondary",
-            size: "sm",
+            type: "button",
             className:
-              "quick-markers-settings-toggle mb-2" +
+              "btn btn-secondary btn-sm quick-markers-settings-toggle mb-2" +
               (showAddForm ? " quick-markers-settings-toggle-open" : ""),
             onClick: function () {
               setShowAddForm(!showAddForm);
@@ -866,19 +874,18 @@
                 })
               ),
               React.createElement(
-                Button,
-                { variant: "primary", onClick: onAddPreset },
+                "button",
+                { type: "button", className: "btn btn-primary", onClick: onAddPreset },
                 "Add"
               )
             )
           : null
       ),
       React.createElement(
-        Button,
+        "button",
         {
-          variant: "secondary",
-          size: "sm",
-          className: "mt-2",
+          type: "button",
+          className: "btn btn-secondary btn-sm mt-2",
           onClick: openJsonModal,
         },
         "Edit JSON (advanced)…"
@@ -942,13 +949,21 @@
                 "div",
                 { className: "quick-markers-modal-footer" },
                 React.createElement(
-                  Button,
-                  { variant: "secondary", onClick: closeJsonModal },
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn btn-secondary",
+                    onClick: closeJsonModal,
+                  },
                   "Cancel"
                 ),
                 React.createElement(
-                  Button,
-                  { variant: "primary", onClick: onSaveJsonModal },
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn btn-primary",
+                    onClick: onSaveJsonModal,
+                  },
                   "Save"
                 )
               )
@@ -958,9 +973,12 @@
     );
   }
 
-  PluginApi.patch.after("PluginSettings", function (props, result) {
-    if (props.pluginID !== PLUGIN_ID) {
-      return result;
+  PluginApi.patch.instead("PluginSettings", function () {
+    var args = Array.prototype.slice.call(arguments);
+    var next = args.pop();
+    var props = args[0];
+    if (!props || props.pluginID !== PLUGIN_ID) {
+      return next.apply(null, args);
     }
     return React.createElement(QuickMarkersSettings, null);
   });
