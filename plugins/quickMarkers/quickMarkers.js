@@ -12,6 +12,9 @@
   }
 
   const StashService = PluginApi.utils.StashService;
+  const useFlatMarkerCreateVars = !!(
+    StashService && typeof StashService.useSceneMarkerCreate === "function"
+  );
   const React = PluginApi.React;
   const GQL = PluginApi.GQL;
   const Mousetrap = PluginApi.libraries.Mousetrap;
@@ -277,15 +280,18 @@
             ? Math.max(startSeconds, endSeconds)
             : null;
 
+        const markerVars = {
+          scene_id: scene.id,
+          title: preset.title,
+          seconds: from,
+          end_seconds: to,
+          primary_tag_id: tagId,
+          tag_ids: [],
+        };
         await createMarker({
-          variables: {
-            scene_id: scene.id,
-            title: preset.title,
-            seconds: from,
-            end_seconds: to,
-            primary_tag_id: tagId,
-            tag_ids: [],
-          },
+          variables: useFlatMarkerCreateVars
+            ? markerVars
+            : { input: markerVars },
         });
 
         const rangeMsg =
