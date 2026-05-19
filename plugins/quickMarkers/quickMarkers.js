@@ -473,7 +473,7 @@
   function QuickMarkersSettings() {
     const { plugins, savePluginSettings, loading } = PluginApi.hooks.useSettings();
     const Toast = PluginApi.hooks.useToast();
-    const { Button, Modal } = PluginApi.libraries.Bootstrap;
+    const { Button } = PluginApi.libraries.Bootstrap;
 
     const [config, setConfig] = React.useState({
       defaultPresetIndex: 0,
@@ -883,51 +883,78 @@
         },
         "Edit JSON (advanced)…"
       ),
-      React.createElement(
-        Modal,
-        {
-          show: showJsonModal,
-          onHide: closeJsonModal,
-          size: "lg",
-          className: "quick-markers-json-modal",
-        },
-        React.createElement(
-          Modal.Header,
-          { closeButton: true },
-          React.createElement(Modal.Title, null, "Edit presets (JSON)")
-        ),
-        React.createElement(
-          Modal.Body,
-          null,
-          React.createElement(
-            "p",
-            { className: "text-muted small mb-2" },
-            "Full config: defaultPresetIndex and presets array. Tag names must match Stash."
-          ),
-          React.createElement("textarea", {
-            className: "form-control quick-markers-json",
-            rows: 16,
-            value: jsonModalDraft,
-            onChange: function (e) {
-              setJsonModalDraft(e.target.value);
+      showJsonModal
+        ? React.createElement(
+            "div",
+            {
+              className: "quick-markers-modal-backdrop",
+              role: "presentation",
+              onClick: closeJsonModal,
             },
-          })
-        ),
-        React.createElement(
-          Modal.Footer,
-          null,
-          React.createElement(
-            Button,
-            { variant: "secondary", onClick: closeJsonModal },
-            "Cancel"
-          ),
-          React.createElement(
-            Button,
-            { variant: "primary", onClick: onSaveJsonModal },
-            "Save"
+            React.createElement(
+              "div",
+              {
+                className: "quick-markers-modal",
+                role: "dialog",
+                "aria-modal": true,
+                "aria-labelledby": "qm-json-modal-title",
+                onClick: function (e) {
+                  e.stopPropagation();
+                },
+              },
+              React.createElement(
+                "div",
+                { className: "quick-markers-modal-header" },
+                React.createElement(
+                  "h3",
+                  { id: "qm-json-modal-title", className: "quick-markers-modal-title" },
+                  "Edit presets (JSON)"
+                ),
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    className: "quick-markers-modal-close",
+                    "aria-label": "Close",
+                    onClick: closeJsonModal,
+                  },
+                  "×"
+                )
+              ),
+              React.createElement(
+                "div",
+                { className: "quick-markers-modal-body" },
+                React.createElement(
+                  "p",
+                  { className: "text-muted small mb-2" },
+                  "Full config: defaultPresetIndex and presets array. Tag names must match Stash."
+                ),
+                React.createElement("textarea", {
+                  className: "form-control quick-markers-json",
+                  rows: 16,
+                  value: jsonModalDraft,
+                  onChange: function (e) {
+                    setJsonModalDraft(e.target.value);
+                  },
+                })
+              ),
+              React.createElement(
+                "div",
+                { className: "quick-markers-modal-footer" },
+                React.createElement(
+                  Button,
+                  { variant: "secondary", onClick: closeJsonModal },
+                  "Cancel"
+                ),
+                React.createElement(
+                  Button,
+                  { variant: "primary", onClick: onSaveJsonModal },
+                  "Save"
+                )
+              )
+            )
           )
-        )
-      )
+        : null
     );
   }
 

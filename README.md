@@ -204,6 +204,10 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 
 ## Changelog
 
+### Quick Markers 1.0.4
+
+- Replace Bootstrap Modal with custom popup (fixes React error #31 in settings)
+
 ### Quick Markers 1.0.3
 
 - Use `patch.after` for plugin settings (fixes `next is not a function` with multiple UI plugins)

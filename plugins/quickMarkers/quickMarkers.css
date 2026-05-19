@@ -161,6 +161,66 @@
   font-size: 0.85rem;
 }
 
-.quick-markers-json-modal .modal-body {
-  padding-top: 0.5rem;
+.quick-markers-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.quick-markers-modal {
+  width: min(720px, 100%);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bs-body-bg, #1a1a1a);
+  border: 1px solid var(--bs-border-color, #444);
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.quick-markers-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--bs-border-color, #333);
+}
+
+.quick-markers-modal-title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.quick-markers-modal-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0 0.35rem;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.quick-markers-modal-close:hover {
+  opacity: 1;
+}
+
+.quick-markers-modal-body {
+  padding: 1rem;
+  overflow: auto;
+  flex: 1;
+}
+
+.quick-markers-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--bs-border-color, #333);
 }
