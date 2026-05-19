@@ -1,5 +1,7 @@
 {
   "defaultPresetIndex": 0,
+  "panelPosition": "top-left",
+  "panelCollapsed": true,
   "presets": [
     {
       "id": "compilation",

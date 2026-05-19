@@ -2,7 +2,15 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.0.8";
+  const PLUGIN_VERSION = "1.0.9";
+  const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
+  const VALID_PANEL_POSITIONS = [
+    "top-left",
+    "top-right",
+    "bottom-left",
+    "bottom-right",
+    "hidden",
+  ];
   const ASSETS_PRESETS = "/plugin/" + PLUGIN_ID + "/assets/presets.json";
 
   const PluginApi = window.PluginApi;
@@ -21,6 +29,8 @@
 
   const DEFAULT_PRESETS_CONFIG = {
     defaultPresetIndex: 0,
+    panelPosition: "top-left",
+    panelCollapsed: true,
     presets: [
       {
         id: "compilation",
@@ -36,9 +46,37 @@
 
   console.info("[Quick Markers] loaded v" + PLUGIN_VERSION);
 
+  function normalizePanelPosition(value) {
+    const pos = String(value || "top-left")
+      .trim()
+      .toLowerCase();
+    return VALID_PANEL_POSITIONS.indexOf(pos) >= 0 ? pos : "top-left";
+  }
+
+  function readStoredPanelOpen(fallbackOpen) {
+    try {
+      const stored = localStorage.getItem(PANEL_OPEN_STORAGE_KEY);
+      if (stored === "1") return true;
+      if (stored === "0") return false;
+    } catch (e) {
+      /* ignore */
+    }
+    return fallbackOpen;
+  }
+
+  function storePanelOpen(open) {
+    try {
+      localStorage.setItem(PANEL_OPEN_STORAGE_KEY, open ? "1" : "0");
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   function getDefaultPresetsConfig() {
     return {
       defaultPresetIndex: DEFAULT_PRESETS_CONFIG.defaultPresetIndex,
+      panelPosition: DEFAULT_PRESETS_CONFIG.panelPosition,
+      panelCollapsed: DEFAULT_PRESETS_CONFIG.panelCollapsed,
       presets: DEFAULT_PRESETS_CONFIG.presets.map(function (p) {
         return {
           id: p.id,
@@ -106,14 +144,23 @@
       defaultIndex = parsed.defaultPresetIndex;
     }
     if (defaultIndex < 0 || defaultIndex >= normalized.length) defaultIndex = 0;
-    return { presets: normalized, defaultPresetIndex: defaultIndex };
+    const panelPosition = normalizePanelPosition(parsed.panelPosition);
+    const panelCollapsed =
+      parsed.panelCollapsed === undefined || parsed.panelCollapsed === null
+        ? true
+        : !!parsed.panelCollapsed;
+    return {
+      presets: normalized,
+      defaultPresetIndex: defaultIndex,
+      panelPosition: panelPosition,
+      panelCollapsed: panelCollapsed,
+    };
   }
 
   function presetsToJson(config) {
-    return JSON.stringify(
-      {
-        defaultPresetIndex: config.defaultPresetIndex,
-        presets: config.presets.map(function (p) {
+    const root = {
+      defaultPresetIndex: config.defaultPresetIndex,
+      presets: config.presets.map(function (p) {
           const o = {
             id: p.id,
             label: p.label,
@@ -125,10 +172,14 @@
           if (p.instantKey) o.instantKey = p.instantKey;
           return o;
         }),
-      },
-      null,
-      2
-    );
+    };
+    if (config.panelPosition && config.panelPosition !== "top-left") {
+      root.panelPosition = config.panelPosition;
+    }
+    if (config.panelCollapsed === false) {
+      root.panelCollapsed = false;
+    }
+    return JSON.stringify(root, null, 2);
   }
 
   function getPresetsFromSettings(plugins) {
@@ -241,7 +292,26 @@
     const [activeIndex, setActiveIndex] = React.useState(0);
     const [inPoint, setInPoint] = React.useState(null);
     const [status, setStatus] = React.useState("");
-    const [panelOpen, setPanelOpen] = React.useState(true);
+    const [panelOpen, setPanelOpen] = React.useState(false);
+    const panelInitRef = React.useRef(false);
+
+    React.useEffect(
+      function () {
+        if (!config || panelInitRef.current) return;
+        panelInitRef.current = true;
+        const defaultOpen = config.panelCollapsed === false;
+        setPanelOpen(readStoredPanelOpen(defaultOpen));
+      },
+      [config]
+    );
+
+    function togglePanelOpen() {
+      setPanelOpen(function (open) {
+        const next = !open;
+        storePanelOpen(next);
+        return next;
+      });
+    }
 
     const useCreateMarker =
       StashService && StashService.useSceneMarkerCreate
@@ -425,11 +495,17 @@
 
     if (!config || !activePreset) return null;
 
+    const panelPosition = normalizePanelPosition(
+      config.panelPosition || "top-left"
+    );
+    if (panelPosition === "hidden") return null;
+
     return React.createElement(
       "div",
       {
         className:
-          "quick-markers-panel" +
+          "quick-markers-panel quick-markers-panel-pos-" +
+          panelPosition +
           (panelOpen ? "" : " quick-markers-panel-collapsed"),
       },
       React.createElement(
@@ -440,9 +516,7 @@
           {
             type: "button",
             className: "quick-markers-toggle",
-            onClick: function () {
-              setPanelOpen(!panelOpen);
-            },
+            onClick: togglePanelOpen,
             title: panelOpen ? "Collapse" : "Expand",
           },
           panelOpen ? "▼" : "▶"
@@ -617,7 +691,16 @@
       [plugins, loading]
     );
 
-    function persistConfig(nextConfig) {
+    function persistConfig(updates) {
+      const nextConfig = Object.assign(
+        {
+          defaultPresetIndex: config.defaultPresetIndex,
+          panelPosition: config.panelPosition || "top-left",
+          panelCollapsed: config.panelCollapsed !== false,
+          presets: config.presets,
+        },
+        updates
+      );
       savePluginSettings(PLUGIN_ID, {
         presetsJson: presetsToJson(nextConfig),
       });
@@ -745,6 +828,72 @@
       loadError
         ? React.createElement("p", { className: "text-warning" }, loadError)
         : null,
+      React.createElement(
+        "div",
+        { className: "form-group quick-markers-panel-ui" },
+        React.createElement(
+          "label",
+          { htmlFor: "qm-panel-position" },
+          "Scene panel position"
+        ),
+        React.createElement(
+          "select",
+          {
+            id: "qm-panel-position",
+            className: "form-control",
+            value: normalizePanelPosition(config.panelPosition),
+            onChange: function (e) {
+              persistConfig({
+                panelPosition: normalizePanelPosition(e.target.value),
+              });
+            },
+          },
+          React.createElement(
+            "option",
+            { value: "top-left" },
+            "Top left (default)"
+          ),
+          React.createElement("option", { value: "top-right" }, "Top right"),
+          React.createElement(
+            "option",
+            { value: "bottom-left" },
+            "Bottom left"
+          ),
+          React.createElement(
+            "option",
+            { value: "bottom-right" },
+            "Bottom right (old)"
+          ),
+          React.createElement(
+            "option",
+            { value: "hidden" },
+            "Hidden (hotkeys only)"
+          )
+        ),
+        React.createElement(
+          "p",
+          { className: "text-muted small mb-2" },
+          "Collapsed by default on the scene page. Click ▶ on the panel to expand; Stash remembers that per browser."
+        ),
+        React.createElement(
+          "div",
+          { className: "form-check" },
+          React.createElement("input", {
+            id: "qm-panel-collapsed",
+            className: "form-check-input",
+            type: "checkbox",
+            checked: config.panelCollapsed !== false,
+            onChange: function (e) {
+              persistConfig({ panelCollapsed: e.target.checked });
+            },
+          }),
+          React.createElement(
+            "label",
+            { className: "form-check-label", htmlFor: "qm-panel-collapsed" },
+            "Start scene panel collapsed"
+          )
+        )
+      ),
       config.presets.length > 0
         ? React.createElement(
             "div",

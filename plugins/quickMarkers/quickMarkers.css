@@ -1,7 +1,5 @@
 .quick-markers-panel {
   position: fixed;
-  right: 1rem;
-  bottom: 5rem;
   z-index: 1050;
   max-width: 22rem;
   padding: 0.65rem 0.75rem;
@@ -12,8 +10,37 @@
   font-size: 0.875rem;
 }
 
+.quick-markers-panel-pos-top-left {
+  top: 4rem;
+  left: 1rem;
+}
+
+.quick-markers-panel-pos-top-right {
+  top: 4rem;
+  right: 1rem;
+}
+
+.quick-markers-panel-pos-bottom-left {
+  bottom: 5rem;
+  left: 1rem;
+}
+
+.quick-markers-panel-pos-bottom-right {
+  bottom: 5rem;
+  right: 1rem;
+}
+
 .quick-markers-panel-collapsed {
-  max-width: 12rem;
+  max-width: none;
+  padding: 0.4rem 0.55rem;
+}
+
+.quick-markers-panel-collapsed .quick-markers-panel-header {
+  flex-wrap: nowrap;
+}
+
+.quick-markers-panel-ui {
+  margin-bottom: 1rem;
 }
 
 .quick-markers-panel-header {
