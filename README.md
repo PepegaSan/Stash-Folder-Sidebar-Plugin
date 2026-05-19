@@ -3,7 +3,7 @@
 A [Stash](https://github.com/stashapp/stash) UI plugin: fixed sidebar with your own root folders, drill into subfolders, and list scenes in the current directory only — no filter UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.4.0-informational)
+![Version](https://img.shields.io/badge/version-1.4.1-informational)
 
 ## Features
 
@@ -11,6 +11,7 @@ A [Stash](https://github.com/stashapp/stash) UI plugin: fixed sidebar with your 
 - Configurable **root folders** (sidebar + settings UI)
 - **Subfolders** per root, breadcrumb navigation, **up one level**
 - **Files in this folder** only (not recursive into subfolders)
+- **Browse cache** — reopening a folder or using the browser **Back** button after opening a scene shows the last list immediately (background refresh optional)
 - Settings UI: add folders (label + path), **Delete** per row, collapsible sections, optional JSON editor
 
 ## Requirements
@@ -108,11 +109,29 @@ Copy `folders.json.example` to `folders.json` and edit:
 - Direct link (same Stash session): `http://localhost:9999/plugin/folder-sidebar`  
   - Opening in a **new tab** or refresh may show **404** — [known Stash plugin route limitation](https://github.com/stashapp/stash/issues/4510)
 
+## Performance and cache
+
+- The first time you open a folder, Stash loads all scenes under that path (can take a while on large trees).
+- **v1.4.1+** keeps results in memory for **30 minutes** per folder path. After you open a scene and go **Back**, the folder view appears right away from cache; Stash may still refresh in the background (**Updating…** next to **Refresh**).
+- Use **Refresh** to force a reload (clears cache for the current folder).
+- For faster first loads, use **smaller root folders** in settings instead of one huge library path.
+
 ## Notes
 
 - **Scenes only** (not images/galleries)  
 - Paths must match Stash’s indexed paths (Docker: often `/data/...`, not `D:\...`)  
-- Very large folders load all scenes at once; split roots if needed  
+- Very large folders load all scenes at once on first visit; split roots if needed  
+
+## Changelog
+
+### 1.4.1
+
+- In-memory browse cache (30 min) for instant return after opening a scene or navigating back
+- GraphQL `cache-first` for folder queries; **Refresh** clears cache and refetches
+
+### 1.4.0
+
+- Delete button per root folder in plugin settings
 
 ## License
 

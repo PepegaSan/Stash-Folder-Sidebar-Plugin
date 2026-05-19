@@ -1,6 +1,6 @@
 name: Folder Sidebar
 description: Sidebar with configurable folder shortcuts; browse subfolders and list scenes by path without filters
-version: 1.4.0
+version: 1.4.1
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:

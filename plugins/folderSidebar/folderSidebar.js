@@ -161,6 +161,36 @@
     return parseFoldersJson(raw);
   }
 
+  /** In-memory browse cache (survives navigation to a scene and browser back). */
+  const browseCache = new Map();
+  const BROWSE_CACHE_TTL_MS = 30 * 60 * 1000;
+
+  function browseCacheKey(path) {
+    return ensureTrailingSep(path).toLowerCase();
+  }
+
+  function getBrowseCache(path) {
+    if (!path) return null;
+    const key = browseCacheKey(path);
+    const entry = browseCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.ts > BROWSE_CACHE_TTL_MS) {
+      browseCache.delete(key);
+      return null;
+    }
+    return entry.scenes;
+  }
+
+  function setBrowseCache(path, scenes) {
+    if (!path || !scenes) return;
+    browseCache.set(browseCacheKey(path), { scenes: scenes, ts: Date.now() });
+  }
+
+  function clearBrowseCache(path) {
+    if (!path) return;
+    browseCache.delete(browseCacheKey(path));
+  }
+
   async function loadFoldersFromFile() {
     const res = await fetch(ASSETS_JSON, { credentials: "same-origin" });
     if (!res.ok) {
@@ -228,8 +258,17 @@
         ? GQL.CriterionModifier.Includes
         : "INCLUDES";
 
+    const cachedScenes = React.useMemo(
+      function () {
+        return getBrowseCache(currentPath);
+      },
+      [currentPath]
+    );
+
     const { data, loading, error, refetch } = GQL.useFindScenesQuery({
       skip: !currentPath,
+      fetchPolicy: "cache-first",
+      nextFetchPolicy: "cache-first",
       variables: {
         filter: {
           per_page: -1,
@@ -245,10 +284,26 @@
       },
     });
 
-    if (loading) {
+    const hasQueryData = !!(data && data.findScenes);
+    const queryScenes = hasQueryData ? data.findScenes.scenes || [] : null;
+
+    React.useEffect(
+      function () {
+        if (hasQueryData) {
+          setBrowseCache(currentPath, data.findScenes.scenes || []);
+        }
+      },
+      [currentPath, hasQueryData, data]
+    );
+
+    const allScenes =
+      queryScenes !== null ? queryScenes : cachedScenes || [];
+    const showFullLoading = loading && !hasQueryData && !cachedScenes;
+
+    if (showFullLoading) {
       return React.createElement(LoadingIndicator);
     }
-    if (error) {
+    if (error && !allScenes.length) {
       return React.createElement(
         "p",
         { className: "folder-sidebar-error" },
@@ -257,8 +312,7 @@
       );
     }
 
-    const allScenes =
-      (data && data.findScenes && data.findScenes.scenes) || [];
+    const isRefreshing = loading && allScenes.length > 0;
     const subfolders = getImmediateSubfolders(allScenes, currentPath);
     const directScenes = allScenes.filter(function (scene) {
       return isFileDirectlyInFolder(sceneFilePath(scene), currentPath);
@@ -320,16 +374,27 @@
           currentPath
         ),
         React.createElement(
-          Button,
-          {
-            variant: "secondary",
-            size: "sm",
-            className: "mt-2",
-            onClick: function () {
-              refetch();
+          "div",
+          { className: "folder-sidebar-header-actions mt-2" },
+          React.createElement(
+            Button,
+            {
+              variant: "secondary",
+              size: "sm",
+              onClick: function () {
+                clearBrowseCache(currentPath);
+                refetch({ fetchPolicy: "network-only" });
+              },
             },
-          },
-          "Refresh"
+            "Refresh"
+          ),
+          isRefreshing
+            ? React.createElement(
+                "span",
+                { className: "folder-sidebar-refreshing text-muted" },
+                "Updating…"
+              )
+            : null
         )
       ),
       !atRoot
