@@ -2,7 +2,8 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.0.6";
+  const PLUGIN_VERSION = "1.0.7";
+  const StashService = PluginApi.utils.StashService;
   const ASSETS_PRESETS = "/plugin/" + PLUGIN_ID + "/assets/presets.json";
 
   const DEFAULT_PRESETS_CONFIG = {
@@ -58,6 +59,16 @@
     if (!player || typeof player.currentTime !== "function") return null;
     const t = player.currentTime();
     return typeof t === "number" && !isNaN(t) ? t : null;
+  }
+
+  function formatError(err) {
+    if (!err) return "Unknown error";
+    if (err.graphQLErrors && err.graphQLErrors.length) {
+      return err.graphQLErrors.map(function (e) {
+        return e.message;
+      }).join("; ");
+    }
+    return err.message || String(err);
   }
 
   function formatTime(seconds) {
@@ -165,38 +176,58 @@
 
   function useResolveTagId() {
     const [findTags] = GQL.useFindTagsLazyQuery({ fetchPolicy: "cache-first" });
-    const modifier =
+    const equalsModifier =
       GQL.CriterionModifier && GQL.CriterionModifier.Equals
         ? GQL.CriterionModifier.Equals
         : "EQUALS";
+    const includesModifier =
+      GQL.CriterionModifier && GQL.CriterionModifier.Includes
+        ? GQL.CriterionModifier.Includes
+        : "INCLUDES";
 
     return React.useCallback(
       async function resolveTagId(tagName) {
         const key = tagName.toLowerCase();
         if (tagIdCache.has(key)) return tagIdCache.get(key);
 
-        const result = await findTags({
-          variables: {
-            filter: { per_page: 1 },
-            tag_filter: {
-              name: { value: tagName, modifier: modifier },
+        async function queryTags(modifier) {
+          return findTags({
+            variables: {
+              filter: { per_page: 25, q: tagName },
+              tag_filter: {
+                name: { value: tagName, modifier: modifier },
+              },
             },
-          },
-        });
+          });
+        }
 
-        const tags =
+        let result = await queryTags(equalsModifier);
+        let tags =
           result.data && result.data.findTags && result.data.findTags.tags;
+
+        if (!tags || !tags.length) {
+          result = await queryTags(includesModifier);
+          tags =
+            result.data && result.data.findTags && result.data.findTags.tags;
+        }
+
         if (!tags || !tags.length) {
           throw new Error(
             'Tag "' +
               tagName +
-              '" not found. Create it in Stash (Tags) or fix primaryTag in presets.'
+              '" not found. Create it under Tags (exact name as primaryTag).'
           );
         }
-        tagIdCache.set(key, tags[0].id);
-        return tags[0].id;
+
+        const exact =
+          tags.find(function (t) {
+            return t.name.toLowerCase() === key;
+          }) || tags[0];
+
+        tagIdCache.set(key, exact.id);
+        return exact.id;
       },
-      [findTags, modifier]
+      [findTags, equalsModifier, includesModifier]
     );
   }
 
@@ -210,10 +241,7 @@
     const [status, setStatus] = React.useState("");
     const [panelOpen, setPanelOpen] = React.useState(true);
 
-    const [createMarker] = GQL.useSceneMarkerCreateMutation({
-      refetchQueries: ["FindScene", "FindSceneMarkers"],
-      awaitRefetchQueries: false,
-    });
+    const [createMarker] = StashService.useSceneMarkerCreate();
 
     React.useEffect(
       function () {
@@ -240,23 +268,27 @@
     const createAt = React.useCallback(
       async function (preset, startSeconds, endSeconds) {
         const tagId = await resolveTagId(preset.primaryTag);
-        const input = {
-          title: preset.title,
-          seconds: startSeconds,
-          scene_id: scene.id,
-          primary_tag_id: tagId,
-        };
-        if (
-          typeof endSeconds === "number" &&
-          endSeconds > startSeconds + 0.05
-        ) {
-          input.end_seconds = endSeconds;
-        }
-        await createMarker({ variables: { input: input } });
+        const from = Math.min(startSeconds, endSeconds ?? startSeconds);
+        const to =
+          typeof endSeconds === "number" && endSeconds > from + 0.05
+            ? Math.max(startSeconds, endSeconds)
+            : null;
+
+        await createMarker({
+          variables: {
+            scene_id: scene.id,
+            title: preset.title,
+            seconds: from,
+            end_seconds: to,
+            primary_tag_id: tagId,
+            tag_ids: [],
+          },
+        });
+
         const rangeMsg =
-          input.end_seconds != null
-            ? formatTime(startSeconds) + " – " + formatTime(endSeconds)
-            : formatTime(startSeconds);
+          to != null
+            ? formatTime(from) + " – " + formatTime(to)
+            : formatTime(from);
         setStatus(preset.label + " @ " + rangeMsg);
         Toast.success("Marker: " + preset.label + " (" + rangeMsg + ")");
       },
@@ -273,7 +305,7 @@
         try {
           await createAt(preset, t, null);
         } catch (e) {
-          Toast.error(e.message || String(e));
+          Toast.error(formatError(e));
         }
       },
       [createAt, Toast]
@@ -314,7 +346,7 @@
           inPointByScene.delete(scene.id);
           setInPoint(null);
         } catch (e) {
-          Toast.error(e.message || String(e));
+          Toast.error(formatError(e));
         }
       },
       [createAt, scene.id, Toast]
@@ -329,11 +361,11 @@
         function bind(key, fn) {
           if (!key) return;
           keysToUnbind.push(key);
-          if (MousetrapPause && MousetrapPause.bind) {
-            MousetrapPause.bind(key, fn);
-          } else {
-            Mousetrap.bind(key, fn);
-          }
+          Mousetrap.bind(key, function (e) {
+            if (e && e.preventDefault) e.preventDefault();
+            fn(e);
+            return false;
+          });
         }
 
         config.presets.forEach(function (preset, index) {
@@ -375,11 +407,7 @@
 
         return function () {
           keysToUnbind.forEach(function (key) {
-            if (MousetrapPause && MousetrapPause.unbind) {
-              MousetrapPause.unbind(key);
-            } else {
-              Mousetrap.unbind(key);
-            }
+            Mousetrap.unbind(key);
           });
         };
       },
@@ -466,10 +494,14 @@
                       "quick-markers-preset-btn" +
                       (isActive ? " active" : ""),
                     title: preset.instantKey
-                      ? "Click or " + preset.instantKey
-                      : "Select for range keys",
+                      ? "Click = active for Shift+I/O. Double-click or " +
+                        preset.instantKey +
+                        " = instant marker"
+                      : "Click to use with Shift+I/O",
                     onClick: function () {
                       setActiveIndex(index);
+                    },
+                    onDoubleClick: function () {
                       if (preset.instantKey) onInstant(preset);
                     },
                   },
