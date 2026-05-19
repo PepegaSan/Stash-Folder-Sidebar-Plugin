@@ -2,9 +2,19 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.0.7";
-  const StashService = PluginApi.utils.StashService;
+  const PLUGIN_VERSION = "1.0.8";
   const ASSETS_PRESETS = "/plugin/" + PLUGIN_ID + "/assets/presets.json";
+
+  const PluginApi = window.PluginApi;
+  if (!PluginApi) {
+    console.error("[Quick Markers] PluginApi not available");
+    return;
+  }
+
+  const StashService = PluginApi.utils.StashService;
+  const React = PluginApi.React;
+  const GQL = PluginApi.GQL;
+  const Mousetrap = PluginApi.libraries.Mousetrap;
 
   const DEFAULT_PRESETS_CONFIG = {
     defaultPresetIndex: 0,
@@ -39,16 +49,6 @@
       }),
     };
   }
-
-  const PluginApi = window.PluginApi;
-  if (!PluginApi) {
-    console.error("[Quick Markers] PluginApi not available");
-    return;
-  }
-
-  const React = PluginApi.React;
-  const GQL = PluginApi.GQL;
-  const Mousetrap = PluginApi.libraries.Mousetrap;
 
   const tagIdCache = new Map();
   const inPointByScene = new Map();
@@ -142,7 +142,7 @@
   }
 
   function usePresetsConfig() {
-    const [config, setConfig] = React.useState(null);
+    const [config, setConfig] = React.useState(getDefaultPresetsConfig);
     const [error, setError] = React.useState(null);
     const { data } = GQL.useConfigurationQuery({ fetchPolicy: "cache-first" });
 
@@ -240,7 +240,11 @@
     const [status, setStatus] = React.useState("");
     const [panelOpen, setPanelOpen] = React.useState(true);
 
-    const [createMarker] = StashService.useSceneMarkerCreate();
+    const useCreateMarker =
+      StashService && StashService.useSceneMarkerCreate
+        ? StashService.useSceneMarkerCreate
+        : GQL.useSceneMarkerCreateMutation;
+    const [createMarker] = useCreateMarker();
 
     React.useEffect(
       function () {
@@ -413,7 +417,7 @@
       [config, scene, activePreset, onInstant, onRangeIn, onRangeOut]
     );
 
-    if (configError || !config || !activePreset) return null;
+    if (!config || !activePreset) return null;
 
     return React.createElement(
       "div",
