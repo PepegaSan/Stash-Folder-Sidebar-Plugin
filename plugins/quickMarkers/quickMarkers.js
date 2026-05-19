@@ -460,7 +460,7 @@
     );
   }
 
-  PluginApi.patch.after("ScenePage", function (props, _, result) {
+  PluginApi.patch.after("ScenePage", function (props, result) {
     if (!props.scene) return result;
     return React.createElement(
       React.Fragment,
@@ -931,9 +931,9 @@
     );
   }
 
-  PluginApi.patch.instead("PluginSettings", function (props, next) {
+  PluginApi.patch.after("PluginSettings", function (props, result) {
     if (props.pluginID !== PLUGIN_ID) {
-      return next(props);
+      return result;
     }
     return React.createElement(QuickMarkersSettings, null);
   });
