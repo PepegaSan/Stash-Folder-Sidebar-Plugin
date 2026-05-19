@@ -1,0 +1,21 @@
+{
+  "defaultPresetIndex": 0,
+  "presets": [
+    {
+      "id": "compilation",
+      "label": "Compilation",
+      "primaryTag": "Compilation",
+      "title": "Compilation",
+      "rangeInKey": "shift+i",
+      "rangeOutKey": "shift+o",
+      "instantKey": "shift+1"
+    },
+    {
+      "id": "highlight",
+      "label": "Highlight",
+      "primaryTag": "Highlight",
+      "title": "Highlight",
+      "instantKey": "shift+2"
+    }
+  ]
+}

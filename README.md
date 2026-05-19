@@ -1,6 +1,17 @@
-# Stash Folder Sidebar
+# Stash plugins (PepegaSan)
 
-A [Stash](https://github.com/stashapp/stash) UI plugin: fixed sidebar with your own root folders, drill into subfolders, and list scenes in the current directory only — no filter UI.
+Community plugins for [Stash](https://github.com/stashapp/stash), installable via [source URL](#installation-from-stash-plugin-source-url) or manual copy from `plugins/<id>/`.
+
+| Plugin | Description |
+|--------|-------------|
+| [Folder Sidebar](plugins/folderSidebar/) | Browse scenes by filesystem folder |
+| [Quick Markers](plugins/quickMarkers/) | Hotkey scene markers with presets |
+
+---
+
+# Folder Sidebar
+
+Fixed sidebar with your own root folders, drill into subfolders, and list scenes in the current directory only — no filter UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
 ![Version](https://img.shields.io/badge/version-1.4.1-informational)
@@ -21,7 +32,7 @@ A [Stash](https://github.com/stashapp/stash) UI plugin: fixed sidebar with your 
 
 ## Installation
 
-### From Stash (plugin source URL)
+### From Stash (plugin source URL) {#installation-from-stash-plugin-source-url}
 
 1. In Stash: **Settings → Plugins → Available Plugins**
 2. Add this **source URL** (after [GitHub Pages](#github-pages-one-time) is enabled on the repo):
@@ -30,7 +41,7 @@ A [Stash](https://github.com/stashapp/stash) UI plugin: fixed sidebar with your 
    https://pepegasan.github.io/Stash-Folder-Sidebar-Plugin/main/index.yml
    ```
 
-3. Install **Folder Sidebar** from the list, then reload plugins if prompted.
+3. Install **Folder Sidebar** and/or **Quick Markers** from the list, then reload plugins if prompted.
 
 ### Manual
 
@@ -122,9 +133,76 @@ Copy `folders.json.example` to `folders.json` and edit:
 - Paths must match Stash’s indexed paths (Docker: often `/data/...`, not `D:\...`)  
 - Very large folders load all scenes at once on first visit; split roots if needed  
 
+---
+
+# Quick Markers
+
+Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
+
+## Requirements
+
+- Stash UI plugins enabled
+- **Tags must exist** in Stash before use (e.g. create tag `Compilation` under **Tags**)
+- Copy `presets.json.example` → `presets.json` in the plugin folder, or configure under **Settings → Plugins → Quick Markers**
+
+## Hotkeys (defaults)
+
+| Key | Action |
+|-----|--------|
+| `shift+i` | **In** point (active preset) |
+| `shift+o` | **Out** + create range marker (active preset) |
+| `shift+1` … `shift+9` | Instant marker at playhead (per preset) |
+| `shift+[` / `shift+]` | Previous / next active preset |
+
+**Note:** Plain `i` / `o` are already used by Stash (File info, O-Counter). Do not map those in presets.
+
+## Usage
+
+1. Open a **scene** and start playback.
+2. Use **Shift+I** at start, **Shift+O** at end → marker with your preset tag.
+3. Or press **Shift+1** (etc.) for a marker at the current time only.
+4. Optional: floating **Quick Markers** panel (bottom right) — click a preset or switch active preset.
+
+Markers are saved via GraphQL; open the **Markers** tab or refresh if the list does not update immediately.
+
+## Configuration
+
+**Settings → Plugins → Quick Markers** — edit JSON:
+
+```json
+{
+  "defaultPresetIndex": 0,
+  "presets": [
+    {
+      "id": "compilation",
+      "label": "Compilation",
+      "primaryTag": "Compilation",
+      "title": "Compilation",
+      "rangeInKey": "shift+i",
+      "rangeOutKey": "shift+o",
+      "instantKey": "shift+1"
+    }
+  ]
+}
+```
+
+- `primaryTag` — exact tag **name** in Stash (required)
+- `rangeInKey` / `rangeOutKey` — optional range workflow for that preset when it is **active**
+- `instantKey` — optional one-shot marker at playhead
+
+## Manual install
+
+Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.json` from the example, **Reload plugins**.
+
+---
+
 ## Changelog
 
-### 1.4.1
+### Quick Markers 1.0.0
+
+- Initial release: presets, Shift+I/O range, Shift+1–9 instant, on-scene panel
+
+### Folder Sidebar 1.4.1
 
 - In-memory browse cache (30 min) for instant return after opening a scene or navigating back
 - GraphQL `cache-first` for folder queries; **Refresh** clears cache and refetches

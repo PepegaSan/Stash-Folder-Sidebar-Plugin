@@ -1,0 +1,96 @@
+.quick-markers-panel {
+  position: fixed;
+  right: 1rem;
+  bottom: 5rem;
+  z-index: 1050;
+  max-width: 22rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--bs-body-bg, #1a1a1a);
+  border: 1px solid var(--bs-border-color, #444);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  font-size: 0.875rem;
+}
+
+.quick-markers-panel-collapsed {
+  max-width: 12rem;
+}
+
+.quick-markers-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.quick-markers-toggle {
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0 0.25rem;
+  cursor: pointer;
+}
+
+.quick-markers-active {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.quick-markers-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.quick-markers-hint kbd,
+.quick-markers-in-point kbd,
+.quick-markers-key {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.2rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.quick-markers-in-point {
+  margin: 0.35rem 0 0;
+  color: var(--bs-info, #6cf);
+}
+
+.quick-markers-status {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+}
+
+.quick-markers-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.quick-markers-preset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--bs-border-color, #555);
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  cursor: pointer;
+}
+
+.quick-markers-preset-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.quick-markers-preset-btn.active {
+  border-color: var(--bs-primary, #0d6efd);
+  background: rgba(13, 110, 253, 0.2);
+}
+
+.quick-markers-settings .quick-markers-json {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
