@@ -49,7 +49,6 @@
   const React = PluginApi.React;
   const GQL = PluginApi.GQL;
   const Mousetrap = PluginApi.libraries.Mousetrap;
-  const MousetrapPause = PluginApi.libraries.MousetrapPause;
 
   const tagIdCache = new Map();
   const inPointByScene = new Map();
