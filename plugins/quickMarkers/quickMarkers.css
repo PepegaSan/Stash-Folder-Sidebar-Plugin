@@ -199,6 +199,26 @@
   width: min(520px, 100%);
 }
 
+.quick-markers-tags-help-code {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  border-radius: 0.35rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--bs-border-color, #444);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.quick-markers-settings-json-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .quick-markers-settings-add-body {
   padding: 0.5rem 0 0.25rem;
 }
