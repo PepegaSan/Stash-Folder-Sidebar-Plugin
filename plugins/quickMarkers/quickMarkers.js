@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.2.0";
+  const PLUGIN_VERSION = "1.2.1";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const VALID_PANEL_POSITIONS = [
     "top-left",
@@ -771,6 +771,126 @@
     );
   });
 
+  function TagsHelpModal(props) {
+    if (!props.open) return null;
+    return React.createElement(
+      "div",
+      {
+        className: "quick-markers-modal-backdrop",
+        role: "presentation",
+        onClick: props.onClose,
+      },
+      React.createElement(
+        "div",
+        {
+          className: "quick-markers-modal quick-markers-tags-help-modal",
+          role: "dialog",
+          "aria-modal": true,
+          "aria-labelledby": "qm-tags-help-title",
+          onClick: function (e) {
+            e.stopPropagation();
+          },
+        },
+        React.createElement(
+          "div",
+          { className: "quick-markers-modal-header" },
+          React.createElement(
+            "h3",
+            { id: "qm-tags-help-title", className: "quick-markers-modal-title" },
+            "Tags an Markern nachträglich hinzufügen"
+          ),
+          React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "quick-markers-modal-close",
+              "aria-label": "Close",
+              onClick: props.onClose,
+            },
+            "×"
+          )
+        ),
+        React.createElement(
+          "div",
+          { className: "quick-markers-modal-body quick-markers-tags-help-body" },
+          React.createElement(
+            "p",
+            null,
+            React.createElement("strong", null, "Primärtag"),
+            " (Primary Tag) = Haupt-Kategorie des Markers, z. B. ",
+            React.createElement("em", null, "Compilation"),
+            ". Den setzt Quick Markers über ",
+            React.createElement("code", null, "primaryTag"),
+            " im Preset."
+          ),
+          React.createElement(
+            "p",
+            null,
+            React.createElement("strong", null, "Weitere Tags"),
+            " (Tags / zusätzliche Tags) = normale Stash-Tags am gleichen Marker, z. B. ",
+            React.createElement("em", null, "Joi"),
+            ", ",
+            React.createElement("em", null, "Talk"),
+            ". Die kannst du im Preset unter ",
+            React.createElement("code", null, "tags"),
+            " automatisch setzen — oder später von Hand:"
+          ),
+          React.createElement(
+            "ol",
+            { className: "quick-markers-tags-help-steps" },
+            React.createElement(
+              "li",
+              null,
+              "Szene öffnen, in der der Marker liegt."
+            ),
+            React.createElement(
+              "li",
+              null,
+              "Rechte Seitenleiste: Tab ",
+              React.createElement("strong", null, "Markers"),
+              " (Marker-Liste)."
+            ),
+            React.createElement(
+              "li",
+              null,
+              "Marker anklicken oder Stift/Edit — der Marker-Dialog öffnet sich."
+            ),
+            React.createElement(
+              "li",
+              null,
+              "Feld ",
+              React.createElement("strong", null, "Tags"),
+              " (nicht „Primary Tag“): weitere Tags auswählen oder eintippen. Das sind die normalen Tags, oft Mehrfachauswahl."
+            ),
+            React.createElement("li", null, "Speichern.")
+          ),
+          React.createElement(
+            "p",
+            { className: "text-muted small mb-0" },
+            "Neue Tag-Namen zuerst unter ",
+            React.createElement("strong", null, "Tags"),
+            " in der Stash-Hauptnavigation anlegen. Namen müssen exakt übereinstimmen (wie bei ",
+            React.createElement("code", null, "primaryTag"),
+            ")."
+          )
+        ),
+        React.createElement(
+          "div",
+          { className: "quick-markers-modal-footer" },
+          React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-primary",
+              onClick: props.onClose,
+            },
+            "OK"
+          )
+        )
+      )
+    );
+  }
+
   function QuickMarkersSettings() {
     const { plugins, savePluginSettings, loading } = PluginApi.hooks.useSettings();
     const Toast = PluginApi.hooks.useToast();
@@ -785,6 +905,7 @@
     const [showPresetList, setShowPresetList] = React.useState(false);
     const [showAddForm, setShowAddForm] = React.useState(false);
     const [showJsonModal, setShowJsonModal] = React.useState(false);
+    const [showTagsHelpModal, setShowTagsHelpModal] = React.useState(false);
     const [jsonModalDraft, setJsonModalDraft] = React.useState("");
 
     const [newLabel, setNewLabel] = React.useState("");
@@ -953,8 +1074,25 @@
         React.createElement("kbd", null, "i"),
         " / ",
         React.createElement("kbd", null, "o"),
-        " (Stash shortcuts)."
+        " (Stash shortcuts). ",
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-link btn-sm p-0 align-baseline quick-markers-tags-help-link",
+            onClick: function () {
+              setShowTagsHelpModal(true);
+            },
+          },
+          "Tags am Marker nachträglich bearbeiten?"
+        )
       ),
+      React.createElement(TagsHelpModal, {
+        open: showTagsHelpModal,
+        onClose: function () {
+          setShowTagsHelpModal(false);
+        },
+      }),
       usingFile
         ? React.createElement(
             "p",
@@ -1272,8 +1410,20 @@
                 }),
                 React.createElement(
                   "p",
-                  { className: "text-muted small mb-0" },
-                  "Comma-separated. Must exist in Stash Tags. Not the same as primary tag."
+                  { className: "text-muted small mb-1" },
+                  "Comma-separated. Must exist in Stash Tags. Not the same as primary tag. ",
+                  React.createElement(
+                    "button",
+                    {
+                      type: "button",
+                      className:
+                        "btn btn-link btn-sm p-0 align-baseline quick-markers-tags-help-link",
+                      onClick: function () {
+                        setShowTagsHelpModal(true);
+                      },
+                    },
+                    "Hilfe: Tags nachträglich in Stash"
+                  )
                 )
               ),
               React.createElement(

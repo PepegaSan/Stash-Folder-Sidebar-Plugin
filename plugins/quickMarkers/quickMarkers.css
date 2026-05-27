@@ -177,6 +177,28 @@
   word-break: break-word;
 }
 
+.quick-markers-tags-help-link {
+  font-size: inherit;
+  vertical-align: baseline;
+}
+
+.quick-markers-tags-help-body p {
+  margin-bottom: 0.75rem;
+}
+
+.quick-markers-tags-help-steps {
+  margin: 0 0 0.75rem 1.1rem;
+  padding: 0;
+}
+
+.quick-markers-tags-help-steps li {
+  margin-bottom: 0.35rem;
+}
+
+.quick-markers-tags-help-modal {
+  width: min(520px, 100%);
+}
+
 .quick-markers-settings-add-body {
   padding: 0.5rem 0 0.25rem;
 }
