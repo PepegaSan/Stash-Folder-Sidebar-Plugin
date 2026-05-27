@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.0.9";
+  const PLUGIN_VERSION = "1.1.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const VALID_PANEL_POSITIONS = [
     "top-left",
@@ -11,6 +11,7 @@
     "bottom-right",
     "hidden",
   ];
+  const VALID_TOUCH_CONTROLS = ["auto", "on", "off"];
   const ASSETS_PRESETS = "/plugin/" + PLUGIN_ID + "/assets/presets.json";
 
   const PluginApi = window.PluginApi;
@@ -31,6 +32,7 @@
     defaultPresetIndex: 0,
     panelPosition: "top-left",
     panelCollapsed: true,
+    touchControls: "auto",
     presets: [
       {
         id: "compilation",
@@ -51,6 +53,24 @@
       .trim()
       .toLowerCase();
     return VALID_PANEL_POSITIONS.indexOf(pos) >= 0 ? pos : "top-left";
+  }
+
+  function normalizeTouchControls(value) {
+    const v = String(value || "auto").trim().toLowerCase();
+    return VALID_TOUCH_CONTROLS.indexOf(v) >= 0 ? v : "auto";
+  }
+
+  function isTouchActive(setting) {
+    if (setting === "on") return true;
+    if (setting === "off") return false;
+    try {
+      return (
+        window.matchMedia("(pointer: coarse)").matches ||
+        navigator.maxTouchPoints > 0
+      );
+    } catch (e) {
+      return false;
+    }
   }
 
   function readStoredPanelOpen(fallbackOpen) {
@@ -77,6 +97,7 @@
       defaultPresetIndex: DEFAULT_PRESETS_CONFIG.defaultPresetIndex,
       panelPosition: DEFAULT_PRESETS_CONFIG.panelPosition,
       panelCollapsed: DEFAULT_PRESETS_CONFIG.panelCollapsed,
+      touchControls: DEFAULT_PRESETS_CONFIG.touchControls,
       presets: DEFAULT_PRESETS_CONFIG.presets.map(function (p) {
         return {
           id: p.id,
@@ -149,11 +170,13 @@
       parsed.panelCollapsed === undefined || parsed.panelCollapsed === null
         ? true
         : !!parsed.panelCollapsed;
+    const touchControls = normalizeTouchControls(parsed.touchControls);
     return {
       presets: normalized,
       defaultPresetIndex: defaultIndex,
       panelPosition: panelPosition,
       panelCollapsed: panelCollapsed,
+      touchControls: touchControls,
     };
   }
 
@@ -178,6 +201,9 @@
     }
     if (config.panelCollapsed === false) {
       root.panelCollapsed = false;
+    }
+    if (config.touchControls && config.touchControls !== "auto") {
+      root.touchControls = config.touchControls;
     }
     return JSON.stringify(root, null, 2);
   }
@@ -498,117 +524,199 @@
     const panelPosition = normalizePanelPosition(
       config.panelPosition || "top-left"
     );
-    if (panelPosition === "hidden") return null;
+    const showTouchBar = isTouchActive(
+      normalizeTouchControls(config.touchControls)
+    );
 
-    return React.createElement(
-      "div",
-      {
-        className:
-          "quick-markers-panel quick-markers-panel-pos-" +
-          panelPosition +
-          (panelOpen ? "" : " quick-markers-panel-collapsed"),
-      },
-      React.createElement(
-        "div",
-        { className: "quick-markers-panel-header" },
-        React.createElement(
-          "button",
-          {
-            type: "button",
-            className: "quick-markers-toggle",
-            onClick: togglePanelOpen,
-            title: panelOpen ? "Collapse" : "Expand",
-          },
-          panelOpen ? "▼" : "▶"
-        ),
-        React.createElement("strong", null, "Quick Markers"),
-        React.createElement(
-          "span",
-          { className: "quick-markers-active" },
-          activePreset.label
-        )
-      ),
-      panelOpen
+    var floatingPanel =
+      panelPosition !== "hidden"
         ? React.createElement(
-            React.Fragment,
-            null,
-            React.createElement(
-              "p",
-              { className: "quick-markers-hint text-muted" },
-              "Range (active preset): ",
-              React.createElement("kbd", null, activePreset.rangeInKey || "—"),
-              " In, ",
-              React.createElement("kbd", null, activePreset.rangeOutKey || "—"),
-              " Out · ",
-              React.createElement("kbd", null, "shift+["),
-              " / ",
-              React.createElement("kbd", null, "shift+]"),
-              " switch preset"
-            ),
-            inPoint != null
-              ? React.createElement(
-                  "p",
-                  { className: "quick-markers-in-point" },
-                  "In: ",
-                  formatTime(inPoint),
-                  " — press ",
-                  React.createElement("kbd", null, activePreset.rangeOutKey || "Out"),
-                  " to save"
-                )
-              : null,
-            status
-              ? React.createElement(
-                  "p",
-                  { className: "quick-markers-status text-muted" },
-                  status
-                )
-              : null,
+            "div",
+            {
+              className:
+                "quick-markers-panel quick-markers-panel-pos-" +
+                panelPosition +
+                (panelOpen ? "" : " quick-markers-panel-collapsed"),
+            },
             React.createElement(
               "div",
-              { className: "quick-markers-presets" },
-              config.presets.map(function (preset, index) {
-                const isActive = index === activeIndex;
-                return React.createElement(
-                  "button",
-                  {
-                    key: preset.id,
-                    type: "button",
-                    className:
-                      "quick-markers-preset-btn" +
-                      (isActive ? " active" : ""),
-                    title: preset.instantKey
-                      ? "Click = active for Shift+I/O. Double-click or " +
-                        preset.instantKey +
-                        " = instant marker"
-                      : "Click to use with Shift+I/O",
-                    onClick: function () {
-                      setActiveIndex(index);
-                    },
-                    onDoubleClick: function () {
-                      if (preset.instantKey) onInstant(preset);
-                    },
-                  },
-                  preset.label,
-                  preset.instantKey
+              { className: "quick-markers-panel-header" },
+              React.createElement(
+                "button",
+                {
+                  type: "button",
+                  className: "quick-markers-toggle",
+                  onClick: togglePanelOpen,
+                  title: panelOpen ? "Collapse" : "Expand",
+                },
+                panelOpen ? "▼" : "▶"
+              ),
+              React.createElement("strong", null, "Quick Markers"),
+              React.createElement(
+                "span",
+                { className: "quick-markers-active" },
+                activePreset.label
+              )
+            ),
+            panelOpen
+              ? React.createElement(
+                  React.Fragment,
+                  null,
+                  React.createElement(
+                    "p",
+                    { className: "quick-markers-hint text-muted" },
+                    "Range (active preset): ",
+                    React.createElement("kbd", null, activePreset.rangeInKey || "—"),
+                    " In, ",
+                    React.createElement("kbd", null, activePreset.rangeOutKey || "—"),
+                    " Out · ",
+                    React.createElement("kbd", null, "shift+["),
+                    " / ",
+                    React.createElement("kbd", null, "shift+]"),
+                    " switch preset"
+                  ),
+                  inPoint != null
                     ? React.createElement(
-                        "span",
-                        { className: "quick-markers-key" },
+                        "p",
+                        { className: "quick-markers-in-point" },
+                        "In: ",
+                        formatTime(inPoint),
+                        " — press ",
+                        React.createElement("kbd", null, activePreset.rangeOutKey || "Out"),
+                        " to save"
+                      )
+                    : null,
+                  status
+                    ? React.createElement(
+                        "p",
+                        { className: "quick-markers-status text-muted" },
+                        status
+                      )
+                    : null,
+                  React.createElement(
+                    "div",
+                    { className: "quick-markers-presets" },
+                    config.presets.map(function (preset, index) {
+                      const isActive = index === activeIndex;
+                      return React.createElement(
+                        "button",
+                        {
+                          key: preset.id,
+                          type: "button",
+                          className:
+                            "quick-markers-preset-btn" +
+                            (isActive ? " active" : ""),
+                          title: preset.instantKey
+                            ? "Click = active for Shift+I/O. Double-click or " +
+                              preset.instantKey +
+                              " = instant marker"
+                            : "Click to use with Shift+I/O",
+                          onClick: function () {
+                            setActiveIndex(index);
+                          },
+                          onDoubleClick: function () {
+                            if (preset.instantKey) onInstant(preset);
+                          },
+                        },
+                        preset.label,
                         preset.instantKey
+                          ? React.createElement(
+                              "span",
+                              { className: "quick-markers-key" },
+                              preset.instantKey
+                            )
+                          : null
+                      );
+                    })
+                  ),
+                  configError
+                    ? React.createElement(
+                        "p",
+                        { className: "text-danger" },
+                        configError
                       )
                     : null
-                );
-              })
-            ),
-            configError
-              ? React.createElement(
-                  "p",
-                  { className: "text-danger" },
-                  configError
                 )
               : null
           )
-        : null
-    );
+        : null;
+
+    var touchBar = showTouchBar
+      ? React.createElement(
+          "div",
+          { className: "quick-markers-touch-bar" },
+          React.createElement(
+            "div",
+            { className: "quick-markers-touch-actions" },
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                className:
+                  "quick-markers-touch-btn quick-markers-touch-in" +
+                  (inPoint != null ? " active" : ""),
+                onClick: function () {
+                  onRangeIn(activePreset);
+                },
+              },
+              inPoint != null ? "IN " + formatTime(inPoint) : "IN"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                className: "quick-markers-touch-btn quick-markers-touch-out",
+                disabled: inPoint == null,
+                onClick: function () {
+                  onRangeOut(activePreset);
+                },
+              },
+              "OUT"
+            ),
+            React.createElement(
+              "button",
+              {
+                type: "button",
+                className: "quick-markers-touch-btn quick-markers-touch-instant",
+                onClick: function () {
+                  onInstant(activePreset);
+                },
+              },
+              "INSTANT"
+            )
+          ),
+          React.createElement(
+            "div",
+            { className: "quick-markers-touch-presets" },
+            config.presets.map(function (preset, index) {
+              const isActive = index === activeIndex;
+              return React.createElement(
+                "button",
+                {
+                  key: preset.id,
+                  type: "button",
+                  className:
+                    "quick-markers-touch-preset" +
+                    (isActive ? " active" : ""),
+                  onClick: function () {
+                    setActiveIndex(index);
+                  },
+                },
+                preset.label
+              );
+            })
+          ),
+          status
+            ? React.createElement(
+                "div",
+                { className: "quick-markers-touch-status" },
+                status
+              )
+            : null
+        )
+      : null;
+
+    return React.createElement(React.Fragment, null, floatingPanel, touchBar);
   }
 
   PluginApi.patch.after("ScenePage", function () {
@@ -697,6 +805,7 @@
           defaultPresetIndex: config.defaultPresetIndex,
           panelPosition: config.panelPosition || "top-left",
           panelCollapsed: config.panelCollapsed !== false,
+          touchControls: config.touchControls || "auto",
           presets: config.presets,
         },
         updates
@@ -892,6 +1001,40 @@
             { className: "form-check-label", htmlFor: "qm-panel-collapsed" },
             "Start scene panel collapsed"
           )
+        )
+      ),
+      React.createElement(
+        "div",
+        { className: "form-group quick-markers-panel-ui" },
+        React.createElement(
+          "label",
+          { htmlFor: "qm-touch-controls" },
+          "Touch controls (Android / tablet)"
+        ),
+        React.createElement(
+          "select",
+          {
+            id: "qm-touch-controls",
+            className: "form-control",
+            value: normalizeTouchControls(config.touchControls),
+            onChange: function (e) {
+              persistConfig({
+                touchControls: normalizeTouchControls(e.target.value),
+              });
+            },
+          },
+          React.createElement(
+            "option",
+            { value: "auto" },
+            "Auto-detect (default)"
+          ),
+          React.createElement("option", { value: "on" }, "Always on"),
+          React.createElement("option", { value: "off" }, "Always off")
+        ),
+        React.createElement(
+          "p",
+          { className: "text-muted small mb-0" },
+          "Shows IN / OUT / INSTANT buttons below the video player. Auto-detect enables them on touch devices (phones, tablets) and hides them on desktop."
         )
       ),
       config.presets.length > 0

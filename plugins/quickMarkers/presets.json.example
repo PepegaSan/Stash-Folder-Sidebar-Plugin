@@ -2,6 +2,7 @@
   "defaultPresetIndex": 0,
   "panelPosition": "top-left",
   "panelCollapsed": true,
+  "touchControls": "auto",
   "presets": [
     {
       "id": "compilation",

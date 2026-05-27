@@ -251,3 +251,110 @@
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--bs-border-color, #333);
 }
+
+/* ── Touch bar (Android / tablet) ── */
+
+.quick-markers-touch-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1040;
+  padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  background: var(--bs-body-bg, #1a1a1a);
+  border-top: 1px solid var(--bs-border-color, #444);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.quick-markers-touch-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.quick-markers-touch-btn {
+  flex: 1;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.quick-markers-touch-btn:active {
+  transform: scale(0.95);
+}
+
+.quick-markers-touch-in {
+  background: var(--bs-info, #0dcaf0);
+  color: #000;
+}
+
+.quick-markers-touch-in.active {
+  background: #0aa2c0;
+  border-color: #fff;
+}
+
+.quick-markers-touch-out {
+  background: var(--bs-success, #198754);
+}
+
+.quick-markers-touch-out:disabled {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: default;
+  transform: none;
+}
+
+.quick-markers-touch-instant {
+  background: var(--bs-warning, #ffc107);
+  color: #000;
+}
+
+.quick-markers-touch-presets {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.quick-markers-touch-preset {
+  padding: 0.35rem 0.75rem;
+  min-height: 36px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid var(--bs-border-color, #555);
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.quick-markers-touch-preset.active {
+  border-color: var(--bs-primary, #0d6efd);
+  background: rgba(13, 110, 253, 0.25);
+  font-weight: 600;
+}
+
+.quick-markers-touch-status {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  opacity: 0.75;
+  text-align: center;
+}
+
+@media (pointer: coarse) {
+  .quick-markers-panel .quick-markers-hint {
+    display: none;
+  }
+}
