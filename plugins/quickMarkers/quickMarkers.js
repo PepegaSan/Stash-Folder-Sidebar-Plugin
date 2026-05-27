@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.2.2";
+  const PLUGIN_VERSION = "1.2.3";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const VALID_PANEL_POSITIONS = [
     "top-left",
@@ -771,8 +771,57 @@
     );
   });
 
+  const TAGS_HELP_I18N = {
+    de: {
+      title: "Zusatz-Tags im Preset-JSON (tags)",
+      button: "Hilfe: tags in JSON",
+      intro:
+        "So fügst du weitere Tags (nicht den Primärtag) nachträglich in die Preset-Konfiguration ein. Gespeichert wird in der Stash-Datenbank, nicht in einer Datei auf der Festplatte.",
+      step1: "Hier in den Plugin-Settings auf Edit JSON (advanced) klicken (Button unten auf dieser Seite).",
+      step2:
+        "Im Array presets das gewünschte Preset suchen (z. B. an id oder label).",
+      step3:
+        "Zeile tags einfügen oder anpassen — Array aus Tag-Namen, exakt wie in Stash unter Tags.",
+      primaryNote:
+        "primaryTag = Primärtag am Marker. tags = zusätzliche normale Tags. Den Primärtag nicht nochmal in tags eintragen.",
+      saveNote:
+        "Save im JSON-Dialog — danach Reload plugins und Reload UI in Stash.",
+      warning:
+        "Wichtig: Das gilt für neue Marker, die du danach mit Quick Markers anlegst. Bereits existierende Marker auf Szenen werden durch JSON-Änderungen nicht automatisch aktualisiert — dafür Marker in Stash bearbeiten (Tab Markers → Edit → Feld Tags).",
+      ok: "OK",
+    },
+    en: {
+      title: "Additional tags in preset JSON (tags)",
+      button: "Help: tags in JSON",
+      intro:
+        "How to add extra tags (not the primary tag) to a preset later. Saved in the Stash database (plugin settings), not as a file on disk.",
+      step1:
+        'In these plugin settings, click Edit JSON (advanced) (button at the bottom of this page).',
+      step2: "In the presets array, find the preset (e.g. by id or label).",
+      step3:
+        'Add or edit the tags line — array of tag names, exactly as in Stash under Tags.',
+      primaryNote:
+        "primaryTag = primary tag on the marker. tags = additional tags. Do not duplicate the primary tag in tags.",
+      saveNote: "Click Save in the JSON dialog, then Reload plugins and Reload UI in Stash.",
+      warning:
+        "Important: This applies to new markers you create with Quick Markers after saving. Existing markers on scenes are not updated by JSON changes — edit them in Stash (Markers tab → Edit → Tags field).",
+      ok: "OK",
+    },
+  };
+
+  function getTagsHelpLang() {
+    try {
+      const lang = String(navigator.language || "en").toLowerCase();
+      if (lang.startsWith("de")) return "de";
+    } catch (e) {
+      /* ignore */
+    }
+    return "en";
+  }
+
   function TagsHelpModal(props) {
     if (!props.open) return null;
+    const t = TAGS_HELP_I18N[getTagsHelpLang()];
     return React.createElement(
       "div",
       {
@@ -797,7 +846,7 @@
           React.createElement(
             "h3",
             { id: "qm-tags-help-title", className: "quick-markers-modal-title" },
-            "Zusatz-Tags im Preset-JSON (tags)"
+            t.title
           ),
           React.createElement(
             "button",
@@ -813,77 +862,25 @@
         React.createElement(
           "div",
           { className: "quick-markers-modal-body quick-markers-tags-help-body" },
-          React.createElement(
-            "p",
-            null,
-            "So fügst du ",
-            React.createElement("strong", null, "weitere Tags"),
-            " (nicht den Primärtag) nachträglich in die Preset-Konfiguration ein. Gespeichert wird in der ",
-            React.createElement("strong", null, "Stash-Datenbank"),
-            ", nicht in einer Datei auf der Festplatte."
-          ),
+          React.createElement("p", null, t.intro),
           React.createElement(
             "ol",
             { className: "quick-markers-tags-help-steps" },
-            React.createElement(
-              "li",
-              null,
-              "Hier in den Plugin-Settings auf ",
-              React.createElement("strong", null, "Edit JSON (advanced)"),
-              " klicken (Button unten auf dieser Seite)."
-            ),
-            React.createElement(
-              "li",
-              null,
-              "Im Array ",
-              React.createElement("code", null, "presets"),
-              " das gewünschte Preset suchen (z. B. an ",
-              React.createElement("code", null, "id"),
-              " oder ",
-              React.createElement("code", null, "label"),
-              ")."
-            ),
-            React.createElement(
-              "li",
-              null,
-              "Zeile ",
-              React.createElement("code", null, "tags"),
-              " einfügen oder anpassen — Array aus Tag-Namen, exakt wie in Stash unter Tags:"
-            )
+            React.createElement("li", null, t.step1),
+            React.createElement("li", null, t.step2),
+            React.createElement("li", null, t.step3)
           ),
           React.createElement(
             "pre",
             { className: "quick-markers-tags-help-code" },
             '{\n  "id": "com-joi",\n  "label": "Com Joi",\n  "primaryTag": "Compilation",\n  "tags": ["Joi", "Talk"],\n  "title": "Com Joi",\n  "rangeInKey": "shift+i",\n  "rangeOutKey": "shift+o"\n}'
           ),
-          React.createElement(
-            "p",
-            null,
-            React.createElement("strong", null, "primaryTag"),
-            " = Primärtag am Marker. ",
-            React.createElement("strong", null, "tags"),
-            " = zusätzliche normale Tags. Den Primärtag nicht nochmal in ",
-            React.createElement("code", null, "tags"),
-            " eintragen."
-          ),
-          React.createElement(
-            "p",
-            null,
-            React.createElement("strong", null, "Save"),
-            " im JSON-Dialog — danach ",
-            React.createElement("strong", null, "Reload plugins"),
-            " und ",
-            React.createElement("strong", null, "Reload UI"),
-            " in Stash."
-          ),
+          React.createElement("p", null, t.primaryNote),
+          React.createElement("p", null, t.saveNote),
           React.createElement(
             "p",
             { className: "text-muted small mb-0" },
-            "Wichtig: Das gilt für ",
-            React.createElement("strong", null, "neue"),
-            " Marker, die du danach mit Quick Markers anlegst. Bereits existierende Marker auf Szenen werden durch JSON-Änderungen ",
-            React.createElement("strong", null, "nicht"),
-            " automatisch aktualisiert — dafür Marker in Stash bearbeiten (Tab Markers → Edit → Feld Tags)."
+            t.warning
           )
         ),
         React.createElement(
@@ -896,7 +893,7 @@
               className: "btn btn-primary",
               onClick: props.onClose,
             },
-            "OK"
+            t.ok
           )
         )
       )
@@ -906,6 +903,7 @@
   function QuickMarkersSettings() {
     const { plugins, savePluginSettings, loading } = PluginApi.hooks.useSettings();
     const Toast = PluginApi.hooks.useToast();
+    const tagsHelpT = TAGS_HELP_I18N[getTagsHelpLang()];
 
     const [config, setConfig] = React.useState({
       defaultPresetIndex: 0,
@@ -1495,7 +1493,7 @@
               setShowTagsHelpModal(true);
             },
           },
-          "Hilfe: tags in JSON"
+          tagsHelpT.button
         )
       ),
       showJsonModal
