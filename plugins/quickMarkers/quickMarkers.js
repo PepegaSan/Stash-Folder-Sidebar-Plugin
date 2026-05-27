@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.1.0";
+  const PLUGIN_VERSION = "1.2.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const VALID_PANEL_POSITIONS = [
     "top-left",
@@ -103,6 +103,7 @@
           id: p.id,
           label: p.label,
           primaryTag: p.primaryTag,
+          tags: p.tags || [],
           title: p.title,
           rangeInKey: p.rangeInKey,
           rangeOutKey: p.rangeOutKey,
@@ -139,6 +140,34 @@
     return m + ":" + String(sec).padStart(2, "0");
   }
 
+  function normalizePresetTags(value, primaryTag) {
+    let list = [];
+    if (Array.isArray(value)) {
+      list = value.map(function (t) {
+        return String(t).trim();
+      });
+    } else if (typeof value === "string" && value.trim()) {
+      list = value.split(",").map(function (t) {
+        return t.trim();
+      });
+    }
+    const primaryKey = String(primaryTag || "")
+      .trim()
+      .toLowerCase();
+    const seen = new Set();
+    return list
+      .filter(function (name) {
+        return !!name;
+      })
+      .filter(function (name) {
+        const key = name.toLowerCase();
+        if (primaryKey && key === primaryKey) return false;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
   function parsePresetsJson(text) {
     if (!text || !String(text).trim()) return null;
     const parsed = JSON.parse(String(text));
@@ -154,6 +183,7 @@
         id: (p.id || String(index)).trim(),
         label: label,
         primaryTag: primaryTag,
+        tags: normalizePresetTags(p.tags, primaryTag),
         title: (p.title || label).trim(),
         rangeInKey: (p.rangeInKey || "").trim().toLowerCase(),
         rangeOutKey: (p.rangeOutKey || "").trim().toLowerCase(),
@@ -193,6 +223,7 @@
           if (p.rangeInKey) o.rangeInKey = p.rangeInKey;
           if (p.rangeOutKey) o.rangeOutKey = p.rangeOutKey;
           if (p.instantKey) o.instantKey = p.instantKey;
+          if (p.tags && p.tags.length) o.tags = p.tags;
           return o;
         }),
     };
@@ -370,6 +401,14 @@
     const createAt = React.useCallback(
       async function (preset, startSeconds, endSeconds) {
         const tagId = await resolveTagId(preset.primaryTag);
+        const extraTagIds = [];
+        const extraTags = preset.tags || [];
+        for (let i = 0; i < extraTags.length; i++) {
+          const extraId = await resolveTagId(extraTags[i]);
+          if (extraId !== tagId && extraTagIds.indexOf(extraId) < 0) {
+            extraTagIds.push(extraId);
+          }
+        }
         const from = Math.min(startSeconds, endSeconds ?? startSeconds);
         const to =
           typeof endSeconds === "number" && endSeconds > from + 0.05
@@ -382,7 +421,7 @@
           seconds: from,
           end_seconds: to,
           primary_tag_id: tagId,
-          tag_ids: [],
+          tag_ids: extraTagIds,
         };
         await createMarker({
           variables: useFlatMarkerCreateVars
@@ -750,6 +789,7 @@
 
     const [newLabel, setNewLabel] = React.useState("");
     const [newPrimaryTag, setNewPrimaryTag] = React.useState("");
+    const [newTags, setNewTags] = React.useState("");
     const [newRangeIn, setNewRangeIn] = React.useState("shift+i");
     const [newRangeOut, setNewRangeOut] = React.useState("shift+o");
     const [newInstant, setNewInstant] = React.useState("");
@@ -854,6 +894,7 @@
             id: id,
             label: label,
             primaryTag: primaryTag,
+            tags: normalizePresetTags(newTags, primaryTag),
             title: label,
             rangeInKey: newRangeIn.trim().toLowerCase(),
             rangeOutKey: newRangeOut.trim().toLowerCase(),
@@ -864,6 +905,7 @@
       persistConfig(next);
       setNewLabel("");
       setNewPrimaryTag("");
+      setNewTags("");
       setNewRangeIn("shift+i");
       setNewRangeOut("shift+o");
       setNewInstant("");
@@ -1095,7 +1137,7 @@
                   "div",
                   { className: "quick-markers-settings-list-header" },
                   React.createElement("span", null, "Label"),
-                  React.createElement("span", null, "Tag"),
+                  React.createElement("span", null, "Tags"),
                   React.createElement("span", null, "Keys"),
                   React.createElement("span", {
                     className: "quick-markers-settings-list-actions-hdr",
@@ -1117,7 +1159,18 @@
                       className: "quick-markers-settings-list-row",
                     },
                     React.createElement("span", null, preset.label),
-                    React.createElement("code", null, preset.primaryTag),
+                    React.createElement(
+                      "span",
+                      { className: "quick-markers-settings-tags" },
+                      React.createElement("code", null, preset.primaryTag),
+                      preset.tags && preset.tags.length
+                        ? React.createElement(
+                            "span",
+                            { className: "text-muted" },
+                            " + " + preset.tags.join(", ")
+                          )
+                        : null
+                    ),
                     React.createElement(
                       "span",
                       { className: "quick-markers-settings-keys text-muted" },
@@ -1198,6 +1251,30 @@
                     setNewPrimaryTag(e.target.value);
                   },
                 })
+              ),
+              React.createElement(
+                "div",
+                { className: "form-group" },
+                React.createElement(
+                  "label",
+                  { htmlFor: "qm-new-tags" },
+                  "Additional tags (optional)"
+                ),
+                React.createElement("input", {
+                  id: "qm-new-tags",
+                  type: "text",
+                  className: "form-control",
+                  value: newTags,
+                  placeholder: "Favorite, Outdoor",
+                  onChange: function (e) {
+                    setNewTags(e.target.value);
+                  },
+                }),
+                React.createElement(
+                  "p",
+                  { className: "text-muted small mb-0" },
+                  "Comma-separated. Must exist in Stash Tags. Not the same as primary tag."
+                )
               ),
               React.createElement(
                 "div",
@@ -1311,7 +1388,7 @@
                 React.createElement(
                   "p",
                   { className: "text-muted small mb-2" },
-                  "Full config: defaultPresetIndex and presets array. Tag names must match Stash."
+                  "Full config: defaultPresetIndex and presets array. Each preset: primaryTag (required), optional tags array for extra marker tags. Names must exist in Stash."
                 ),
                 React.createElement("textarea", {
                   className: "form-control quick-markers-json",

@@ -17,6 +17,7 @@
       "id": "highlight",
       "label": "Highlight",
       "primaryTag": "Highlight",
+      "tags": ["Favorite"],
       "title": "Highlight",
       "instantKey": "shift+2"
     }

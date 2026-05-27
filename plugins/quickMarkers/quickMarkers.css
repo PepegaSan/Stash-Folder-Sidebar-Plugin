@@ -172,6 +172,11 @@
   word-break: break-word;
 }
 
+.quick-markers-settings-tags {
+  font-size: 0.85rem;
+  word-break: break-word;
+}
+
 .quick-markers-settings-add-body {
   padding: 0.5rem 0 0.25rem;
 }
