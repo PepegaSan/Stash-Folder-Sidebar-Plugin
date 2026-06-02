@@ -2,10 +2,12 @@
 
 Community plugins for [Stash](https://github.com/stashapp/stash), installable via [source URL](#installation-from-stash-plugin-source-url) or manual copy from `plugins/<id>/`.
 
+**Jump to:** [Folder Sidebar](#folder-sidebar) · [Quick Markers](#quick-markers)
+
 | Plugin | Description |
 |--------|-------------|
-| [Folder Sidebar](plugins/folderSidebar/) | Browse scenes by filesystem folder |
-| [Quick Markers](plugins/quickMarkers/) | Hotkey scene markers with presets |
+| [Folder Sidebar](#folder-sidebar) | Browse scenes by filesystem folder |
+| [Quick Markers](#quick-markers) | Hotkey scene markers with presets |
 
 ---
 
@@ -139,6 +141,9 @@ Copy `folders.json.example` to `folders.json` and edit:
 
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
+![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
+![Version](https://img.shields.io/badge/version-1.2.3-informational)
+
 ## Requirements
 
 - Stash UI plugins enabled
@@ -161,7 +166,8 @@ Create **scene markers** from the scene player with **presets** (e.g. tag `Compi
 1. Open a **scene** and start playback.
 2. Use **Shift+I** at start, **Shift+O** at end → marker with your preset tag.
 3. Or press **Shift+1** (etc.) for a marker at the current time only.
-4. Optional: floating **Quick Markers** panel (bottom right) — click a preset or switch active preset.
+4. Optional: floating **Quick Markers** panel (position in settings; collapsed by default) — click a preset or switch active preset with **Shift+[** / **Shift+]**.
+5. **Android / tablet:** touch bar at the bottom of the screen (**IN** / **OUT** / **INSTANT** + preset buttons). Auto-enabled on touch devices; override in settings (**Touch controls**: auto / on / off).
 
 Markers are saved via GraphQL; open the **Markers** tab or refresh if the list does not update immediately.
 
@@ -169,20 +175,28 @@ Markers are saved via GraphQL; open the **Markers** tab or refresh if the list d
 
 **Settings → Plugins → Quick Markers**
 
+- **Scene panel position** — top-left (default), top-right, bottom corners, or hidden (hotkeys only)
+- **Start scene panel collapsed** — small header until expanded
+- **Touch controls (Android / tablet)** — auto-detect, always on, or off
 - **Presets** list (collapsible) — view/delete presets, pick default for Shift+I/O
-- **Add preset** (collapsed) — label, tag name, hotkeys
-- **Edit JSON (advanced)…** — opens a **popup** for full JSON (hidden until you open it)
+- **Add preset** (collapsed) — label, primary tag, optional additional tags, hotkeys
+- **Edit JSON (advanced)…** — full config in a popup
+- **Help: tags in JSON** — how to add `tags` to a preset (German or English by browser locale)
 
 JSON example (same as in the modal):
 
 ```json
 {
   "defaultPresetIndex": 0,
+  "panelPosition": "top-left",
+  "panelCollapsed": true,
+  "touchControls": "auto",
   "presets": [
     {
       "id": "compilation",
       "label": "Compilation",
       "primaryTag": "Compilation",
+      "tags": ["Favorite"],
       "title": "Compilation",
       "rangeInKey": "shift+i",
       "rangeOutKey": "shift+o",
@@ -192,9 +206,13 @@ JSON example (same as in the modal):
 }
 ```
 
-- `primaryTag` — exact tag **name** in Stash (required)
+- `primaryTag` — exact tag **name** in Stash (required); becomes the marker **primary tag**
+- `tags` — optional array of extra tag names on the marker (must exist in Stash)
 - `rangeInKey` / `rangeOutKey` — optional range workflow for that preset when it is **active**
 - `instantKey` — optional one-shot marker at playhead
+- `panelPosition`, `panelCollapsed`, `touchControls` — optional UI settings
+
+Presets are stored in **Stash plugin settings** (`presetsJson`) after you save in the UI. The optional `presets.json` file in the plugin folder is only used until settings are saved once.
 
 ## Manual install
 
@@ -208,14 +226,30 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.0.5`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.0.5**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.2.3`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.2.3**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
 ---
 
 ## Changelog
+
+### Quick Markers 1.2.x (1.2.0–1.2.3)
+
+- **Additional tags per preset** — optional `tags` array in JSON; applied as extra marker tags (`tag_ids`) alongside `primaryTag`
+- **Help: tags in JSON** — modal explaining how to add `tags` to presets via **Edit JSON** (German or English from browser locale)
+- Settings: optional **Additional tags** field when adding a preset; preset list shows primary tag + extras
+
+### Quick Markers 1.1.0
+
+- **Touch controls** for Android / tablet — fixed bottom bar with **IN** / **OUT** / **INSTANT** and preset buttons (does not overlay the video player)
+- **Touch controls** setting: auto-detect (`pointer: coarse`), always on, or off
+
+### Quick Markers 1.0.7–1.0.9
+
+- Fix marker create API (400) and **PluginApi** initialization (settings + scene panel missing)
+- **Scene panel position** (top-left default, hidden, etc.) and **collapsed by default**; browser remembers expand/collapse
 
 ### Quick Markers 1.0.6
 
