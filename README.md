@@ -44,7 +44,7 @@ Fixed sidebar with your own root folders, drill into subfolders, and list scenes
    https://pepegasan.github.io/Stash-Folder-Sidebar-Plugin/main/index.yml
    ```
 
-3. Install **Folder Sidebar** and/or **Quick Markers** from the list, then reload plugins if prompted.
+3. Install **Folder Sidebar**, **Quick Markers**, and/or **Bracket Tags** from the list, then reload plugins if prompted.
 
 ### Manual
 
@@ -236,27 +236,81 @@ If the version line is missing or an old version number appears, the old `quickM
 
 # Bracket Tags
 
-Task plugin: reads `[Tag]` parts from scene filenames and adds them as scene tags.
+Adds **scene tags** from text in **square brackets** in the filename — e.g. `[Joi]` and `[Talk]` in `My Clip [Joi] [Talk].mp4`. Simpler than generic filename parsers: no regex config, just run a task or enable auto-tagging on scan.
 
 ![Stash](https://img.shields.io/badge/Stash-task%20plugin-blue)
 ![Version](https://img.shields.io/badge/version-1.0.0-informational)
 
-## Example
+## Features
 
-`My Clip [Joi] [Talk].mp4` → tags `Joi` and `Talk` on the scene.
+- Reads every `[...]` block from the scene filename (first file on the scene)
+- **Multiple brackets** — `[Tag A] [Tag B]` or comma-separated inside one bracket: `[Tag A, Tag B]`
+- **Create missing tags** — optional; on by default (no manual tag setup required)
+- **Manual task** — process the whole library once from **Tasks**
+- **Auto on new scenes** — optional hook after library scan (new scenes only)
+- Skips **organized** scenes; only **adds** tags, never removes existing ones
 
-`Clip [Joi, Talk].mp4` also works (comma-separated inside one bracket).
+## Requirements
+
+- Stash with plugin task support (recent stable builds)
+- **Scenes only** (not images/galleries)
+
+## Installation
+
+Install from the [plugin source URL](#installation-from-stash-plugin-source-url) (**Bracket Tags** in the list), or copy manually:
+
+| OS | Path |
+|----|------|
+| Windows | `%USERPROFILE%\.stash\plugins\bracketTags\` |
+| Linux / macOS | `~/.stash/plugins/bracketTags/` |
+
+Required files: `bracketTags.yml`, `bracketTags.js`
+
+Then **Settings → Plugins → Reload plugins**.
+
+## Configuration
+
+**Settings → Plugins → Bracket Tags**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Create missing tags** | on | Create tags in Stash when the bracket name does not exist yet |
+| **Auto on new scenes** | off | Apply bracket tags automatically when a scene is created (e.g. after scan) |
 
 ## Usage
 
-1. Copy `plugins/bracketTags/` to `~/.stash/plugins/bracketTags/`
-2. **Settings → Plugins → Reload plugins**
-3. **Settings → Plugins → Bracket Tags**
-   - **Create missing tags** — on by default
-   - **Auto on new scenes** — optional hook after library scan
-4. **Tasks → Apply bracket tags to all scenes** — run once for existing library
+### Existing library (one-time)
 
-Organized scenes are skipped. Existing tags are kept; only missing ones are added.
+1. **Tasks → Apply bracket tags to all scenes**
+2. Watch progress in the task log; updated scenes are logged with filename and tags added
+
+### New files after scan
+
+Enable **Auto on new scenes** in plugin settings, then run a normal library scan. Each new scene gets bracket tags from its filename without running the task again.
+
+### Examples
+
+| Filename | Tags added |
+|----------|------------|
+| `My Clip [Joi] [Talk].mp4` | `Joi`, `Talk` |
+| `Clip [Joi, Talk].mp4` | `Joi`, `Talk` |
+| `No brackets here.mp4` | *(skipped)* |
+
+## Notes
+
+- Matching is **case-insensitive** when checking if a tag already exists on the scene
+- Tag **names** in brackets are used as-is (trimmed); create-missing uses the exact bracket text
+- Re-running the task is safe — already-applied tags are not duplicated
+- For complex filename layouts (studio/date/performer patterns), use Stash’s built-in **Scene Filename Parser** instead
+
+## Manual install
+
+```bash
+git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
+cp -r Stash-Folder-Sidebar-Plugin/plugins/bracketTags ~/.stash/plugins/bracketTags
+```
+
+Reload plugins in Stash, then run the task or enable **Auto on new scenes**.
 
 ---
 
@@ -265,7 +319,6 @@ Organized scenes are skipped. Existing tags are kept; only missing ones are adde
 ### Bracket Tags 1.0.0
 
 - Initial release: bracket parsing, optional tag creation, manual task + optional scan hook
-
 
 ### Quick Markers 1.2.x (1.2.0–1.2.3)
 
