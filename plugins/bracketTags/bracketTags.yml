@@ -1,0 +1,28 @@
+name: Bracket Tags
+description: Add scene tags from [bracketed] parts of the filename
+version: 1.0.0
+url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
+exec:
+  - bracketTags.js
+interface: js
+settings:
+  createMissingTags:
+    displayName: Create missing tags
+    description: Create tags in Stash when they do not exist yet.
+    type: BOOLEAN
+  autoOnScan:
+    displayName: Auto on new scenes
+    description: Apply bracket tags when a scene is created (e.g. after library scan).
+    type: BOOLEAN
+hooks:
+  - name: Apply bracket tags on scene create
+    description: Runs when auto on new scenes is enabled.
+    triggeredBy:
+      - Scene.Create.Post
+    defaultArgs:
+      mode: hook
+tasks:
+  - name: Apply bracket tags to all scenes
+    description: Scan all scenes and add tags from [brackets] in filenames.
+    defaultArgs:
+      mode: allScenes

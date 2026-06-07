@@ -2,12 +2,13 @@
 
 Community plugins for [Stash](https://github.com/stashapp/stash), installable via [source URL](#installation-from-stash-plugin-source-url) or manual copy from `plugins/<id>/`.
 
-**Jump to:** [Folder Sidebar](#folder-sidebar) · [Quick Markers](#quick-markers)
+**Jump to:** [Folder Sidebar](#folder-sidebar) · [Quick Markers](#quick-markers) · [Bracket Tags](#bracket-tags)
 
 | Plugin | Description |
 |--------|-------------|
 | [Folder Sidebar](#folder-sidebar) | Browse scenes by filesystem folder |
 | [Quick Markers](#quick-markers) | Hotkey scene markers with presets |
+| [Bracket Tags](#bracket-tags) | Tags from `[brackets]` in filenames |
 
 ---
 
@@ -233,7 +234,38 @@ If the version line is missing or an old version number appears, the old `quickM
 
 ---
 
+# Bracket Tags
+
+Task plugin: reads `[Tag]` parts from scene filenames and adds them as scene tags.
+
+![Stash](https://img.shields.io/badge/Stash-task%20plugin-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-informational)
+
+## Example
+
+`My Clip [Joi] [Talk].mp4` → tags `Joi` and `Talk` on the scene.
+
+`Clip [Joi, Talk].mp4` also works (comma-separated inside one bracket).
+
+## Usage
+
+1. Copy `plugins/bracketTags/` to `~/.stash/plugins/bracketTags/`
+2. **Settings → Plugins → Reload plugins**
+3. **Settings → Plugins → Bracket Tags**
+   - **Create missing tags** — on by default
+   - **Auto on new scenes** — optional hook after library scan
+4. **Tasks → Apply bracket tags to all scenes** — run once for existing library
+
+Organized scenes are skipped. Existing tags are kept; only missing ones are added.
+
+---
+
 ## Changelog
+
+### Bracket Tags 1.0.0
+
+- Initial release: bracket parsing, optional tag creation, manual task + optional scan hook
+
 
 ### Quick Markers 1.2.x (1.2.0–1.2.3)
 
