@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.2.6";
+  const PLUGIN_VERSION = "1.2.7";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const VALID_PANEL_POSITIONS = [
     "top-left",
@@ -1393,7 +1393,7 @@
                         {
                           type: "button",
                           className:
-                            "btn btn-secondary btn-sm" +
+                            "btn btn-primary btn-sm" +
                             (editingPresetId === preset.id
                               ? " active"
                               : ""),

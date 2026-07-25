@@ -148,7 +148,7 @@
 .quick-markers-settings-list-header,
 .quick-markers-settings-list-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.4fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(9.5rem, auto);
   gap: 0.5rem;
   align-items: center;
   padding: 0.45rem 0.65rem;
@@ -159,6 +159,7 @@
   flex-wrap: wrap;
   gap: 0.35rem;
   justify-content: flex-end;
+  min-width: 9.5rem;
 }
 
 .quick-markers-settings-form-actions {

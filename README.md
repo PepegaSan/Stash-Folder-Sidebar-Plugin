@@ -143,7 +143,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.2.6-informational)
+![Version](https://img.shields.io/badge/version-1.2.7-informational)
 
 ## Requirements
 
@@ -227,8 +227,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.2.6`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.2.6**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.2.7`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.2.7**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -319,6 +319,10 @@ Reload plugins in Stash, then run the task or enable **Auto on new scenes**.
 ### Bracket Tags 1.0.0
 
 - Initial release: bracket parsing, optional tag creation, manual task + optional scan hook
+
+### Quick Markers 1.2.7
+
+- **Settings UI** — clearer **Edit** button next to Delete; wider actions column so Edit is not clipped
 
 ### Quick Markers 1.2.6
 
