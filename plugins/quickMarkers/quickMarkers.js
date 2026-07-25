@@ -2,9 +2,11 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.2.8";
+  const PLUGIN_VERSION = "1.2.9";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
+  const TOUCH_BAR_GAP = 6;
+  const TOUCH_BAR_FALLBACK_HEIGHT = 112;
   const VALID_PANEL_POSITIONS = [
     "top-left",
     "top-right",
@@ -152,6 +154,87 @@
     if (!tech) return null;
     const wrap = tech.closest(".video-js, .VideoPlayer, .scene-player");
     return wrap || tech.parentElement || tech;
+  }
+
+  function findPlayerControls(playerEl) {
+    if (!playerEl || !playerEl.querySelector) return null;
+    const controlBar =
+      playerEl.querySelector(".vjs-control-bar") ||
+      playerEl.querySelector("[class*='control-bar']");
+    const progress =
+      playerEl.querySelector(".vjs-progress-control") ||
+      playerEl.querySelector(".vjs-progress-holder") ||
+      (controlBar &&
+        controlBar.querySelector(
+          ".vjs-progress-control, .vjs-progress-holder, [class*='progress']"
+        ));
+    return { controlBar: controlBar, progress: progress };
+  }
+
+  function measureTouchBarLayout(playerEl, barHeight) {
+    const rect = playerEl.getBoundingClientRect();
+    if (rect.width < 40) return null;
+
+    const left = Math.round(rect.left);
+    const width = Math.round(rect.width);
+    const height = barHeight > 0 ? barHeight : TOUCH_BAR_FALLBACK_HEIGHT;
+    const controls = findPlayerControls(playerEl);
+
+    let anchorBottom = rect.bottom;
+    let controlsTop = null;
+
+    if (controls) {
+      if (controls.controlBar) {
+        const cb = controls.controlBar.getBoundingClientRect();
+        if (cb.width > 0 && cb.height > 0) {
+          anchorBottom = Math.max(anchorBottom, cb.bottom);
+          controlsTop = cb.top;
+        }
+      }
+      if (controls.progress) {
+        const pr = controls.progress.getBoundingClientRect();
+        if (pr.width > 0 && pr.height > 0) {
+          anchorBottom = Math.max(anchorBottom, pr.bottom);
+          controlsTop =
+            controlsTop == null ? pr.top : Math.min(controlsTop, pr.top);
+        }
+      }
+    }
+
+    const spaceBelow = window.innerHeight - anchorBottom - TOUCH_BAR_GAP;
+    let top;
+    let placement;
+
+    if (spaceBelow >= height) {
+      top = Math.round(anchorBottom + TOUCH_BAR_GAP);
+      placement = "below-player";
+    } else if (
+      controlsTop != null &&
+      controlsTop - height - TOUCH_BAR_GAP > rect.top + 8
+    ) {
+      // Keep the seek/control bar free: sit just above it (over video).
+      top = Math.round(controlsTop - height - TOUCH_BAR_GAP);
+      placement = "above-controls";
+    } else {
+      top = Math.round(
+        Math.max(TOUCH_BAR_GAP, window.innerHeight - height - TOUCH_BAR_GAP)
+      );
+      if (controlsTop != null && top + height > controlsTop - TOUCH_BAR_GAP) {
+        top = Math.round(
+          Math.max(rect.top + 8, controlsTop - height - TOUCH_BAR_GAP)
+        );
+        placement = "above-controls";
+      } else {
+        placement = "viewport-bottom";
+      }
+    }
+
+    return {
+      left: left,
+      width: width,
+      top: top,
+      placement: placement,
+    };
   }
 
   function getDefaultPresetsConfig() {
@@ -418,6 +501,7 @@
     const [playerLayout, setPlayerLayout] = React.useState(null);
     const panelInitRef = React.useRef(false);
     const panelRef = React.useRef(null);
+    const touchBarRef = React.useRef(null);
     const dragRef = React.useRef(null);
     const panelPosRef = React.useRef(panelPos);
 
@@ -442,49 +526,47 @@
       function () {
         let cancelled = false;
         let resizeObserver = null;
-        let observedEl = null;
+        const observed = [];
+
+        function observeEl(el) {
+          if (!el || !resizeObserver || observed.indexOf(el) >= 0) return;
+          try {
+            resizeObserver.observe(el);
+            observed.push(el);
+          } catch (e) {
+            /* ignore */
+          }
+        }
 
         function updatePlayerLayout() {
           const el = findPlayerElement();
-          if (
-            el &&
-            resizeObserver &&
-            el !== observedEl &&
-            typeof resizeObserver.observe === "function"
-          ) {
-            if (observedEl) {
-              try {
-                resizeObserver.unobserve(observedEl);
-              } catch (e) {
-                /* ignore */
-              }
-            }
-            try {
-              resizeObserver.observe(el);
-              observedEl = el;
-            } catch (e) {
-              /* ignore */
-            }
-          }
           if (!el) {
             if (!cancelled) setPlayerLayout(null);
             return;
           }
-          const rect = el.getBoundingClientRect();
-          if (rect.width < 40) {
+          observeEl(el);
+          const controls = findPlayerControls(el);
+          if (controls) {
+            observeEl(controls.controlBar);
+            observeEl(controls.progress);
+          }
+          const barEl = touchBarRef.current;
+          const barHeight = barEl
+            ? barEl.getBoundingClientRect().height
+            : TOUCH_BAR_FALLBACK_HEIGHT;
+          const next = measureTouchBarLayout(el, barHeight);
+          if (!next) {
             if (!cancelled) setPlayerLayout(null);
             return;
           }
-          const next = {
-            left: Math.round(rect.left),
-            width: Math.round(rect.width),
-          };
           if (!cancelled) {
             setPlayerLayout(function (prev) {
               if (
                 prev &&
                 prev.left === next.left &&
-                prev.width === next.width
+                prev.width === next.width &&
+                prev.top === next.top &&
+                prev.placement === next.placement
               ) {
                 return prev;
               }
@@ -497,7 +579,7 @@
           resizeObserver = new ResizeObserver(updatePlayerLayout);
         }
         updatePlayerLayout();
-        const intervalId = setInterval(updatePlayerLayout, 500);
+        const intervalId = setInterval(updatePlayerLayout, 400);
         window.addEventListener("resize", updatePlayerLayout);
         window.addEventListener("scroll", updatePlayerLayout, true);
 
@@ -509,7 +591,7 @@
           if (resizeObserver) resizeObserver.disconnect();
         };
       },
-      [scene.id]
+      [scene.id, config]
     );
 
     function togglePanelOpen() {
@@ -923,7 +1005,9 @@
       ? {
           left: playerLayout.left + "px",
           width: playerLayout.width + "px",
+          top: playerLayout.top + "px",
           right: "auto",
+          bottom: "auto",
         }
       : undefined;
 
@@ -931,9 +1015,13 @@
       ? React.createElement(
           "div",
           {
+            ref: touchBarRef,
             className:
               "quick-markers-touch-bar" +
-              (playerLayout ? " quick-markers-touch-bar-aligned" : ""),
+              (playerLayout
+                ? " quick-markers-touch-bar-aligned placement-" +
+                  (playerLayout.placement || "below-player")
+                : ""),
             style: touchBarStyle,
           },
           React.createElement(
@@ -1522,7 +1610,7 @@
         React.createElement(
           "p",
           { className: "text-muted small mb-0" },
-          "Shows IN / OUT / INSTANT buttons below the video player. Auto-detect enables them on touch devices (phones, tablets) and hides them on desktop."
+          "Shows IN / OUT / INSTANT under the player (or just above the seek bar if there is no room). Width follows the player so themes keep their timeline usable. Auto-detect: touch devices on, desktop off."
         )
       ),
       config.presets.length > 0
