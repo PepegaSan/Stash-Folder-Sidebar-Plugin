@@ -143,7 +143,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.2.7-informational)
+![Version](https://img.shields.io/badge/version-1.2.8-informational)
 
 ## Requirements
 
@@ -167,8 +167,8 @@ Create **scene markers** from the scene player with **presets** (e.g. tag `Compi
 1. Open a **scene** and start playback.
 2. Use **Shift+I** at start, **Shift+O** at end → marker with your preset tag.
 3. Or press **Shift+1** for an instant marker at the current time (uses the **active** preset, same idea as Shift+I/O).
-4. Optional: floating **Quick Markers** panel (position in settings; collapsed by default) — click a preset or switch active preset with **Shift+[** / **Shift+]**.
-5. **Android / tablet:** touch bar at the bottom of the screen (**IN** / **OUT** / **INSTANT** + preset buttons). Auto-enabled on touch devices; override in settings (**Touch controls**: auto / on / off).
+4. Optional: floating **Quick Markers** panel (corner in settings; collapsed by default) — **drag the header** to move it, double-click header to reset; click a preset or switch with **Shift+[** / **Shift+]**.
+5. **Android / tablet:** touch bar under the player (**IN** / **OUT** / **INSTANT** + preset buttons), width matched to the video player. Auto-enabled on touch devices; override in settings (**Touch controls**: auto / on / off).
 
 Markers are saved via GraphQL; open the **Markers** tab or refresh if the list does not update immediately.
 
@@ -176,9 +176,9 @@ Markers are saved via GraphQL; open the **Markers** tab or refresh if the list d
 
 **Settings → Plugins → Quick Markers**
 
-- **Scene panel position** — top-left (default), top-right, bottom corners, or hidden (hotkeys only)
+- **Scene panel position** — starting corner (top-left default), or hidden (hotkeys only); drag the panel header on the scene page to place it freely
 - **Start scene panel collapsed** — small header until expanded
-- **Touch controls (Android / tablet)** — auto-detect, always on, or off
+- **Touch controls (Android / tablet)** — auto-detect, always on, or off (bar width follows the player)
 - **Presets** list (collapsible) — view/edit/delete presets, pick default for Shift+I/O and Shift+1
 - **Add preset** (collapsed) — label, primary tag, optional additional tags, hotkeys
 - **Edit JSON (advanced)…** — full config in a popup
@@ -227,8 +227,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.2.7`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.2.7**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.2.8`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.2.8**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -319,6 +319,11 @@ Reload plugins in Stash, then run the task or enable **Auto on new scenes**.
 ### Bracket Tags 1.0.0
 
 - Initial release: bracket parsing, optional tag creation, manual task + optional scan hook
+
+### Quick Markers 1.2.8
+
+- **Draggable scene panel** — drag the header to move; double-click header to reset to the configured corner; position saved in the browser
+- **Touch bar width** — IN/OUT/INSTANT bar matches the video player width instead of full screen
 
 ### Quick Markers 1.2.7
 

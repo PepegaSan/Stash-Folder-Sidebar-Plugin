@@ -2,8 +2,9 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.2.7";
+  const PLUGIN_VERSION = "1.2.8";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
+  const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const VALID_PANEL_POSITIONS = [
     "top-left",
     "top-right",
@@ -90,6 +91,67 @@
     } catch (e) {
       /* ignore */
     }
+  }
+
+  function readStoredPanelPos() {
+    try {
+      const raw = localStorage.getItem(PANEL_POS_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (
+        parsed &&
+        typeof parsed.left === "number" &&
+        typeof parsed.top === "number" &&
+        !isNaN(parsed.left) &&
+        !isNaN(parsed.top)
+      ) {
+        return { left: parsed.left, top: parsed.top };
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return null;
+  }
+
+  function storePanelPos(pos) {
+    try {
+      if (!pos) {
+        localStorage.removeItem(PANEL_POS_STORAGE_KEY);
+        return;
+      }
+      localStorage.setItem(
+        PANEL_POS_STORAGE_KEY,
+        JSON.stringify({ left: pos.left, top: pos.top })
+      );
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function clampPanelPos(left, top, width, height) {
+    const maxLeft = Math.max(0, window.innerWidth - width);
+    const maxTop = Math.max(0, window.innerHeight - height);
+    return {
+      left: Math.min(Math.max(0, left), maxLeft),
+      top: Math.min(Math.max(0, top), maxTop),
+    };
+  }
+
+  function findPlayerElement() {
+    const preferred = [
+      ".video-js",
+      "#VideoJsPlayer",
+      ".VideoPlayer",
+      ".scene-player",
+    ];
+    for (let i = 0; i < preferred.length; i++) {
+      const el = document.querySelector(preferred[i]);
+      if (el && el.getBoundingClientRect().width > 40) return el;
+    }
+    const tech = document.querySelector(".vjs-tech, video");
+    if (!tech) return null;
+    const wrap = tech.closest(".video-js, .VideoPlayer, .scene-player");
+    return wrap || tech.parentElement || tech;
   }
 
   function getDefaultPresetsConfig() {
@@ -351,7 +413,20 @@
     const [inPoint, setInPoint] = React.useState(null);
     const [status, setStatus] = React.useState("");
     const [panelOpen, setPanelOpen] = React.useState(false);
+    const [panelPos, setPanelPos] = React.useState(readStoredPanelPos);
+    const [panelDragging, setPanelDragging] = React.useState(false);
+    const [playerLayout, setPlayerLayout] = React.useState(null);
     const panelInitRef = React.useRef(false);
+    const panelRef = React.useRef(null);
+    const dragRef = React.useRef(null);
+    const panelPosRef = React.useRef(panelPos);
+
+    React.useEffect(
+      function () {
+        panelPosRef.current = panelPos;
+      },
+      [panelPos]
+    );
 
     React.useEffect(
       function () {
@@ -363,12 +438,140 @@
       [config]
     );
 
+    React.useEffect(
+      function () {
+        let cancelled = false;
+        let resizeObserver = null;
+        let observedEl = null;
+
+        function updatePlayerLayout() {
+          const el = findPlayerElement();
+          if (
+            el &&
+            resizeObserver &&
+            el !== observedEl &&
+            typeof resizeObserver.observe === "function"
+          ) {
+            if (observedEl) {
+              try {
+                resizeObserver.unobserve(observedEl);
+              } catch (e) {
+                /* ignore */
+              }
+            }
+            try {
+              resizeObserver.observe(el);
+              observedEl = el;
+            } catch (e) {
+              /* ignore */
+            }
+          }
+          if (!el) {
+            if (!cancelled) setPlayerLayout(null);
+            return;
+          }
+          const rect = el.getBoundingClientRect();
+          if (rect.width < 40) {
+            if (!cancelled) setPlayerLayout(null);
+            return;
+          }
+          const next = {
+            left: Math.round(rect.left),
+            width: Math.round(rect.width),
+          };
+          if (!cancelled) {
+            setPlayerLayout(function (prev) {
+              if (
+                prev &&
+                prev.left === next.left &&
+                prev.width === next.width
+              ) {
+                return prev;
+              }
+              return next;
+            });
+          }
+        }
+
+        if (typeof ResizeObserver !== "undefined") {
+          resizeObserver = new ResizeObserver(updatePlayerLayout);
+        }
+        updatePlayerLayout();
+        const intervalId = setInterval(updatePlayerLayout, 500);
+        window.addEventListener("resize", updatePlayerLayout);
+        window.addEventListener("scroll", updatePlayerLayout, true);
+
+        return function () {
+          cancelled = true;
+          clearInterval(intervalId);
+          window.removeEventListener("resize", updatePlayerLayout);
+          window.removeEventListener("scroll", updatePlayerLayout, true);
+          if (resizeObserver) resizeObserver.disconnect();
+        };
+      },
+      [scene.id]
+    );
+
     function togglePanelOpen() {
       setPanelOpen(function (open) {
         const next = !open;
         storePanelOpen(next);
         return next;
       });
+    }
+
+    function onPanelDragStart(e) {
+      if (e.button != null && e.button !== 0) return;
+      if (e.target && e.target.closest && e.target.closest(".quick-markers-toggle")) {
+        return;
+      }
+      const el = panelRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      dragRef.current = {
+        pointerId: e.pointerId,
+        offsetX: e.clientX - rect.left,
+        offsetY: e.clientY - rect.top,
+        width: rect.width,
+        height: rect.height,
+      };
+      if (el.setPointerCapture && e.pointerId != null) {
+        try {
+          el.setPointerCapture(e.pointerId);
+        } catch (err) {
+          /* ignore */
+        }
+      }
+      setPanelDragging(true);
+      e.preventDefault();
+    }
+
+    function onPanelDragMove(e) {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const next = clampPanelPos(
+        e.clientX - drag.offsetX,
+        e.clientY - drag.offsetY,
+        drag.width,
+        drag.height
+      );
+      panelPosRef.current = next;
+      setPanelPos(next);
+    }
+
+    function onPanelDragEnd() {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      setPanelDragging(false);
+      storePanelPos(panelPosRef.current);
+    }
+
+    function onPanelDragReset(e) {
+      e.preventDefault();
+      dragRef.current = null;
+      setPanelDragging(false);
+      setPanelPos(null);
+      storePanelPos(null);
     }
 
     const useCreateMarker =
@@ -582,19 +785,40 @@
       normalizeTouchControls(config.touchControls)
     );
 
+    var panelStyle = panelPos
+      ? {
+          left: panelPos.left + "px",
+          top: panelPos.top + "px",
+          right: "auto",
+          bottom: "auto",
+        }
+      : undefined;
+
     var floatingPanel =
       panelPosition !== "hidden"
         ? React.createElement(
             "div",
             {
+              ref: panelRef,
               className:
                 "quick-markers-panel quick-markers-panel-pos-" +
                 panelPosition +
-                (panelOpen ? "" : " quick-markers-panel-collapsed"),
+                (panelPos ? " quick-markers-panel-custom" : "") +
+                (panelOpen ? "" : " quick-markers-panel-collapsed") +
+                (panelDragging ? " quick-markers-panel-dragging" : ""),
+              style: panelStyle,
+              onPointerMove: onPanelDragMove,
+              onPointerUp: onPanelDragEnd,
+              onPointerCancel: onPanelDragEnd,
             },
             React.createElement(
               "div",
-              { className: "quick-markers-panel-header" },
+              {
+                className: "quick-markers-panel-header",
+                onPointerDown: onPanelDragStart,
+                onDoubleClick: onPanelDragReset,
+                title: "Drag to move · double-click to reset position",
+              },
               React.createElement(
                 "button",
                 {
@@ -695,10 +919,23 @@
           )
         : null;
 
+    var touchBarStyle = playerLayout
+      ? {
+          left: playerLayout.left + "px",
+          width: playerLayout.width + "px",
+          right: "auto",
+        }
+      : undefined;
+
     var touchBar = showTouchBar
       ? React.createElement(
           "div",
-          { className: "quick-markers-touch-bar" },
+          {
+            className:
+              "quick-markers-touch-bar" +
+              (playerLayout ? " quick-markers-touch-bar-aligned" : ""),
+            style: touchBarStyle,
+          },
           React.createElement(
             "div",
             { className: "quick-markers-touch-actions" },
@@ -1152,7 +1389,7 @@
         React.createElement("kbd", null, "shift+o"),
         " for range and ",
         React.createElement("kbd", null, "shift+1"),
-        " for instant (defaults for all presets). Avoid plain ",
+        " for instant (defaults for all presets). Scene panel: drag the header to move, double-click to reset. Avoid plain ",
         React.createElement("kbd", null, "i"),
         " / ",
         React.createElement("kbd", null, "o"),
@@ -1233,7 +1470,7 @@
         React.createElement(
           "p",
           { className: "text-muted small mb-2" },
-          "Collapsed by default on the scene page. Click ▶ on the panel to expand; Stash remembers that per browser."
+          "Collapsed by default on the scene page. Click ▶ to expand. Drag the panel header to move it; double-click the header to reset. Position is remembered per browser."
         ),
         React.createElement(
           "div",
