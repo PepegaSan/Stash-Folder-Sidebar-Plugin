@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.2.5";
+  const PLUGIN_VERSION = "1.2.6";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const VALID_PANEL_POSITIONS = [
     "top-left",
@@ -185,10 +185,10 @@
         primaryTag: primaryTag,
         tags: normalizePresetTags(p.tags, primaryTag),
         title: (p.title || label).trim(),
-        // Default shared In/Out hotkeys; override per preset if needed.
+        // Default shared hotkeys (like active-preset I/O); override per preset if needed.
         rangeInKey: (p.rangeInKey || "shift+i").trim().toLowerCase(),
         rangeOutKey: (p.rangeOutKey || "shift+o").trim().toLowerCase(),
-        instantKey: (p.instantKey || "").trim().toLowerCase(),
+        instantKey: (p.instantKey || "shift+1").trim().toLowerCase(),
       };
     });
     let defaultIndex = 0;
@@ -513,16 +513,8 @@
           });
         }
 
-        config.presets.forEach(function (preset, index) {
-          if (preset.instantKey) {
-            bind(preset.instantKey, function (e) {
-              if (e && e.preventDefault) e.preventDefault();
-              onInstant(preset);
-            });
-          }
-        });
-
         if (activePreset) {
+          // Shared defaults (shift+i/o/1) apply to the active preset — same model for all three.
           if (activePreset.rangeInKey) {
             bind(activePreset.rangeInKey, function (e) {
               if (e && e.preventDefault) e.preventDefault();
@@ -535,7 +527,29 @@
               onRangeOut(activePreset);
             });
           }
+          if (activePreset.instantKey) {
+            bind(activePreset.instantKey, function (e) {
+              if (e && e.preventDefault) e.preventDefault();
+              onInstant(activePreset);
+            });
+          }
         }
+
+        // Unique instant keys still work for other presets (e.g. shift+2) without switching.
+        config.presets.forEach(function (preset) {
+          if (!preset.instantKey) return;
+          if (activePreset && preset.id === activePreset.id) return;
+          if (
+            activePreset &&
+            preset.instantKey === activePreset.instantKey
+          ) {
+            return;
+          }
+          bind(preset.instantKey, function (e) {
+            if (e && e.preventDefault) e.preventDefault();
+            onInstant(preset);
+          });
+        });
 
         bind("shift+]", function (e) {
           if (e && e.preventDefault) e.preventDefault();
@@ -925,7 +939,7 @@
     const [newTags, setNewTags] = React.useState("");
     const [newRangeIn, setNewRangeIn] = React.useState("shift+i");
     const [newRangeOut, setNewRangeOut] = React.useState("shift+o");
-    const [newInstant, setNewInstant] = React.useState("");
+    const [newInstant, setNewInstant] = React.useState("shift+1");
 
     function resetPresetForm() {
       setNewLabel("");
@@ -933,7 +947,7 @@
       setNewTags("");
       setNewRangeIn("shift+i");
       setNewRangeOut("shift+o");
-      setNewInstant("");
+      setNewInstant("shift+1");
       setEditingPresetId(null);
     }
 
@@ -945,7 +959,7 @@
       );
       setNewRangeIn(preset.rangeInKey || "shift+i");
       setNewRangeOut(preset.rangeOutKey || "shift+o");
-      setNewInstant(preset.instantKey || "");
+      setNewInstant(preset.instantKey || "shift+1");
       setEditingPresetId(preset.id);
     }
 
@@ -1048,7 +1062,7 @@
         title: label,
         rangeInKey: (newRangeIn.trim() || "shift+i").toLowerCase(),
         rangeOutKey: (newRangeOut.trim() || "shift+o").toLowerCase(),
-        instantKey: newInstant.trim().toLowerCase(),
+        instantKey: (newInstant.trim() || "shift+1").toLowerCase(),
       };
 
       if (editingPresetId != null) {
@@ -1136,7 +1150,9 @@
         React.createElement("kbd", null, "shift+i"),
         " / ",
         React.createElement("kbd", null, "shift+o"),
-        " for range markers. Avoid plain ",
+        " for range and ",
+        React.createElement("kbd", null, "shift+1"),
+        " for instant (defaults for all presets). Avoid plain ",
         React.createElement("kbd", null, "i"),
         " / ",
         React.createElement("kbd", null, "o"),
@@ -1543,7 +1559,7 @@
                 React.createElement(
                   "label",
                   { htmlFor: "qm-new-instant" },
-                  "Instant key (optional)"
+                  "Instant key"
                 ),
                 React.createElement("input", {
                   id: "qm-new-instant",
@@ -1554,7 +1570,16 @@
                   onChange: function (e) {
                     setNewInstant(e.target.value);
                   },
-                })
+                }),
+                React.createElement(
+                  "p",
+                  { className: "text-muted small mb-0" },
+                  "Default ",
+                  React.createElement("kbd", null, "shift+1"),
+                  " is shared (active preset). Use a unique key (e.g. ",
+                  React.createElement("kbd", null, "shift+2"),
+                  ") for a direct shortcut."
+                )
               ),
               React.createElement(
                 "div",
