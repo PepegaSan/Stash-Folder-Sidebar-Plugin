@@ -154,6 +154,20 @@
   padding: 0.45rem 0.65rem;
 }
 
+.quick-markers-settings-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.quick-markers-settings-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .quick-markers-settings-list-header {
   font-size: 0.75rem;
   font-weight: 600;

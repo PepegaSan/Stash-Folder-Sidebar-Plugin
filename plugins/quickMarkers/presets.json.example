@@ -19,6 +19,8 @@
       "primaryTag": "Highlight",
       "tags": ["Favorite"],
       "title": "Highlight",
+      "rangeInKey": "shift+i",
+      "rangeOutKey": "shift+o",
       "instantKey": "shift+2"
     }
   ]

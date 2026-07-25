@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.2.3";
+  const PLUGIN_VERSION = "1.2.5";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const VALID_PANEL_POSITIONS = [
     "top-left",
@@ -185,8 +185,9 @@
         primaryTag: primaryTag,
         tags: normalizePresetTags(p.tags, primaryTag),
         title: (p.title || label).trim(),
-        rangeInKey: (p.rangeInKey || "").trim().toLowerCase(),
-        rangeOutKey: (p.rangeOutKey || "").trim().toLowerCase(),
+        // Default shared In/Out hotkeys; override per preset if needed.
+        rangeInKey: (p.rangeInKey || "shift+i").trim().toLowerCase(),
+        rangeOutKey: (p.rangeOutKey || "shift+o").trim().toLowerCase(),
         instantKey: (p.instantKey || "").trim().toLowerCase(),
       };
     });
@@ -914,6 +915,7 @@
     const [loadError, setLoadError] = React.useState(null);
     const [showPresetList, setShowPresetList] = React.useState(false);
     const [showAddForm, setShowAddForm] = React.useState(false);
+    const [editingPresetId, setEditingPresetId] = React.useState(null);
     const [showJsonModal, setShowJsonModal] = React.useState(false);
     const [showTagsHelpModal, setShowTagsHelpModal] = React.useState(false);
     const [jsonModalDraft, setJsonModalDraft] = React.useState("");
@@ -924,6 +926,28 @@
     const [newRangeIn, setNewRangeIn] = React.useState("shift+i");
     const [newRangeOut, setNewRangeOut] = React.useState("shift+o");
     const [newInstant, setNewInstant] = React.useState("");
+
+    function resetPresetForm() {
+      setNewLabel("");
+      setNewPrimaryTag("");
+      setNewTags("");
+      setNewRangeIn("shift+i");
+      setNewRangeOut("shift+o");
+      setNewInstant("");
+      setEditingPresetId(null);
+    }
+
+    function fillPresetForm(preset) {
+      setNewLabel(preset.label || "");
+      setNewPrimaryTag(preset.primaryTag || "");
+      setNewTags(
+        preset.tags && preset.tags.length ? preset.tags.join(", ") : ""
+      );
+      setNewRangeIn(preset.rangeInKey || "shift+i");
+      setNewRangeOut(preset.rangeOutKey || "shift+o");
+      setNewInstant(preset.instantKey || "");
+      setEditingPresetId(preset.id);
+    }
 
     React.useEffect(
       function () {
@@ -1010,38 +1034,66 @@
       }
     }
 
-    function onAddPreset() {
+    function onSavePreset() {
       const label = newLabel.trim();
       const primaryTag = (newPrimaryTag || newLabel).trim();
       if (!label || !primaryTag) {
         Toast.error("Label and primary tag are required.");
         return;
       }
+      const fields = {
+        label: label,
+        primaryTag: primaryTag,
+        tags: normalizePresetTags(newTags, primaryTag),
+        title: label,
+        rangeInKey: (newRangeIn.trim() || "shift+i").toLowerCase(),
+        rangeOutKey: (newRangeOut.trim() || "shift+o").toLowerCase(),
+        instantKey: newInstant.trim().toLowerCase(),
+      };
+
+      if (editingPresetId != null) {
+        const idx = config.presets.findIndex(function (p) {
+          return p.id === editingPresetId;
+        });
+        if (idx < 0) {
+          Toast.error("Preset not found.");
+          resetPresetForm();
+          setShowAddForm(false);
+          return;
+        }
+        const presets = config.presets.slice();
+        presets[idx] = Object.assign({}, presets[idx], fields);
+        persistConfig({
+          defaultPresetIndex: config.defaultPresetIndex,
+          presets: presets,
+        });
+        resetPresetForm();
+        setShowAddForm(false);
+        Toast.success("Preset updated.");
+        return;
+      }
+
       const id = label.toLowerCase().replace(/\s+/g, "-");
-      const next = {
+      persistConfig({
         defaultPresetIndex: config.defaultPresetIndex,
         presets: config.presets.concat([
-          {
-            id: id,
-            label: label,
-            primaryTag: primaryTag,
-            tags: normalizePresetTags(newTags, primaryTag),
-            title: label,
-            rangeInKey: newRangeIn.trim().toLowerCase(),
-            rangeOutKey: newRangeOut.trim().toLowerCase(),
-            instantKey: newInstant.trim().toLowerCase(),
-          },
+          Object.assign({ id: id }, fields),
         ]),
-      };
-      persistConfig(next);
-      setNewLabel("");
-      setNewPrimaryTag("");
-      setNewTags("");
-      setNewRangeIn("shift+i");
-      setNewRangeOut("shift+o");
-      setNewInstant("");
+      });
+      resetPresetForm();
       setShowAddForm(false);
       Toast.success("Preset added.");
+    }
+
+    function onEditPreset(preset) {
+      fillPresetForm(preset);
+      setShowAddForm(true);
+      setShowPresetList(true);
+    }
+
+    function onCancelPresetForm() {
+      resetPresetForm();
+      setShowAddForm(false);
     }
 
     function onRemovePreset(preset) {
@@ -1053,6 +1105,10 @@
       let defaultPresetIndex = config.defaultPresetIndex;
       if (defaultPresetIndex >= presets.length) {
         defaultPresetIndex = Math.max(0, presets.length - 1);
+      }
+      if (editingPresetId === preset.id) {
+        resetPresetForm();
+        setShowAddForm(false);
       }
       persistConfig({ defaultPresetIndex: defaultPresetIndex, presets: presets });
       Toast.success("Preset removed.");
@@ -1314,15 +1370,34 @@
                       keys || "—"
                     ),
                     React.createElement(
-                      "button",
-                      {
-                        type: "button",
-                        className: "btn btn-danger btn-sm",
-                        onClick: function () {
-                          onRemovePreset(preset);
+                      "div",
+                      { className: "quick-markers-settings-list-actions" },
+                      React.createElement(
+                        "button",
+                        {
+                          type: "button",
+                          className:
+                            "btn btn-secondary btn-sm" +
+                            (editingPresetId === preset.id
+                              ? " active"
+                              : ""),
+                          onClick: function () {
+                            onEditPreset(preset);
+                          },
                         },
-                      },
-                      "Delete"
+                        "Edit"
+                      ),
+                      React.createElement(
+                        "button",
+                        {
+                          type: "button",
+                          className: "btn btn-danger btn-sm",
+                          onClick: function () {
+                            onRemovePreset(preset);
+                          },
+                        },
+                        "Delete"
+                      )
                     )
                   );
                 })
@@ -1345,16 +1420,33 @@
               "btn btn-secondary btn-sm quick-markers-settings-toggle mb-2" +
               (showAddForm ? " quick-markers-settings-toggle-open" : ""),
             onClick: function () {
-              setShowAddForm(!showAddForm);
+              if (showAddForm) {
+                onCancelPresetForm();
+                return;
+              }
+              resetPresetForm();
+              setShowAddForm(true);
             },
             "aria-expanded": showAddForm,
           },
-          showAddForm ? "▼ Add preset" : "▶ Add preset"
+          showAddForm
+            ? editingPresetId != null
+              ? "▼ Edit preset"
+              : "▼ Add preset"
+            : "▶ Add preset"
         ),
         showAddForm
           ? React.createElement(
               "div",
               { className: "quick-markers-settings-add-body" },
+              editingPresetId != null
+                ? React.createElement(
+                    "p",
+                    { className: "text-muted small" },
+                    "Editing: ",
+                    React.createElement("strong", null, newLabel || editingPresetId)
+                  )
+                : null,
               React.createElement(
                 "div",
                 { className: "form-group" },
@@ -1465,9 +1557,26 @@
                 })
               ),
               React.createElement(
-                "button",
-                { type: "button", className: "btn btn-primary", onClick: onAddPreset },
-                "Add"
+                "div",
+                { className: "quick-markers-settings-form-actions" },
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn btn-primary",
+                    onClick: onSavePreset,
+                  },
+                  editingPresetId != null ? "Save changes" : "Add"
+                ),
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn btn-secondary",
+                    onClick: onCancelPresetForm,
+                  },
+                  "Cancel"
+                )
               )
             )
           : null

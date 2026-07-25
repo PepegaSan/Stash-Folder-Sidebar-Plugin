@@ -143,7 +143,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.2.3-informational)
+![Version](https://img.shields.io/badge/version-1.2.5-informational)
 
 ## Requirements
 
@@ -179,7 +179,7 @@ Markers are saved via GraphQL; open the **Markers** tab or refresh if the list d
 - **Scene panel position** — top-left (default), top-right, bottom corners, or hidden (hotkeys only)
 - **Start scene panel collapsed** — small header until expanded
 - **Touch controls (Android / tablet)** — auto-detect, always on, or off
-- **Presets** list (collapsible) — view/delete presets, pick default for Shift+I/O
+- **Presets** list (collapsible) — view/edit/delete presets, pick default for Shift+I/O
 - **Add preset** (collapsed) — label, primary tag, optional additional tags, hotkeys
 - **Edit JSON (advanced)…** — full config in a popup
 - **Help: tags in JSON** — how to add `tags` to a preset (German or English by browser locale)
@@ -209,8 +209,8 @@ JSON example (same as in the modal):
 
 - `primaryTag` — exact tag **name** in Stash (required); becomes the marker **primary tag**
 - `tags` — optional array of extra tag names on the marker (must exist in Stash)
-- `rangeInKey` / `rangeOutKey` — optional range workflow for that preset when it is **active**
-- `instantKey` — optional one-shot marker at playhead
+- `rangeInKey` / `rangeOutKey` — range workflow for that preset when it is **active** (defaults to `shift+i` / `shift+o` if omitted; override per preset if you want different keys)
+- `instantKey` — optional one-shot marker at playhead (usually unique per preset, e.g. Shift+1/2/3)
 - `panelPosition`, `panelCollapsed`, `touchControls` — optional UI settings
 
 Presets are stored in **Stash plugin settings** (`presetsJson`) after you save in the UI. The optional `presets.json` file in the plugin folder is only used until settings are saved once.
@@ -227,8 +227,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.2.3`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.2.3**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.2.5`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.2.5**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -319,6 +319,14 @@ Reload plugins in Stash, then run the task or enable **Auto on new scenes**.
 ### Bracket Tags 1.0.0
 
 - Initial release: bracket parsing, optional tag creation, manual task + optional scan hook
+
+### Quick Markers 1.2.5
+
+- **Edit preset in settings** — **Edit** opens the same form as Add, prefilled; **Save changes** updates that preset (JSON still available for advanced edits)
+
+### Quick Markers 1.2.4
+
+- **Default range hotkeys** — if a preset omits `rangeInKey` / `rangeOutKey`, they default to `shift+i` / `shift+o` (still overridable per preset)
 
 ### Quick Markers 1.2.x (1.2.0–1.2.3)
 
