@@ -143,7 +143,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.2.9-informational)
+![Version](https://img.shields.io/badge/version-1.3.0-informational)
 
 ## Requirements
 
@@ -155,20 +155,22 @@ Create **scene markers** from the scene player with **presets** (e.g. tag `Compi
 
 | Key | Action |
 |-----|--------|
+| `shift+1` … `shift+9` | **Select** preset 1–9 (activate only — no marker) |
 | `shift+i` | **In** point (active preset) |
 | `shift+o` | **Out** + create range marker (active preset) |
-| `shift+1` | Instant marker at playhead (**active** preset; default for all presets, overridable) |
+| `shift+m` | Instant marker at playhead (**active** preset) |
 | `shift+[` / `shift+]` | Previous / next active preset |
 
-**Note:** Plain `i` / `o` are already used by Stash (File info, O-Counter). Do not map those in presets.
+**Note:** Plain `i` / `o` are already used by Stash (File info, O-Counter). Do not map those in presets. `shift+1`–`9` are reserved for preset select (old configs that used them as instant keys are migrated to `shift+m`).
 
 ## Usage
 
 1. Open a **scene** and start playback.
-2. Use **Shift+I** at start, **Shift+O** at end → marker with your preset tag.
-3. Or press **Shift+1** for an instant marker at the current time (uses the **active** preset, same idea as Shift+I/O).
-4. Optional: floating **Quick Markers** panel (corner in settings; collapsed by default) — **drag the header** to move it, double-click header to reset; click a preset or switch with **Shift+[** / **Shift+]**.
-5. **Android / tablet:** touch bar (**IN** / **OUT** / **INSTANT** + presets) aligned to the player — sits under the player, or just above the seek/control bar if space is tight (theme-friendly). Auto-enabled on touch devices; override in settings.
+2. Press **Shift+3** (etc.) to select the preset you want, **or** click it in the panel.
+3. Use **Shift+I** at start, **Shift+O** at end → range marker with that preset’s tag.
+4. Or press **Shift+M** for an instant marker at the current time (active preset).
+5. Optional: floating **Quick Markers** panel (corner in settings; collapsed by default) — **drag the header** to move it, double-click header to reset; `Shift+[` / `Shift+]` also cycle presets.
+6. **Android / tablet:** touch bar (**IN** / **OUT** / **INSTANT** + presets) aligned to the player — sits under the player, or just above the seek/control bar if space is tight (theme-friendly). Auto-enabled on touch devices; override in settings.
 
 Markers are saved via GraphQL; open the **Markers** tab or refresh if the list does not update immediately.
 
@@ -179,8 +181,8 @@ Markers are saved via GraphQL; open the **Markers** tab or refresh if the list d
 - **Scene panel position** — starting corner (top-left default), or hidden (hotkeys only); drag the panel header on the scene page to place it freely
 - **Start scene panel collapsed** — small header until expanded
 - **Touch controls (Android / tablet)** — auto-detect, always on, or off (bar follows player width/position; avoids covering the timeline)
-- **Presets** list (collapsible) — view/edit/delete presets, pick default for Shift+I/O and Shift+1
-- **Add preset** (collapsed) — label, primary tag, optional additional tags, hotkeys
+- **Presets** list (collapsible) — view/edit/delete presets, pick default; **Shift+1–9** select presets on the scene page
+- **Add preset** (collapsed) — label, primary tag, optional additional tags, hotkeys (`instantKey` default `shift+m`)
 - **Edit JSON (advanced)…** — full config in a popup
 - **Help: tags in JSON** — how to add `tags` to a preset (German or English by browser locale)
 
@@ -201,7 +203,7 @@ JSON example (same as in the modal):
       "title": "Compilation",
       "rangeInKey": "shift+i",
       "rangeOutKey": "shift+o",
-      "instantKey": "shift+1"
+      "instantKey": "shift+m"
     }
   ]
 }
@@ -210,7 +212,7 @@ JSON example (same as in the modal):
 - `primaryTag` — exact tag **name** in Stash (required); becomes the marker **primary tag**
 - `tags` — optional array of extra tag names on the marker (must exist in Stash)
 - `rangeInKey` / `rangeOutKey` — range workflow for that preset when it is **active** (defaults to `shift+i` / `shift+o` if omitted)
-- `instantKey` — instant marker at playhead for the **active** preset (defaults to `shift+1` if omitted; set a unique key like `shift+2` if you want a shortcut that always hits that preset)
+- `instantKey` — instant marker at playhead for the **active** preset (defaults to `shift+m`; `shift+1`–`9` are reserved for preset select and get remapped)
 - `panelPosition`, `panelCollapsed`, `touchControls` — optional UI settings
 
 Presets are stored in **Stash plugin settings** (`presetsJson`) after you save in the UI. The optional `presets.json` file in the plugin folder is only used until settings are saved once.
@@ -227,8 +229,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.2.9`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.2.9**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.3.0`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.3.0**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -319,6 +321,11 @@ Reload plugins in Stash, then run the task or enable **Auto on new scenes**.
 ### Bracket Tags 1.0.0
 
 - Initial release: bracket parsing, optional tag creation, manual task + optional scan hook
+
+### Quick Markers 1.3.0
+
+- **Shift+1–9 select presets** — activate preset 1–9 without creating a marker; then use Shift+I/O as usual
+- **Instant default is Shift+M** — old `instantKey` values of `shift+1`–`9` are migrated to `shift+m`
 
 ### Quick Markers 1.2.9
 

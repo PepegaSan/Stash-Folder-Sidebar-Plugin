@@ -2,11 +2,13 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.2.9";
+  const PLUGIN_VERSION = "1.3.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_GAP = 6;
   const TOUCH_BAR_FALLBACK_HEIGHT = 112;
+  const DEFAULT_INSTANT_KEY = "shift+m";
+  const PRESET_SELECT_KEY_RE = /^shift\+[1-9]$/;
   const VALID_PANEL_POSITIONS = [
     "top-left",
     "top-right",
@@ -44,7 +46,7 @@
         title: "Compilation",
         rangeInKey: "shift+i",
         rangeOutKey: "shift+o",
-        instantKey: "shift+1",
+        instantKey: "shift+m",
       },
     ],
   };
@@ -285,6 +287,15 @@
     return m + ":" + String(sec).padStart(2, "0");
   }
 
+  function normalizeInstantKey(value) {
+    const key = String(value == null ? "" : value)
+      .trim()
+      .toLowerCase();
+    // Shift+1–9 are reserved for selecting the active preset.
+    if (!key || PRESET_SELECT_KEY_RE.test(key)) return DEFAULT_INSTANT_KEY;
+    return key;
+  }
+
   function normalizePresetTags(value, primaryTag) {
     let list = [];
     if (Array.isArray(value)) {
@@ -330,10 +341,10 @@
         primaryTag: primaryTag,
         tags: normalizePresetTags(p.tags, primaryTag),
         title: (p.title || label).trim(),
-        // Default shared hotkeys (like active-preset I/O); override per preset if needed.
+        // Default shared hotkeys; Shift+1–9 select presets (not instant).
         rangeInKey: (p.rangeInKey || "shift+i").trim().toLowerCase(),
         rangeOutKey: (p.rangeOutKey || "shift+o").trim().toLowerCase(),
-        instantKey: (p.instantKey || "shift+1").trim().toLowerCase(),
+        instantKey: normalizeInstantKey(p.instantKey),
       };
     });
     let defaultIndex = 0;
@@ -799,7 +810,7 @@
         }
 
         if (activePreset) {
-          // Shared defaults (shift+i/o/1) apply to the active preset — same model for all three.
+          // Shared In/Out + Instant apply to the active preset.
           if (activePreset.rangeInKey) {
             bind(activePreset.rangeInKey, function (e) {
               if (e && e.preventDefault) e.preventDefault();
@@ -812,7 +823,10 @@
               onRangeOut(activePreset);
             });
           }
-          if (activePreset.instantKey) {
+          if (
+            activePreset.instantKey &&
+            !PRESET_SELECT_KEY_RE.test(activePreset.instantKey)
+          ) {
             bind(activePreset.instantKey, function (e) {
               if (e && e.preventDefault) e.preventDefault();
               onInstant(activePreset);
@@ -820,9 +834,22 @@
           }
         }
 
-        // Unique instant keys still work for other presets (e.g. shift+2) without switching.
+        // Shift+1–9 select preset 1–9 (activate only — no marker).
+        for (let n = 1; n <= 9; n++) {
+          (function (index) {
+            bind("shift+" + (index + 1), function (e) {
+              if (e && e.preventDefault) e.preventDefault();
+              if (index < config.presets.length) {
+                setActiveIndex(index);
+              }
+            });
+          })(n - 1);
+        }
+
+        // Optional custom instant keys on other presets (must not be Shift+1–9).
         config.presets.forEach(function (preset) {
           if (!preset.instantKey) return;
+          if (PRESET_SELECT_KEY_RE.test(preset.instantKey)) return;
           if (activePreset && preset.id === activePreset.id) return;
           if (
             activePreset &&
@@ -925,15 +952,16 @@
                   React.createElement(
                     "p",
                     { className: "quick-markers-hint text-muted" },
-                    "Range (active preset): ",
+                    "Range: ",
                     React.createElement("kbd", null, activePreset.rangeInKey || "—"),
-                    " In, ",
+                    " In / ",
                     React.createElement("kbd", null, activePreset.rangeOutKey || "—"),
-                    " Out · ",
-                    React.createElement("kbd", null, "shift+["),
-                    " / ",
-                    React.createElement("kbd", null, "shift+]"),
-                    " switch preset"
+                    " Out · Instant: ",
+                    React.createElement("kbd", null, activePreset.instantKey || "—"),
+                    " · Preset: ",
+                    React.createElement("kbd", null, "shift+1"),
+                    "–",
+                    React.createElement("kbd", null, "9")
                   ),
                   inPoint != null
                     ? React.createElement(
@@ -966,11 +994,7 @@
                           className:
                             "quick-markers-preset-btn" +
                             (isActive ? " active" : ""),
-                          title: preset.instantKey
-                            ? "Click = active for Shift+I/O. Double-click or " +
-                              preset.instantKey +
-                              " = instant marker"
-                            : "Click to use with Shift+I/O",
+                          title: "Click = select for In/Out. Double-click = instant marker",
                           onClick: function () {
                             setActiveIndex(index);
                           },
@@ -979,13 +1003,11 @@
                           },
                         },
                         preset.label,
-                        preset.instantKey
-                          ? React.createElement(
-                              "span",
-                              { className: "quick-markers-key" },
-                              preset.instantKey
-                            )
-                          : null
+                        React.createElement(
+                          "span",
+                          { className: "quick-markers-key" },
+                          "shift+" + (index + 1)
+                        )
                       );
                     })
                   ),
@@ -1264,7 +1286,7 @@
     const [newTags, setNewTags] = React.useState("");
     const [newRangeIn, setNewRangeIn] = React.useState("shift+i");
     const [newRangeOut, setNewRangeOut] = React.useState("shift+o");
-    const [newInstant, setNewInstant] = React.useState("shift+1");
+    const [newInstant, setNewInstant] = React.useState(DEFAULT_INSTANT_KEY);
 
     function resetPresetForm() {
       setNewLabel("");
@@ -1272,7 +1294,7 @@
       setNewTags("");
       setNewRangeIn("shift+i");
       setNewRangeOut("shift+o");
-      setNewInstant("shift+1");
+      setNewInstant(DEFAULT_INSTANT_KEY);
       setEditingPresetId(null);
     }
 
@@ -1284,7 +1306,7 @@
       );
       setNewRangeIn(preset.rangeInKey || "shift+i");
       setNewRangeOut(preset.rangeOutKey || "shift+o");
-      setNewInstant(preset.instantKey || "shift+1");
+      setNewInstant(normalizeInstantKey(preset.instantKey));
       setEditingPresetId(preset.id);
     }
 
@@ -1387,7 +1409,7 @@
         title: label,
         rangeInKey: (newRangeIn.trim() || "shift+i").toLowerCase(),
         rangeOutKey: (newRangeOut.trim() || "shift+o").toLowerCase(),
-        instantKey: (newInstant.trim() || "shift+1").toLowerCase(),
+        instantKey: normalizeInstantKey(newInstant),
       };
 
       if (editingPresetId != null) {
@@ -1471,13 +1493,17 @@
       React.createElement(
         "p",
         { className: "quick-markers-settings-intro text-muted" },
-        "Hotkeys on the scene page. Active preset uses ",
+        "Hotkeys on the scene page: ",
+        React.createElement("kbd", null, "shift+1"),
+        "–",
+        React.createElement("kbd", null, "9"),
+        " select preset, ",
         React.createElement("kbd", null, "shift+i"),
         " / ",
         React.createElement("kbd", null, "shift+o"),
-        " for range and ",
-        React.createElement("kbd", null, "shift+1"),
-        " for instant (defaults for all presets). Scene panel: drag the header to move, double-click to reset. Avoid plain ",
+        " range, ",
+        React.createElement("kbd", null, DEFAULT_INSTANT_KEY),
+        " instant (active preset). Panel header is draggable. Avoid plain ",
         React.createElement("kbd", null, "i"),
         " / ",
         React.createElement("kbd", null, "o"),
@@ -1678,11 +1704,12 @@
                     "aria-hidden": true,
                   })
                 ),
-                config.presets.map(function (preset) {
+                config.presets.map(function (preset, index) {
                   const keys = [
+                    "Select: shift+" + (index + 1),
                     preset.rangeInKey && "In: " + preset.rangeInKey,
                     preset.rangeOutKey && "Out: " + preset.rangeOutKey,
-                    preset.instantKey && preset.instantKey,
+                    preset.instantKey && "Instant: " + preset.instantKey,
                   ]
                     .filter(Boolean)
                     .join(" · ");
@@ -1891,7 +1918,7 @@
                   type: "text",
                   className: "form-control",
                   value: newInstant,
-                  placeholder: "shift+1",
+                  placeholder: DEFAULT_INSTANT_KEY,
                   onChange: function (e) {
                     setNewInstant(e.target.value);
                   },
@@ -1899,11 +1926,15 @@
                 React.createElement(
                   "p",
                   { className: "text-muted small mb-0" },
-                  "Default ",
+                  "Instant marker for the ",
+                  React.createElement("strong", null, "active"),
+                  " preset. Default ",
+                  React.createElement("kbd", null, DEFAULT_INSTANT_KEY),
+                  ". ",
                   React.createElement("kbd", null, "shift+1"),
-                  " is shared (active preset). Use a unique key (e.g. ",
-                  React.createElement("kbd", null, "shift+2"),
-                  ") for a direct shortcut."
+                  "–",
+                  React.createElement("kbd", null, "9"),
+                  " are reserved for selecting presets."
                 )
               ),
               React.createElement(
