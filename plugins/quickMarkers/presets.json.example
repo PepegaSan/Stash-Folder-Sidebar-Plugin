@@ -11,7 +11,8 @@
       "title": "Compilation",
       "rangeInKey": "shift+i",
       "rangeOutKey": "shift+o",
-      "instantKey": "shift+m"
+      "instantKey": "shift+m",
+      "selectSlot": 1
     },
     {
       "id": "highlight",
@@ -21,7 +22,8 @@
       "title": "Highlight",
       "rangeInKey": "shift+i",
       "rangeOutKey": "shift+o",
-      "instantKey": "shift+m"
+      "instantKey": "shift+m",
+      "selectSlot": 2
     }
   ]
 }

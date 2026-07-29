@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.3.0";
+  const PLUGIN_VERSION = "1.3.1";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_GAP = 6;
@@ -47,6 +47,7 @@
         rangeInKey: "shift+i",
         rangeOutKey: "shift+o",
         instantKey: "shift+m",
+        selectSlot: 1,
       },
     ],
   };
@@ -255,6 +256,7 @@
           rangeInKey: p.rangeInKey,
           rangeOutKey: p.rangeOutKey,
           instantKey: p.instantKey,
+          selectSlot: p.selectSlot != null ? p.selectSlot : 1,
         };
       }),
     };
@@ -285,6 +287,42 @@
     const m = Math.floor(s / 60);
     const sec = s % 60;
     return m + ":" + String(sec).padStart(2, "0");
+  }
+
+  function normalizeSelectSlot(value, index) {
+    if (value === null || value === "" || value === false || value === 0) {
+      return null;
+    }
+    if (value === undefined) {
+      return index < 9 ? index + 1 : null;
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim().toLowerCase();
+      if (!trimmed || trimmed === "none" || trimmed === "off") return null;
+      const fromKey = trimmed.match(/^shift\+([1-9])$/);
+      if (fromKey) return Number(fromKey[1]);
+      const asNum = Number(trimmed);
+      if (asNum >= 1 && asNum <= 9) return asNum;
+      return null;
+    }
+    const n = Number(value);
+    if (n >= 1 && n <= 9) return n;
+    return null;
+  }
+
+  function selectSlotToKey(slot) {
+    return slot ? "shift+" + slot : "";
+  }
+
+  function nextFreeSelectSlot(presets) {
+    const used = {};
+    (presets || []).forEach(function (p) {
+      if (p && p.selectSlot) used[p.selectSlot] = true;
+    });
+    for (let n = 1; n <= 9; n++) {
+      if (!used[n]) return n;
+    }
+    return null;
   }
 
   function normalizeInstantKey(value) {
@@ -345,7 +383,18 @@
         rangeInKey: (p.rangeInKey || "shift+i").trim().toLowerCase(),
         rangeOutKey: (p.rangeOutKey || "shift+o").trim().toLowerCase(),
         instantKey: normalizeInstantKey(p.instantKey),
+        selectSlot: normalizeSelectSlot(p.selectSlot, index),
       };
+    });
+    // Ensure select slots are unique (first preset wins).
+    const claimed = {};
+    normalized.forEach(function (preset) {
+      if (!preset.selectSlot) return;
+      if (claimed[preset.selectSlot]) {
+        preset.selectSlot = null;
+      } else {
+        claimed[preset.selectSlot] = true;
+      }
     });
     let defaultIndex = 0;
     if (typeof parsed.defaultPresetIndex === "number") {
@@ -380,6 +429,8 @@
           if (p.rangeInKey) o.rangeInKey = p.rangeInKey;
           if (p.rangeOutKey) o.rangeOutKey = p.rangeOutKey;
           if (p.instantKey) o.instantKey = p.instantKey;
+          if (p.selectSlot) o.selectSlot = p.selectSlot;
+          else o.selectSlot = null;
           if (p.tags && p.tags.length) o.tags = p.tags;
           return o;
         }),
@@ -834,16 +885,22 @@
           }
         }
 
-        // Shift+1–9 select preset 1–9 (activate only — no marker).
+        // Shift+1–9 select whichever preset owns that slot.
+        const slotToIndex = {};
+        config.presets.forEach(function (preset, index) {
+          const slot = normalizeSelectSlot(preset.selectSlot, index);
+          if (!slot || slotToIndex[slot] != null) return;
+          slotToIndex[slot] = index;
+        });
         for (let n = 1; n <= 9; n++) {
-          (function (index) {
-            bind("shift+" + (index + 1), function (e) {
+          (function (slot) {
+            const presetIndex = slotToIndex[slot];
+            if (presetIndex == null) return;
+            bind("shift+" + slot, function (e) {
               if (e && e.preventDefault) e.preventDefault();
-              if (index < config.presets.length) {
-                setActiveIndex(index);
-              }
+              setActiveIndex(presetIndex);
             });
-          })(n - 1);
+          })(n);
         }
 
         // Optional custom instant keys on other presets (must not be Shift+1–9).
@@ -986,6 +1043,9 @@
                     { className: "quick-markers-presets" },
                     config.presets.map(function (preset, index) {
                       const isActive = index === activeIndex;
+                      const selectKey = selectSlotToKey(
+                        normalizeSelectSlot(preset.selectSlot, index)
+                      );
                       return React.createElement(
                         "button",
                         {
@@ -994,7 +1054,11 @@
                           className:
                             "quick-markers-preset-btn" +
                             (isActive ? " active" : ""),
-                          title: "Click = select for In/Out. Double-click = instant marker",
+                          title: selectKey
+                            ? "Click or " +
+                              selectKey +
+                              " = select. Double-click = instant marker"
+                            : "Click = select for In/Out. Double-click = instant marker",
                           onClick: function () {
                             setActiveIndex(index);
                           },
@@ -1003,11 +1067,13 @@
                           },
                         },
                         preset.label,
-                        React.createElement(
-                          "span",
-                          { className: "quick-markers-key" },
-                          "shift+" + (index + 1)
-                        )
+                        selectKey
+                          ? React.createElement(
+                              "span",
+                              { className: "quick-markers-key" },
+                              selectKey
+                            )
+                          : null
                       );
                     })
                   ),
@@ -1287,6 +1353,7 @@
     const [newRangeIn, setNewRangeIn] = React.useState("shift+i");
     const [newRangeOut, setNewRangeOut] = React.useState("shift+o");
     const [newInstant, setNewInstant] = React.useState(DEFAULT_INSTANT_KEY);
+    const [newSelectSlot, setNewSelectSlot] = React.useState("");
 
     function resetPresetForm() {
       setNewLabel("");
@@ -1295,6 +1362,7 @@
       setNewRangeIn("shift+i");
       setNewRangeOut("shift+o");
       setNewInstant(DEFAULT_INSTANT_KEY);
+      setNewSelectSlot("");
       setEditingPresetId(null);
     }
 
@@ -1307,6 +1375,9 @@
       setNewRangeIn(preset.rangeInKey || "shift+i");
       setNewRangeOut(preset.rangeOutKey || "shift+o");
       setNewInstant(normalizeInstantKey(preset.instantKey));
+      setNewSelectSlot(
+        preset.selectSlot ? String(preset.selectSlot) : ""
+      );
       setEditingPresetId(preset.id);
     }
 
@@ -1410,6 +1481,10 @@
         rangeInKey: (newRangeIn.trim() || "shift+i").toLowerCase(),
         rangeOutKey: (newRangeOut.trim() || "shift+o").toLowerCase(),
         instantKey: normalizeInstantKey(newInstant),
+        selectSlot: normalizeSelectSlot(
+          newSelectSlot === "" ? null : newSelectSlot,
+          99
+        ),
       };
 
       if (editingPresetId != null) {
@@ -1422,8 +1497,16 @@
           setShowAddForm(false);
           return;
         }
-        const presets = config.presets.slice();
-        presets[idx] = Object.assign({}, presets[idx], fields);
+        const presets = config.presets.map(function (p, i) {
+          if (i === idx) return Object.assign({}, p, fields);
+          if (
+            fields.selectSlot &&
+            p.selectSlot === fields.selectSlot
+          ) {
+            return Object.assign({}, p, { selectSlot: null });
+          }
+          return p;
+        });
         persistConfig({
           defaultPresetIndex: config.defaultPresetIndex,
           presets: presets,
@@ -1435,11 +1518,23 @@
       }
 
       const id = label.toLowerCase().replace(/\s+/g, "-");
+      if (!fields.selectSlot) {
+        fields.selectSlot = nextFreeSelectSlot(config.presets);
+      }
+      const presets = config.presets
+        .map(function (p) {
+          if (
+            fields.selectSlot &&
+            p.selectSlot === fields.selectSlot
+          ) {
+            return Object.assign({}, p, { selectSlot: null });
+          }
+          return p;
+        })
+        .concat([Object.assign({ id: id }, fields)]);
       persistConfig({
         defaultPresetIndex: config.defaultPresetIndex,
-        presets: config.presets.concat([
-          Object.assign({ id: id }, fields),
-        ]),
+        presets: presets,
       });
       resetPresetForm();
       setShowAddForm(false);
@@ -1497,16 +1592,18 @@
         React.createElement("kbd", null, "shift+1"),
         "–",
         React.createElement("kbd", null, "9"),
-        " select preset, ",
+        " select a preset (assign slots in Edit), ",
         React.createElement("kbd", null, "shift+i"),
         " / ",
         React.createElement("kbd", null, "shift+o"),
         " range, ",
         React.createElement("kbd", null, DEFAULT_INSTANT_KEY),
-        " instant (active preset). Panel header is draggable. Avoid plain ",
+        " instant (active preset). Not Ctrl/Strg — plain Shift. Panel header is draggable. Avoid plain ",
         React.createElement("kbd", null, "i"),
         " / ",
         React.createElement("kbd", null, "o"),
+        " / ",
+        React.createElement("kbd", null, "m"),
         " (Stash shortcuts)."
       ),
       React.createElement(TagsHelpModal, {
@@ -1705,8 +1802,11 @@
                   })
                 ),
                 config.presets.map(function (preset, index) {
+                  const selectKey = selectSlotToKey(
+                    normalizeSelectSlot(preset.selectSlot, index)
+                  );
                   const keys = [
-                    "Select: shift+" + (index + 1),
+                    selectKey && "Select: " + selectKey,
                     preset.rangeInKey && "In: " + preset.rangeInKey,
                     preset.rangeOutKey && "Out: " + preset.rangeOutKey,
                     preset.instantKey && "Instant: " + preset.instantKey,
@@ -1910,6 +2010,39 @@
                 { className: "form-group" },
                 React.createElement(
                   "label",
+                  { htmlFor: "qm-new-select" },
+                  "Select hotkey (Shift+1–9)"
+                ),
+                React.createElement(
+                  "select",
+                  {
+                    id: "qm-new-select",
+                    className: "form-control",
+                    value: newSelectSlot,
+                    onChange: function (e) {
+                      setNewSelectSlot(e.target.value);
+                    },
+                  },
+                  React.createElement("option", { value: "" }, "None"),
+                  [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) {
+                    return React.createElement(
+                      "option",
+                      { key: n, value: String(n) },
+                      "Shift+" + n
+                    );
+                  })
+                ),
+                React.createElement(
+                  "p",
+                  { className: "text-muted small mb-0" },
+                  "Which Shift+number activates this preset. With 10+ presets, assign only the ones you need on the macropad. Duplicate slots are cleared from other presets."
+                )
+              ),
+              React.createElement(
+                "div",
+                { className: "form-group" },
+                React.createElement(
+                  "label",
                   { htmlFor: "qm-new-instant" },
                   "Instant key"
                 ),
@@ -1930,11 +2063,11 @@
                   React.createElement("strong", null, "active"),
                   " preset. Default ",
                   React.createElement("kbd", null, DEFAULT_INSTANT_KEY),
-                  ". ",
+                  " (Shift+M — not Ctrl). ",
                   React.createElement("kbd", null, "shift+1"),
                   "–",
                   React.createElement("kbd", null, "9"),
-                  " are reserved for selecting presets."
+                  " are for select slots only."
                 )
               ),
               React.createElement(

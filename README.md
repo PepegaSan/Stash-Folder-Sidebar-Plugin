@@ -143,7 +143,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.3.0-informational)
+![Version](https://img.shields.io/badge/version-1.3.1-informational)
 
 ## Requirements
 
@@ -155,18 +155,18 @@ Create **scene markers** from the scene player with **presets** (e.g. tag `Compi
 
 | Key | Action |
 |-----|--------|
-| `shift+1` … `shift+9` | **Select** preset 1–9 (activate only — no marker) |
+| `shift+1` … `shift+9` | **Select** the preset assigned to that slot (`selectSlot` in settings — not always list order) |
 | `shift+i` | **In** point (active preset) |
 | `shift+o` | **Out** + create range marker (active preset) |
-| `shift+m` | Instant marker at playhead (**active** preset) |
+| `shift+m` | Instant marker at playhead (**active** preset; Shift+M, not Ctrl+M) |
 | `shift+[` / `shift+]` | Previous / next active preset |
 
-**Note:** Plain `i` / `o` are already used by Stash (File info, O-Counter). Do not map those in presets. `shift+1`–`9` are reserved for preset select (old configs that used them as instant keys are migrated to `shift+m`).
+**Note:** Plain `i` / `o` / `m` are used by Stash. `shift+m` is free in Stash and browsers. Assign up to nine presets to Shift+1–9 via **Select hotkey** when editing a preset (useful if you have more than nine).
 
 ## Usage
 
 1. Open a **scene** and start playback.
-2. Press **Shift+3** (etc.) to select the preset you want, **or** click it in the panel.
+2. Press **Shift+3** (etc.) to select the preset assigned to that slot, **or** click it in the panel.
 3. Use **Shift+I** at start, **Shift+O** at end → range marker with that preset’s tag.
 4. Or press **Shift+M** for an instant marker at the current time (active preset).
 5. Optional: floating **Quick Markers** panel (corner in settings; collapsed by default) — **drag the header** to move it, double-click header to reset; `Shift+[` / `Shift+]` also cycle presets.
@@ -181,8 +181,8 @@ Markers are saved via GraphQL; open the **Markers** tab or refresh if the list d
 - **Scene panel position** — starting corner (top-left default), or hidden (hotkeys only); drag the panel header on the scene page to place it freely
 - **Start scene panel collapsed** — small header until expanded
 - **Touch controls (Android / tablet)** — auto-detect, always on, or off (bar follows player width/position; avoids covering the timeline)
-- **Presets** list (collapsible) — view/edit/delete presets, pick default; **Shift+1–9** select presets on the scene page
-- **Add preset** (collapsed) — label, primary tag, optional additional tags, hotkeys (`instantKey` default `shift+m`)
+- **Presets** list (collapsible) — view/edit/delete presets; **Select hotkey** assigns Shift+1–9 to any preset
+- **Add / Edit preset** — label, primary tag, optional tags, range keys, instant key (`shift+m`), select slot
 - **Edit JSON (advanced)…** — full config in a popup
 - **Help: tags in JSON** — how to add `tags` to a preset (German or English by browser locale)
 
@@ -203,7 +203,8 @@ JSON example (same as in the modal):
       "title": "Compilation",
       "rangeInKey": "shift+i",
       "rangeOutKey": "shift+o",
-      "instantKey": "shift+m"
+      "instantKey": "shift+m",
+      "selectSlot": 1
     }
   ]
 }
@@ -212,7 +213,8 @@ JSON example (same as in the modal):
 - `primaryTag` — exact tag **name** in Stash (required); becomes the marker **primary tag**
 - `tags` — optional array of extra tag names on the marker (must exist in Stash)
 - `rangeInKey` / `rangeOutKey` — range workflow for that preset when it is **active** (defaults to `shift+i` / `shift+o` if omitted)
-- `instantKey` — instant marker at playhead for the **active** preset (defaults to `shift+m`; `shift+1`–`9` are reserved for preset select and get remapped)
+- `instantKey` — instant marker for the **active** preset (defaults to `shift+m`)
+- `selectSlot` — `1`–`9` maps this preset to `shift+1`–`shift+9`; `null` = no select hotkey (defaults: first nine presets get slots 1–9)
 - `panelPosition`, `panelCollapsed`, `touchControls` — optional UI settings
 
 Presets are stored in **Stash plugin settings** (`presetsJson`) after you save in the UI. The optional `presets.json` file in the plugin folder is only used until settings are saved once.
@@ -229,8 +231,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.3.0`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.3.0**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.3.1`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.3.1**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -321,6 +323,10 @@ Reload plugins in Stash, then run the task or enable **Auto on new scenes**.
 ### Bracket Tags 1.0.0
 
 - Initial release: bracket parsing, optional tag creation, manual task + optional scan hook
+
+### Quick Markers 1.3.1
+
+- **Editable select slots** — assign any preset to Shift+1–9 (`selectSlot`); extras beyond nine can stay unassigned or steal a slot from another preset
 
 ### Quick Markers 1.3.0
 
