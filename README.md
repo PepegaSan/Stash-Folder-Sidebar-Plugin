@@ -2,13 +2,14 @@
 
 Community plugins for [Stash](https://github.com/stashapp/stash), installable via [source URL](#installation-from-stash-plugin-source-url) or manual copy from `plugins/<id>/`.
 
-**Jump to:** [Folder Sidebar](#folder-sidebar) · [Quick Markers](#quick-markers) · [Bracket Tags](#bracket-tags)
+**Jump to:** [Folder Sidebar](#folder-sidebar) · [Quick Markers](#quick-markers) · [Bracket Tags](#bracket-tags) · [Tag Categories](#tag-categories)
 
 | Plugin | Description |
 |--------|-------------|
 | [Folder Sidebar](#folder-sidebar) | Browse scenes by filesystem folder |
 | [Quick Markers](#quick-markers) | Hotkey scene markers with presets |
 | [Bracket Tags](#bracket-tags) | Tags from `[brackets]` in filenames |
+| [Tag Categories](#tag-categories) | Browse scenes by named categories (any matching tag) |
 
 ---
 
@@ -44,7 +45,7 @@ Fixed sidebar with your own root folders, drill into subfolders, and list scenes
    https://pepegasan.github.io/Stash-Folder-Sidebar-Plugin/main/index.yml
    ```
 
-3. Install **Folder Sidebar**, **Quick Markers**, and/or **Bracket Tags** from the list, then reload plugins if prompted.
+3. Install **Folder Sidebar**, **Quick Markers**, **Bracket Tags**, and/or **Tag Categories** from the list, then reload plugins if prompted.
 
 ### Manual
 
@@ -318,7 +319,106 @@ Reload plugins in Stash, then run the task or enable **Auto on new scenes**.
 
 ---
 
+# Tag Categories
+
+Named **categories**, each with a list of Stash **tags**. Open **Categories** in the main menu, pick a category, and browse every scene that has **any** of those tags (OR filter). Categories live in plugin settings — they are not a native Stash entity.
+
+The same tag can appear in multiple categories; categories do not block or claim tags from each other.
+
+![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-informational)
+
+## Features
+
+- **Categories** item in the main navigation
+- Click a category → scenes matching **any** of its tags
+- **List / Preview** view toggle (thumbnails in Preview; preference kept in the browser)
+- Settings UI: name + comma-separated tags, edit/delete, collapsible sections
+- **Edit JSON (advanced)** modal with short help
+- UI language follows Stash (**English** / **German**; otherwise English)
+
+## Requirements
+
+- Stash with UI plugin support (recent stable builds)
+
+## Installation
+
+Install **Tag Categories** from the [plugin source URL](#installation-from-stash-plugin-source-url), or copy manually:
+
+| OS | Path |
+|----|------|
+| Windows | `%USERPROFILE%\.stash\plugins\tagCategories\` |
+| Linux / macOS | `~/.stash/plugins/tagCategories/` |
+
+Required files: `tagCategories.yml`, `tagCategories.js`, `tagCategories.css`  
+Optional: `categories.json` (copy from `categories.json.example`)
+
+Then **Settings → Plugins → Reload plugins**.
+
+## Configuration
+
+**Settings → Plugins → Tag Categories**
+
+| Section | Description |
+|---------|-------------|
+| **Categories** | List, edit, or delete categories |
+| **Add category** | Name + tags (`Action, Comedy, Drama`) |
+| **Edit JSON** | Full config editor + help button |
+
+### JSON shape
+
+```json
+{
+  "categories": [
+    {
+      "id": "genre",
+      "name": "Genre",
+      "tags": ["Action", "Comedy", "Drama"]
+    }
+  ]
+}
+```
+
+| Field | Role |
+|-------|------|
+| `name` | Label in the UI |
+| `tags` | Tag names to filter by (any match) |
+| `id` | Fixed browser URL (optional; otherwise from `name`) |
+
+Saved in plugin settings (`categoriesJson`) after you save in the UI. An optional `categories.json` in the plugin folder is used only until settings are saved once.
+
+## Usage
+
+1. Add categories under **Settings → Plugins → Tag Categories**
+2. Open **Categories** in the main menu
+3. Select a category in the left sidebar — matching scenes appear on the right
+4. Switch **List** / **Preview** above the results
+
+## Manual install
+
+```bash
+git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
+cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
+```
+
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.2.0`.
+
+---
+
 ## Changelog
+
+### Tag Categories 1.2.0
+
+- **List / Preview** toggle for category results (thumbnails in preview; preference stored in the browser)
+- Shorter JSON help text for `id`
+
+### Tag Categories 1.1.0
+
+- **Browse mode** — main menu **Categories** tab; click a category to list scenes matching any of its tags (replaces scene apply panel)
+
+### Tag Categories 1.0.0
+
+- Initial release: category list, comma-separated tags, JSON editor + help, DE/EN from Stash language
 
 ### Bracket Tags 1.0.0
 

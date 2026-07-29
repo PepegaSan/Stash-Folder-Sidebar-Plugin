@@ -1,0 +1,14 @@
+{
+  "categories": [
+    {
+      "id": "genre",
+      "name": "Genre",
+      "tags": ["Action", "Comedy", "Drama"]
+    },
+    {
+      "id": "quality",
+      "name": "Quality",
+      "tags": ["4K", "HD"]
+    }
+  ]
+}
