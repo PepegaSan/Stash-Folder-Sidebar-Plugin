@@ -2,22 +2,43 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.2.0";
+  const PLUGIN_VERSION = "1.2.1";
   const ROUTE_PATH = "/plugin/tag-categories";
   const ASSETS_CATEGORIES = "/plugin/" + PLUGIN_ID + "/assets/categories.json";
   const VIEW_MODE_STORAGE_KEY = "tagCategories.viewMode";
   const VIEW_MODES = ["list", "preview"];
 
   const PluginApi = window.PluginApi;
-  if (!PluginApi) {
+  if (!PluginApi || !PluginApi.React) {
     console.error("[Tag Categories] PluginApi not available");
     return;
   }
 
   const React = PluginApi.React;
   const GQL = PluginApi.GQL;
-  const { Link, useLocation, useHistory } = PluginApi.libraries.ReactRouterDOM;
-  const { Button, Nav } = PluginApi.libraries.Bootstrap;
+  const libraries = PluginApi.libraries || {};
+  const RR = libraries.ReactRouterDOM || {};
+  const BS = libraries.Bootstrap || {};
+  const faSolid = libraries.FontAwesomeSolid || {};
+  const Link = RR.Link;
+  const useLocation = RR.useLocation;
+  const useHistory = RR.useHistory;
+  const useNavigate = RR.useNavigate;
+  const Button = BS.Button;
+  const Nav = BS.Nav;
+
+  if (!Link || typeof useLocation !== "function" || !Button || !Nav || !Nav.Link) {
+    console.error(
+      "[Tag Categories] incompatible PluginApi libraries — refusing to patch UI",
+      {
+        hasLink: !!Link,
+        hasUseLocation: typeof useLocation === "function",
+        hasButton: !!Button,
+        hasNavLink: !!(Nav && Nav.Link),
+      }
+    );
+    return;
+  }
 
   const DEFAULT_CONFIG = {
     categories: [],
@@ -902,54 +923,76 @@
   PluginApi.register.route(ROUTE_PATH, TagCategoriesPage);
 
   function CategoriesNavMenuItem() {
-    const location = useLocation();
-    const lang = usePluginLang();
-    const { Icon } = PluginApi.components;
-    const faSolid = PluginApi.libraries.FontAwesomeSolid;
-    const faTags = faSolid.faTags || faSolid.faTag || faSolid.faFolder;
-    const isActive =
-      location.pathname === ROUTE_PATH ||
-      location.pathname.indexOf(ROUTE_PATH + "/") === 0;
+    try {
+      if (typeof useLocation !== "function" || !Link || !Button || !Nav || !Nav.Link) {
+        return null;
+      }
+      const location = useLocation();
+      const lang = usePluginLang();
+      const components = PluginApi.components || {};
+      const Icon = components.Icon;
+      const faTags =
+        faSolid.faTags || faSolid.faTag || faSolid.faFolder || faSolid.faHome;
+      const pathname =
+        (location && location.pathname) ||
+        (typeof window !== "undefined" && window.location.pathname) ||
+        "";
+      const isActive =
+        pathname === ROUTE_PATH || pathname.indexOf(ROUTE_PATH + "/") === 0;
+      const label = React.createElement("span", null, t(lang, "navLabel"));
+      const iconEl =
+        Icon && faTags
+          ? React.createElement(Icon, {
+              icon: faTags,
+              className: "nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0",
+            })
+          : null;
 
-    return React.createElement(
-      Nav.Link,
-      {
-        as: "div",
-        eventKey: ROUTE_PATH,
-        key: "tag-categories-nav",
-        className: "col-4 col-sm-3 col-md-2 col-lg-auto",
-      },
-      React.createElement(
-        Link,
-        { to: ROUTE_PATH, className: "tag-categories-nav-link-wrap" },
+      return React.createElement(
+        Nav.Link,
+        {
+          as: "div",
+          eventKey: ROUTE_PATH,
+          key: "tag-categories-nav",
+          className: "col-4 col-sm-3 col-md-2 col-lg-auto",
+        },
         React.createElement(
-          Button,
-          {
-            className:
-              "minimal p-4 p-xl-2 d-flex d-xl-inline-block flex-column justify-content-between align-items-center" +
-              (isActive ? " active" : ""),
-          },
-          React.createElement(Icon, {
-            icon: faTags,
-            className: "nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0",
-          }),
-          React.createElement("span", null, t(lang, "navLabel"))
+          Link,
+          { to: ROUTE_PATH, className: "tag-categories-nav-link-wrap" },
+          React.createElement(
+            Button,
+            {
+              className:
+                "minimal p-4 p-xl-2 d-flex d-xl-inline-block flex-column justify-content-between align-items-center" +
+                (isActive ? " active" : ""),
+            },
+            iconEl,
+            label
+          )
         )
-      )
-    );
+      );
+    } catch (e) {
+      console.error("[Tag Categories] CategoriesNavMenuItem failed", e);
+      return null;
+    }
   }
 
   PluginApi.patch.before("MainNavBar.MenuItems", function (props) {
-    return [
-      {
-        children: React.createElement(
-          React.Fragment,
-          null,
-          props.children,
-          React.createElement(CategoriesNavMenuItem, null)
-        ),
-      },
-    ];
+    try {
+      return [
+        {
+          children: React.createElement(
+            React.Fragment,
+            null,
+            props && props.children,
+            React.createElement(CategoriesNavMenuItem, null)
+          ),
+        },
+      ];
+    } catch (e) {
+      console.error("[Tag Categories] MainNavBar.MenuItems patch failed", e);
+      return [props || {}];
+    }
   });
 
   function HelpModal(props) {

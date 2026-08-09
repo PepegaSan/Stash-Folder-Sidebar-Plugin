@@ -6,15 +6,57 @@
   const ASSETS_JSON = "/plugin/" + PLUGIN_ID + "/assets/folders.json";
 
   const PluginApi = window.PluginApi;
-  if (!PluginApi) {
+  if (!PluginApi || !PluginApi.React) {
     console.error("[Folder Sidebar] PluginApi not available");
     return;
   }
 
   const React = PluginApi.React;
   const GQL = PluginApi.GQL;
-  const { Link, useLocation, useHistory } = PluginApi.libraries.ReactRouterDOM;
-  const { Button, Nav } = PluginApi.libraries.Bootstrap;
+  const libraries = PluginApi.libraries || {};
+  const RR = libraries.ReactRouterDOM || {};
+  const BS = libraries.Bootstrap || {};
+  const faSolid = libraries.FontAwesomeSolid || {};
+  const Link = RR.Link;
+  const useLocation = RR.useLocation;
+  const useHistory = RR.useHistory;
+  const useNavigate = RR.useNavigate;
+  const Button = BS.Button;
+  const Nav = BS.Nav;
+
+  if (!Link || typeof useLocation !== "function" || !Button || !Nav || !Nav.Link) {
+    console.error(
+      "[Folder Sidebar] incompatible PluginApi libraries — refusing to patch UI",
+      {
+        hasLink: !!Link,
+        hasUseLocation: typeof useLocation === "function",
+        hasButton: !!Button,
+        hasNavLink: !!(Nav && Nav.Link),
+      }
+    );
+    return;
+  }
+
+  function usePluginNavigate() {
+    const history =
+      typeof useHistory === "function" ? useHistory() : null;
+    const navigate =
+      typeof useNavigate === "function" ? useNavigate() : null;
+    return React.useCallback(
+      function (url) {
+        if (navigate) {
+          navigate(url);
+          return;
+        }
+        if (history && typeof history.push === "function") {
+          history.push(url);
+          return;
+        }
+        window.location.assign(url);
+      },
+      [history, navigate]
+    );
+  }
 
   function pathSeparator(p) {
     return String(p).indexOf("\\") >= 0 ? "\\" : "/";
@@ -505,7 +547,7 @@
 
   function FolderSidebarPage() {
     const location = useLocation();
-    const history = useHistory();
+    const goTo = usePluginNavigate();
     const { folders, error, loading } = useFolderConfig();
 
     const params = new URLSearchParams(location.search || "");
@@ -550,7 +592,7 @@
       const q = new URLSearchParams();
       q.set("folder", id);
       q.set("cwd", root.path);
-      history.push(ROUTE_PATH + "?" + q.toString());
+      goTo(ROUTE_PATH + "?" + q.toString());
     }
 
     function navigateTo(path) {
@@ -558,7 +600,7 @@
       const q = new URLSearchParams();
       q.set("folder", selected.id);
       q.set("cwd", ensureTrailingSep(path));
-      history.push(ROUTE_PATH + "?" + q.toString());
+      goTo(ROUTE_PATH + "?" + q.toString());
     }
 
     const { LoadingIndicator } = PluginApi.components;
@@ -949,60 +991,100 @@
     var args = Array.prototype.slice.call(arguments);
     var next = args.pop();
     var props = args[0];
-    if (!props || props.pluginID !== PLUGIN_ID) {
+    try {
+      if (!props || props.pluginID !== PLUGIN_ID) {
+        return next.apply(null, args);
+      }
+      if (
+        !PluginApi.hooks ||
+        typeof PluginApi.hooks.useSettings !== "function"
+      ) {
+        return next.apply(null, args);
+      }
+      return React.createElement(FolderPluginSettings, null);
+    } catch (e) {
+      console.error("[Folder Sidebar] PluginSettings patch failed", e);
       return next.apply(null, args);
     }
-    return React.createElement(FolderPluginSettings, null);
   });
 
-  /** Match stock MainNavbar menu item layout (Nav.Link → LinkContainer → Button → Icon). */
+  /**
+   * Match stock MainNavbar menu item layout.
+   * Must never throw — a crash here blanks every Stash page (navbar shell).
+   */
   function FolderNavMenuItem() {
-    const location = useLocation();
-    const { Icon } = PluginApi.components;
-    const faSolid = PluginApi.libraries.FontAwesomeSolid;
-    const faFolder = faSolid.faFolder || faSolid.faFolderOpen;
-    const isActive =
-      location.pathname === ROUTE_PATH ||
-      location.pathname.indexOf(ROUTE_PATH + "/") === 0;
+    try {
+      if (typeof useLocation !== "function" || !Link || !Button || !Nav || !Nav.Link) {
+        return null;
+      }
+      const location = useLocation();
+      const components = PluginApi.components || {};
+      const Icon = components.Icon;
+      const faFolder =
+        faSolid.faFolder ||
+        faSolid.faFolderOpen ||
+        faSolid.faHome ||
+        faSolid.faPlay;
+      const pathname =
+        (location && location.pathname) ||
+        (typeof window !== "undefined" && window.location.pathname) ||
+        "";
+      const isActive =
+        pathname === ROUTE_PATH || pathname.indexOf(ROUTE_PATH + "/") === 0;
 
-    return React.createElement(
-      Nav.Link,
-      {
-        as: "div",
-        eventKey: ROUTE_PATH,
-        key: "folder-sidebar-nav",
-        className: "col-4 col-sm-3 col-md-2 col-lg-auto",
-      },
-      React.createElement(
-        Link,
-        { to: ROUTE_PATH, className: "folder-sidebar-nav-link-wrap" },
+      const label = React.createElement("span", null, "Folder");
+      const iconEl =
+        Icon && faFolder
+          ? React.createElement(Icon, {
+              icon: faFolder,
+              className: "nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0",
+            })
+          : null;
+
+      return React.createElement(
+        Nav.Link,
+        {
+          as: "div",
+          eventKey: ROUTE_PATH,
+          key: "folder-sidebar-nav",
+          className: "col-4 col-sm-3 col-md-2 col-lg-auto",
+        },
         React.createElement(
-          Button,
-          {
-            className:
-              "minimal p-4 p-xl-2 d-flex d-xl-inline-block flex-column justify-content-between align-items-center" +
-              (isActive ? " active" : ""),
-          },
-          React.createElement(Icon, {
-            icon: faFolder,
-            className: "nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0",
-          }),
-          React.createElement("span", null, "Folder")
+          Link,
+          { to: ROUTE_PATH, className: "folder-sidebar-nav-link-wrap" },
+          React.createElement(
+            Button,
+            {
+              className:
+                "minimal p-4 p-xl-2 d-flex d-xl-inline-block flex-column justify-content-between align-items-center" +
+                (isActive ? " active" : ""),
+            },
+            iconEl,
+            label
+          )
         )
-      )
-    );
+      );
+    } catch (e) {
+      console.error("[Folder Sidebar] FolderNavMenuItem failed", e);
+      return null;
+    }
   }
 
   PluginApi.patch.before("MainNavBar.MenuItems", function (props) {
-    return [
-      {
-        children: React.createElement(
-          React.Fragment,
-          null,
-          props.children,
-          React.createElement(FolderNavMenuItem, null)
-        ),
-      },
-    ];
+    try {
+      return [
+        {
+          children: React.createElement(
+            React.Fragment,
+            null,
+            props && props.children,
+            React.createElement(FolderNavMenuItem, null)
+          ),
+        },
+      ];
+    } catch (e) {
+      console.error("[Folder Sidebar] MainNavBar.MenuItems patch failed", e);
+      return [props || {}];
+    }
   });
 })();

@@ -1,6 +1,6 @@
 name: Tag Categories
 description: Browse scenes by named categories — each category lists tags; click to show scenes matching any of those tags
-version: 1.2.0
+version: 1.2.1
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:

@@ -18,7 +18,7 @@ Community plugins for [Stash](https://github.com/stashapp/stash), installable vi
 Fixed sidebar with your own root folders, drill into subfolders, and list scenes in the current directory only — no filter UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.4.1-informational)
+![Version](https://img.shields.io/badge/version-1.4.5-informational)
 
 ## Features
 
@@ -502,6 +502,14 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.2.0`.
 ### Quick Markers 1.0.0
 
 - Initial release: presets, Shift+I/O range, Shift+1–9 instant, on-scene panel
+
+### Folder Sidebar 1.4.5
+
+- **Hardened MainNav patch** — missing icons/router/Bootstrap APIs no longer crash the whole Stash UI (blank page / stacked nav icons)
+
+### Tag Categories 1.2.1
+
+- Same MainNav hardening as Folder Sidebar (prevent global UI crash)
 
 ### Folder Sidebar 1.4.4
 
