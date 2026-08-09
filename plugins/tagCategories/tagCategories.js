@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.2.1";
+  const PLUGIN_VERSION = "1.2.2";
   const ROUTE_PATH = "/plugin/tag-categories";
   const ASSETS_CATEGORIES = "/plugin/" + PLUGIN_ID + "/assets/categories.json";
   const VIEW_MODE_STORAGE_KEY = "tagCategories.viewMode";
@@ -39,6 +39,52 @@
     );
     return;
   }
+
+  function usePluginNavigate() {
+    const history =
+      typeof useHistory === "function" ? useHistory() : null;
+    const navigate =
+      typeof useNavigate === "function" ? useNavigate() : null;
+    return React.useCallback(
+      function (url) {
+        if (navigate) {
+          navigate(url);
+          return;
+        }
+        if (history && typeof history.push === "function") {
+          history.push(url);
+          return;
+        }
+        window.location.assign(url);
+      },
+      [history, navigate]
+    );
+  }
+
+  var PatchErrorBoundary = (function () {
+    if (!React.Component) {
+      return function Passthrough(props) {
+        return props.children || null;
+      };
+    }
+    function Boundary(props) {
+      React.Component.call(this, props);
+      this.state = { hasError: false };
+    }
+    Boundary.prototype = Object.create(React.Component.prototype);
+    Boundary.prototype.constructor = Boundary;
+    Boundary.getDerivedStateFromError = function () {
+      return { hasError: true };
+    };
+    Boundary.prototype.componentDidCatch = function (err, info) {
+      console.error("[Tag Categories] patched UI render failed", err, info);
+    };
+    Boundary.prototype.render = function () {
+      if (this.state.hasError) return null;
+      return this.props.children;
+    };
+    return Boundary;
+  })();
 
   const DEFAULT_CONFIG = {
     categories: [],
@@ -820,9 +866,10 @@
 
   function TagCategoriesPage() {
     const location = useLocation();
-    const history = useHistory();
+    const goTo = usePluginNavigate();
     const { config, error, loading, lang } = useCategoryConfig();
-    const { LoadingIndicator } = PluginApi.components;
+    const LoadingIndicator =
+      (PluginApi.components && PluginApi.components.LoadingIndicator) || "div";
 
     const params = new URLSearchParams(location.search || "");
     const categoryParam = params.get("category");
@@ -850,7 +897,7 @@
     function selectCategory(id) {
       const q = new URLSearchParams();
       q.set("category", id);
-      history.push(ROUTE_PATH + "?" + q.toString());
+      goTo(ROUTE_PATH + "?" + q.toString());
     }
 
     if (loading) {
@@ -923,58 +970,54 @@
   PluginApi.register.route(ROUTE_PATH, TagCategoriesPage);
 
   function CategoriesNavMenuItem() {
-    try {
-      if (typeof useLocation !== "function" || !Link || !Button || !Nav || !Nav.Link) {
-        return null;
-      }
-      const location = useLocation();
-      const lang = usePluginLang();
-      const components = PluginApi.components || {};
-      const Icon = components.Icon;
-      const faTags =
-        faSolid.faTags || faSolid.faTag || faSolid.faFolder || faSolid.faHome;
-      const pathname =
-        (location && location.pathname) ||
-        (typeof window !== "undefined" && window.location.pathname) ||
-        "";
-      const isActive =
-        pathname === ROUTE_PATH || pathname.indexOf(ROUTE_PATH + "/") === 0;
-      const label = React.createElement("span", null, t(lang, "navLabel"));
-      const iconEl =
-        Icon && faTags
-          ? React.createElement(Icon, {
-              icon: faTags,
-              className: "nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0",
-            })
-          : null;
+    // No GQL in the shell — usePluginLang() would query config on every page.
+    const location = useLocation();
+    const pathname =
+      (location && location.pathname) ||
+      (typeof window !== "undefined" && window.location.pathname) ||
+      "";
+    const isActive =
+      pathname === ROUTE_PATH || pathname.indexOf(ROUTE_PATH + "/") === 0;
+    const components = PluginApi.components || {};
+    const Icon = components.Icon;
+    const faTags =
+      faSolid.faTags || faSolid.faTag || faSolid.faFolder || faSolid.faHome;
+    const useIcon = !!(Icon && faTags && typeof faTags === "object");
+    const navLang = getUiLang({
+      language:
+        (typeof navigator !== "undefined" && navigator.language) || "en",
+    });
+    const label = React.createElement("span", null, t(navLang, "navLabel"));
+    const iconEl = useIcon
+      ? React.createElement(Icon, {
+          icon: faTags,
+          className: "nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0",
+        })
+      : null;
 
-      return React.createElement(
-        Nav.Link,
-        {
-          as: "div",
-          eventKey: ROUTE_PATH,
-          key: "tag-categories-nav",
-          className: "col-4 col-sm-3 col-md-2 col-lg-auto",
-        },
+    return React.createElement(
+      Nav.Link,
+      {
+        as: "div",
+        eventKey: ROUTE_PATH,
+        key: "tag-categories-nav",
+        className: "col-4 col-sm-3 col-md-2 col-lg-auto",
+      },
+      React.createElement(
+        Link,
+        { to: ROUTE_PATH, className: "tag-categories-nav-link-wrap" },
         React.createElement(
-          Link,
-          { to: ROUTE_PATH, className: "tag-categories-nav-link-wrap" },
-          React.createElement(
-            Button,
-            {
-              className:
-                "minimal p-4 p-xl-2 d-flex d-xl-inline-block flex-column justify-content-between align-items-center" +
-                (isActive ? " active" : ""),
-            },
-            iconEl,
-            label
-          )
+          Button,
+          {
+            className:
+              "minimal p-4 p-xl-2 d-flex d-xl-inline-block flex-column justify-content-between align-items-center" +
+              (isActive ? " active" : ""),
+          },
+          iconEl,
+          label
         )
-      );
-    } catch (e) {
-      console.error("[Tag Categories] CategoriesNavMenuItem failed", e);
-      return null;
-    }
+      )
+    );
   }
 
   PluginApi.patch.before("MainNavBar.MenuItems", function (props) {
@@ -985,7 +1028,11 @@
             React.Fragment,
             null,
             props && props.children,
-            React.createElement(CategoriesNavMenuItem, null)
+            React.createElement(
+              PatchErrorBoundary,
+              null,
+              React.createElement(CategoriesNavMenuItem, null)
+            )
           ),
         },
       ];
@@ -1077,9 +1124,31 @@
   }
 
   function TagCategoriesSettings() {
+    const settingsApi =
+      PluginApi.hooks && typeof PluginApi.hooks.useSettings === "function"
+        ? PluginApi.hooks.useSettings()
+        : {
+            plugins: {},
+            savePluginSettings: function () {},
+            loading: false,
+            interface: null,
+          };
     const { plugins, savePluginSettings, loading, interface: iface } =
-      PluginApi.hooks.useSettings();
-    const Toast = PluginApi.hooks.useToast();
+      settingsApi;
+    const toastApi =
+      PluginApi.hooks && typeof PluginApi.hooks.useToast === "function"
+        ? PluginApi.hooks.useToast()
+        : null;
+    const Toast = {
+      success: function (m) {
+        if (toastApi && toastApi.success) toastApi.success(m);
+        else console.info("[Tag Categories]", m);
+      },
+      error: function (m) {
+        if (toastApi && toastApi.error) toastApi.error(m);
+        else console.error("[Tag Categories]", m);
+      },
+    };
     const lang = getUiLang(iface);
 
     const [config, setConfig] = React.useState(DEFAULT_CONFIG);
@@ -1624,9 +1693,24 @@
     var args = Array.prototype.slice.call(arguments);
     var next = args.pop();
     var props = args[0];
-    if (!props || props.pluginID !== PLUGIN_ID) {
+    try {
+      if (!props || props.pluginID !== PLUGIN_ID) {
+        return next.apply(null, args);
+      }
+      if (
+        !PluginApi.hooks ||
+        typeof PluginApi.hooks.useSettings !== "function"
+      ) {
+        return next.apply(null, args);
+      }
+      return React.createElement(
+        PatchErrorBoundary,
+        null,
+        React.createElement(TagCategoriesSettings, null)
+      );
+    } catch (e) {
+      console.error("[Tag Categories] PluginSettings patch failed", e);
       return next.apply(null, args);
     }
-    return React.createElement(TagCategoriesSettings, null);
   });
 })();

@@ -18,7 +18,7 @@ Community plugins for [Stash](https://github.com/stashapp/stash), installable vi
 Fixed sidebar with your own root folders, drill into subfolders, and list scenes in the current directory only — no filter UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.4.5-informational)
+![Version](https://img.shields.io/badge/version-1.4.6-informational)
 
 ## Features
 
@@ -144,7 +144,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.3.1-informational)
+![Version](https://img.shields.io/badge/version-1.3.2-informational)
 
 ## Requirements
 
@@ -232,8 +232,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.3.1`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.3.1**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.3.2`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.3.2**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -502,6 +502,11 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.2.0`.
 ### Quick Markers 1.0.0
 
 - Initial release: presets, Shift+I/O range, Shift+1–9 instant, on-scene panel
+
+### Folder Sidebar 1.4.6 / Tag Categories 1.2.2 / Quick Markers 1.3.2
+
+- **Critical UI crash hardening** — MainNav items wrapped in error boundaries; no GQL in the navbar; Rules-of-Hooks safe
+- **Quick Markers** — ScenePage patch isolated; touch bar only mounts after player geometry is known (theme seek bars stay usable); safer PluginApi guards
 
 ### Folder Sidebar 1.4.5
 

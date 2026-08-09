@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.3.1";
+  const PLUGIN_VERSION = "1.3.2";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_GAP = 6;
@@ -20,18 +20,61 @@
   const ASSETS_PRESETS = "/plugin/" + PLUGIN_ID + "/assets/presets.json";
 
   const PluginApi = window.PluginApi;
-  if (!PluginApi) {
+  if (!PluginApi || !PluginApi.React || !PluginApi.GQL) {
     console.error("[Quick Markers] PluginApi not available");
     return;
   }
 
-  const StashService = PluginApi.utils.StashService;
+  const React = PluginApi.React;
+  const GQL = PluginApi.GQL;
+  const utils = PluginApi.utils || {};
+  const libraries = PluginApi.libraries || {};
+  const hooks = PluginApi.hooks || {};
+  const StashService = utils.StashService;
   const useFlatMarkerCreateVars = !!(
     StashService && typeof StashService.useSceneMarkerCreate === "function"
   );
-  const React = PluginApi.React;
-  const GQL = PluginApi.GQL;
-  const Mousetrap = PluginApi.libraries.Mousetrap;
+  const Mousetrap = libraries.Mousetrap;
+
+  const useCreateMarkerHook =
+    StashService && typeof StashService.useSceneMarkerCreate === "function"
+      ? StashService.useSceneMarkerCreate
+      : typeof GQL.useSceneMarkerCreateMutation === "function"
+        ? GQL.useSceneMarkerCreateMutation
+        : function useUnavailableCreateMarker() {
+            return [
+              function () {
+                return Promise.reject(
+                  new Error("Scene marker create API unavailable")
+                );
+              },
+            ];
+          };
+
+  var ScenePatchErrorBoundary = (function () {
+    if (!React.Component) {
+      return function Passthrough(props) {
+        return props.children || null;
+      };
+    }
+    function Boundary(props) {
+      React.Component.call(this, props);
+      this.state = { hasError: false };
+    }
+    Boundary.prototype = Object.create(React.Component.prototype);
+    Boundary.prototype.constructor = Boundary;
+    Boundary.getDerivedStateFromError = function () {
+      return { hasError: true };
+    };
+    Boundary.prototype.componentDidCatch = function (err, info) {
+      console.error("[Quick Markers] ScenePage UI render failed", err, info);
+    };
+    Boundary.prototype.render = function () {
+      if (this.state.hasError) return null;
+      return this.props.children;
+    };
+    return Boundary;
+  })();
 
   const DEFAULT_PRESETS_CONFIG = {
     defaultPresetIndex: 0,
@@ -266,10 +309,18 @@
   const inPointByScene = new Map();
 
   function getPlayerTime() {
-    const player = PluginApi.utils.InteractiveUtils.getPlayer();
-    if (!player || typeof player.currentTime !== "function") return null;
-    const t = player.currentTime();
-    return typeof t === "number" && !isNaN(t) ? t : null;
+    try {
+      const interactive = utils.InteractiveUtils;
+      if (!interactive || typeof interactive.getPlayer !== "function") {
+        return null;
+      }
+      const player = interactive.getPlayer();
+      if (!player || typeof player.currentTime !== "function") return null;
+      const t = player.currentTime();
+      return typeof t === "number" && !isNaN(t) ? t : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   function formatError(err) {
@@ -549,9 +600,23 @@
     );
   }
 
+  function useSafeToast() {
+    if (typeof hooks.useToast === "function") {
+      return hooks.useToast();
+    }
+    return {
+      success: function (m) {
+        console.info("[Quick Markers]", m);
+      },
+      error: function (m) {
+        console.error("[Quick Markers]", m);
+      },
+    };
+  }
+
   function QuickMarkersSceneHook(props) {
     const scene = props.scene;
-    const Toast = PluginApi.hooks.useToast();
+    const Toast = useSafeToast();
     const { config, error: configError } = usePresetsConfig();
     const resolveTagId = useResolveTagId();
     const [activeIndex, setActiveIndex] = React.useState(0);
@@ -718,11 +783,7 @@
       storePanelPos(null);
     }
 
-    const useCreateMarker =
-      StashService && StashService.useSceneMarkerCreate
-        ? StashService.useSceneMarkerCreate
-        : GQL.useSceneMarkerCreateMutation;
-    const [createMarker] = useCreateMarker();
+      const [createMarker] = useCreateMarkerHook();
 
     React.useEffect(
       function () {
@@ -850,6 +911,10 @@
 
         const keysToUnbind = [];
 
+        if (!Mousetrap || typeof Mousetrap.bind !== "function") {
+          return function () {};
+        }
+
         function bind(key, fn) {
           if (!key) return;
           keysToUnbind.push(key);
@@ -934,6 +999,7 @@
         });
 
         return function () {
+          if (!Mousetrap || typeof Mousetrap.unbind !== "function") return;
           keysToUnbind.forEach(function (key) {
             Mousetrap.unbind(key);
           });
@@ -1099,17 +1165,17 @@
         }
       : undefined;
 
-    var touchBar = showTouchBar
-      ? React.createElement(
+    // Only mount when player geometry is known — avoids covering theme seek bars
+    // with the full-bleed CSS fallback (bottom:0; left:0; right:0).
+    var touchBar =
+      showTouchBar && playerLayout
+        ? React.createElement(
           "div",
           {
             ref: touchBarRef,
             className:
-              "quick-markers-touch-bar" +
-              (playerLayout
-                ? " quick-markers-touch-bar-aligned placement-" +
-                  (playerLayout.placement || "below-player")
-                : ""),
+              "quick-markers-touch-bar quick-markers-touch-bar-aligned placement-" +
+              (playerLayout.placement || "below-player"),
             style: touchBarStyle,
           },
           React.createElement(
@@ -1190,13 +1256,22 @@
     var args = Array.prototype.slice.call(arguments);
     var result = args[args.length - 1];
     var props = args[0];
-    if (!props || !props.scene) return result;
-    return React.createElement(
-      React.Fragment,
-      null,
-      result,
-      React.createElement(QuickMarkersSceneHook, { scene: props.scene })
-    );
+    try {
+      if (!props || !props.scene) return result;
+      return React.createElement(
+        React.Fragment,
+        null,
+        result,
+        React.createElement(
+          ScenePatchErrorBoundary,
+          null,
+          React.createElement(QuickMarkersSceneHook, { scene: props.scene })
+        )
+      );
+    } catch (e) {
+      console.error("[Quick Markers] ScenePage patch failed", e);
+      return result;
+    }
   });
 
   const TAGS_HELP_I18N = {
@@ -1329,8 +1404,12 @@
   }
 
   function QuickMarkersSettings() {
-    const { plugins, savePluginSettings, loading } = PluginApi.hooks.useSettings();
-    const Toast = PluginApi.hooks.useToast();
+    const settingsApi =
+      typeof hooks.useSettings === "function"
+        ? hooks.useSettings()
+        : { plugins: {}, savePluginSettings: function () {}, loading: false };
+    const { plugins, savePluginSettings, loading } = settingsApi;
+    const Toast = useSafeToast();
     const tagsHelpT = TAGS_HELP_I18N[getTagsHelpLang()];
 
     const [config, setConfig] = React.useState({
@@ -2206,9 +2285,21 @@
     var args = Array.prototype.slice.call(arguments);
     var next = args.pop();
     var props = args[0];
-    if (!props || props.pluginID !== PLUGIN_ID) {
+    try {
+      if (!props || props.pluginID !== PLUGIN_ID) {
+        return next.apply(null, args);
+      }
+      if (typeof hooks.useSettings !== "function") {
+        return next.apply(null, args);
+      }
+      return React.createElement(
+        ScenePatchErrorBoundary,
+        null,
+        React.createElement(QuickMarkersSettings, null)
+      );
+    } catch (e) {
+      console.error("[Quick Markers] PluginSettings patch failed", e);
       return next.apply(null, args);
     }
-    return React.createElement(QuickMarkersSettings, null);
   });
 })();

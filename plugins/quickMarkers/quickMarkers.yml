@@ -1,6 +1,6 @@
 name: Quick Markers
-description: Create scene markers with hotkeys and presets (Shift+I/O for range, Shift+1–9 for instant)
-version: 1.3.1
+description: Create scene markers with hotkeys and presets (Shift+1–9 select, Shift+I/O range, Shift+M instant)
+version: 1.3.2
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:

@@ -1,6 +1,6 @@
 .quick-markers-panel {
   position: fixed;
-  z-index: 1050;
+  z-index: 1025;
   max-width: 22rem;
   padding: 0.65rem 0.75rem;
   background: var(--bs-body-bg, #1a1a1a);
@@ -341,12 +341,12 @@
 /* Anchored to the player (not viewport bottom) so theme control/seek bars stay usable. */
 
 .quick-markers-touch-bar {
+  /* Never full-bleed by default — only shown with .quick-markers-touch-bar-aligned
+     after JS measured the player (theme-safe vs seek/control bars). */
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1035;
+  z-index: 1020;
   box-sizing: border-box;
+  display: none;
   padding: 0.45rem 0.65rem
     calc(0.45rem + env(safe-area-inset-bottom, 0px));
   color: var(--bs-body-color, inherit);
@@ -367,6 +367,7 @@
 }
 
 .quick-markers-touch-bar-aligned {
+  display: block;
   right: auto;
   bottom: auto;
   margin: 0;
