@@ -2,7 +2,8 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.2.2";
+  const PLUGIN_VERSION = "1.3.0";
+  const SEARCH_DEBOUNCE_MS = 180;
   const ROUTE_PATH = "/plugin/tag-categories";
   const ASSETS_CATEGORIES = "/plugin/" + PLUGIN_ID + "/assets/categories.json";
   const VIEW_MODE_STORAGE_KEY = "tagCategories.viewMode";
@@ -154,6 +155,10 @@
       viewList: "List",
       viewPreview: "Preview",
       viewModeLabel: "View",
+      searchPlaceholder: "Search in this category…",
+      searchClear: "Clear search",
+      noSearchMatches: "No scenes match this search.",
+      scenesFiltered: "{shown} of {total}",
       helpTitle: "Categories in JSON",
       helpIntro:
         "How to define categories in the JSON editor. Settings are stored in the Stash database (plugin settings). Each category is a filter: scenes that have any of the listed tags.",
@@ -233,6 +238,10 @@
       viewList: "Liste",
       viewPreview: "Vorschau",
       viewModeLabel: "Ansicht",
+      searchPlaceholder: "In dieser Kategorie suchen…",
+      searchClear: "Suche leeren",
+      noSearchMatches: "Keine Szenen passen zur Suche.",
+      scenesFiltered: "{shown} von {total}",
       helpTitle: "Kategorien im JSON",
       helpIntro:
         "So legst du Kategorien im JSON-Editor an. Gespeichert wird in der Stash-Datenbank. Jede Kategorie ist ein Filter: Szenen mit mindestens einem der genannten Tags.",
@@ -453,6 +462,34 @@
     );
   }
 
+  function sceneSearchHaystack(scene) {
+    const parts = [sceneTitle(scene), sceneFilePath(scene)];
+    if (scene.details) parts.push(scene.details);
+    if (scene.studio && scene.studio.name) parts.push(scene.studio.name);
+    if (scene.performers) {
+      for (let i = 0; i < scene.performers.length; i++) {
+        if (scene.performers[i] && scene.performers[i].name) {
+          parts.push(scene.performers[i].name);
+        }
+      }
+    }
+    if (scene.tags) {
+      for (let j = 0; j < scene.tags.length; j++) {
+        if (scene.tags[j] && scene.tags[j].name) {
+          parts.push(scene.tags[j].name);
+        }
+      }
+    }
+    return parts.join(" ").toLowerCase();
+  }
+
+  function sceneMatchesSearch(haystack, tokens) {
+    for (let i = 0; i < tokens.length; i++) {
+      if (haystack.indexOf(tokens[i]) === -1) return false;
+    }
+    return true;
+  }
+
   function usePluginLang() {
     const { data } = GQL.useConfigurationQuery({ fetchPolicy: "cache-first" });
     return getUiLang(
@@ -661,6 +698,8 @@
     const { LoadingIndicator } = PluginApi.components;
     const resolveTagNames = useResolveTagIds();
     const [viewMode, setViewMode] = React.useState(readStoredViewMode);
+    const [searchInput, setSearchInput] = React.useState("");
+    const [searchQuery, setSearchQuery] = React.useState("");
     const [tagState, setTagState] = React.useState({
       ids: null,
       missing: [],
@@ -677,6 +716,26 @@
       setViewMode(next);
       storeViewMode(next);
     }
+
+    React.useEffect(
+      function () {
+        setSearchInput("");
+        setSearchQuery("");
+      },
+      [category.id]
+    );
+
+    React.useEffect(
+      function () {
+        const timer = window.setTimeout(function () {
+          setSearchQuery(searchInput.trim());
+        }, SEARCH_DEBOUNCE_MS);
+        return function () {
+          window.clearTimeout(timer);
+        };
+      },
+      [searchInput]
+    );
 
     React.useEffect(
       function () {
@@ -720,6 +779,28 @@
       },
     });
 
+    const scenes =
+      data && data.findScenes && data.findScenes.scenes
+        ? data.findScenes.scenes
+        : [];
+    const totalCount =
+      data && data.findScenes && data.findScenes.count != null
+        ? data.findScenes.count
+        : scenes.length;
+
+    const filteredScenes = React.useMemo(
+      function () {
+        const q = searchQuery.toLowerCase();
+        if (!q) return scenes;
+        const tokens = q.split(/\s+/).filter(Boolean);
+        if (!tokens.length) return scenes;
+        return scenes.filter(function (scene) {
+          return sceneMatchesSearch(sceneSearchHaystack(scene), tokens);
+        });
+      },
+      [scenes, searchQuery]
+    );
+
     if (tagState.loading) {
       return React.createElement(LoadingIndicator);
     }
@@ -746,16 +827,15 @@
       );
     }
 
-    const scenes =
-      data && data.findScenes && data.findScenes.scenes
-        ? data.findScenes.scenes
-        : [];
-    const count =
-      data && data.findScenes && data.findScenes.count != null
-        ? data.findScenes.count
-        : scenes.length;
     const showFullLoading = loading && !data;
     const isRefreshing = loading && !!data;
+    const isFiltering = !!searchQuery;
+    const countLabel = isFiltering
+      ? t(lang, "scenesFiltered", {
+          shown: filteredScenes.length,
+          total: totalCount,
+        })
+      : String(totalCount);
 
     if (showFullLoading) {
       return React.createElement(LoadingIndicator);
@@ -791,6 +871,36 @@
         React.createElement(
           "div",
           { className: "tag-categories-header-actions mt-2" },
+          React.createElement(
+            "div",
+            { className: "tag-categories-search" },
+            React.createElement("input", {
+              type: "search",
+              className: "form-control form-control-sm tag-categories-search-input",
+              value: searchInput,
+              placeholder: t(lang, "searchPlaceholder"),
+              "aria-label": t(lang, "searchPlaceholder"),
+              onChange: function (e) {
+                setSearchInput(e.target.value);
+              },
+            }),
+            searchInput
+              ? React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    className: "tag-categories-search-clear",
+                    title: t(lang, "searchClear"),
+                    "aria-label": t(lang, "searchClear"),
+                    onClick: function () {
+                      setSearchInput("");
+                      setSearchQuery("");
+                    },
+                  },
+                  "×"
+                )
+              : null
+          ),
           React.createElement(
             "div",
             {
@@ -850,7 +960,7 @@
       React.createElement(
         "h2",
         { className: "tag-categories-section-title" },
-        t(lang, "scenesTitle") + " (" + count + ")"
+        t(lang, "scenesTitle") + " (" + countLabel + ")"
       ),
       scenes.length === 0
         ? React.createElement(
@@ -858,9 +968,15 @@
             { className: "tag-categories-empty" },
             t(lang, "noScenes")
           )
-        : viewMode === "preview"
-          ? React.createElement(ScenePreviewView, { scenes: scenes })
-          : React.createElement(SceneListView, { scenes: scenes })
+        : filteredScenes.length === 0
+          ? React.createElement(
+              "p",
+              { className: "tag-categories-empty" },
+              t(lang, "noSearchMatches")
+            )
+          : viewMode === "preview"
+            ? React.createElement(ScenePreviewView, { scenes: filteredScenes })
+            : React.createElement(SceneListView, { scenes: filteredScenes })
     );
   }
 
