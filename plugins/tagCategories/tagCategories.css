@@ -115,6 +115,15 @@
   opacity: 1;
 }
 
+.tag-categories-sort {
+  margin: 0;
+  min-width: 11rem;
+}
+
+.tag-categories-sort select {
+  min-width: 11rem;
+}
+
 .tag-categories-preview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

@@ -326,13 +326,14 @@ Named **categories**, each with a list of Stash **tags**. Open **Categories** in
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.3.0-informational)
+![Version](https://img.shields.io/badge/version-1.4.0-informational)
 
 ## Features
 
 - **Categories** item in the main navigation
 - Click a category → scenes matching **any** of its tags
 - **Search within a category** — filters the already loaded list (title, file, performers, studio, tags); no extra server request while typing
+- **Sort** — title, duration (long/short), date (newest/oldest); client-side, preference kept in the browser
 - **List / Preview** view toggle (thumbnails in Preview; preference kept in the browser)
 - Settings UI: name + comma-separated tags, edit/delete, collapsible sections
 - **Edit JSON (advanced)** modal with short help
@@ -395,6 +396,7 @@ Saved in plugin settings (`categoriesJson`) after you save in the UI. An optiona
 3. Select a category in the left sidebar — matching scenes appear on the right
 4. Switch **List** / **Preview** above the results
 5. Use the search box to narrow the current category (words are AND; no extra load)
+6. Use **Sort** for title, duration, or date
 
 ## Manual install
 
@@ -403,11 +405,15 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.3.0`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.0`.
 
 ---
 
 ## Changelog
+
+### Tag Categories 1.4.0
+
+- **Sort** loaded category scenes by title, duration (long/short), or date — client-side, no extra request
 
 ### Tag Categories 1.3.0
 

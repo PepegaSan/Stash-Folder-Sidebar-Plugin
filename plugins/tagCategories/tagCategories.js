@@ -2,12 +2,21 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.3.0";
+  const PLUGIN_VERSION = "1.4.0";
   const SEARCH_DEBOUNCE_MS = 180;
   const ROUTE_PATH = "/plugin/tag-categories";
   const ASSETS_CATEGORIES = "/plugin/" + PLUGIN_ID + "/assets/categories.json";
   const VIEW_MODE_STORAGE_KEY = "tagCategories.viewMode";
+  const SORT_MODE_STORAGE_KEY = "tagCategories.sortMode";
   const VIEW_MODES = ["list", "preview"];
+  const SORT_MODES = [
+    "title-asc",
+    "title-desc",
+    "duration-desc",
+    "duration-asc",
+    "date-desc",
+    "date-asc",
+  ];
 
   const PluginApi = window.PluginApi;
   if (!PluginApi || !PluginApi.React) {
@@ -159,6 +168,13 @@
       searchClear: "Clear search",
       noSearchMatches: "No scenes match this search.",
       scenesFiltered: "{shown} of {total}",
+      sortLabel: "Sort",
+      sortTitleAsc: "Title A–Z",
+      sortTitleDesc: "Title Z–A",
+      sortDurationDesc: "Duration (long → short)",
+      sortDurationAsc: "Duration (short → long)",
+      sortDateDesc: "Date (newest)",
+      sortDateAsc: "Date (oldest)",
       helpTitle: "Categories in JSON",
       helpIntro:
         "How to define categories in the JSON editor. Settings are stored in the Stash database (plugin settings). Each category is a filter: scenes that have any of the listed tags.",
@@ -242,6 +258,13 @@
       searchClear: "Suche leeren",
       noSearchMatches: "Keine Szenen passen zur Suche.",
       scenesFiltered: "{shown} von {total}",
+      sortLabel: "Sortierung",
+      sortTitleAsc: "Titel A–Z",
+      sortTitleDesc: "Titel Z–A",
+      sortDurationDesc: "Dauer (lang → kurz)",
+      sortDurationAsc: "Dauer (kurz → lang)",
+      sortDateDesc: "Datum (neueste)",
+      sortDateAsc: "Datum (älteste)",
       helpTitle: "Kategorien im JSON",
       helpIntro:
         "So legst du Kategorien im JSON-Editor an. Gespeichert wird in der Stash-Datenbank. Jede Kategorie ist ein Filter: Szenen mit mindestens einem der genannten Tags.",
@@ -442,6 +465,84 @@
     } catch (e) {
       /* ignore */
     }
+  }
+
+  function normalizeSortMode(value) {
+    const mode = String(value || "title-asc").trim().toLowerCase();
+    return SORT_MODES.indexOf(mode) >= 0 ? mode : "title-asc";
+  }
+
+  function readStoredSortMode() {
+    try {
+      return normalizeSortMode(localStorage.getItem(SORT_MODE_STORAGE_KEY));
+    } catch (e) {
+      return "title-asc";
+    }
+  }
+
+  function storeSortMode(mode) {
+    try {
+      localStorage.setItem(SORT_MODE_STORAGE_KEY, normalizeSortMode(mode));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function durationSortValue(scene) {
+    const d = sceneDuration(scene);
+    if (d == null || isNaN(d)) return null;
+    return d;
+  }
+
+  function dateSortValue(scene) {
+    if (!scene || !scene.date) return 0;
+    const t = Date.parse(scene.date);
+    return isNaN(t) ? 0 : t;
+  }
+
+  function compareTitles(a, b) {
+    return sceneTitle(a).localeCompare(sceneTitle(b), undefined, {
+      sensitivity: "base",
+      numeric: true,
+    });
+  }
+
+  function compareNullableNumbers(a, b, descending) {
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    return descending ? b - a : a - b;
+  }
+
+  function sortScenes(list, mode) {
+    const copy = list.slice();
+    copy.sort(function (a, b) {
+      let cmp = 0;
+      if (mode === "duration-desc") {
+        cmp = compareNullableNumbers(
+          durationSortValue(a),
+          durationSortValue(b),
+          true
+        );
+      } else if (mode === "duration-asc") {
+        cmp = compareNullableNumbers(
+          durationSortValue(a),
+          durationSortValue(b),
+          false
+        );
+      } else if (mode === "date-desc") {
+        cmp = dateSortValue(b) - dateSortValue(a);
+      } else if (mode === "date-asc") {
+        cmp = dateSortValue(a) - dateSortValue(b);
+      } else if (mode === "title-desc") {
+        cmp = compareTitles(b, a);
+      } else {
+        cmp = compareTitles(a, b);
+      }
+      if (cmp !== 0) return cmp;
+      return compareTitles(a, b);
+    });
+    return copy;
   }
 
   function sceneTitle(scene) {
@@ -698,6 +799,7 @@
     const { LoadingIndicator } = PluginApi.components;
     const resolveTagNames = useResolveTagIds();
     const [viewMode, setViewMode] = React.useState(readStoredViewMode);
+    const [sortMode, setSortMode] = React.useState(readStoredSortMode);
     const [searchInput, setSearchInput] = React.useState("");
     const [searchQuery, setSearchQuery] = React.useState("");
     const [tagState, setTagState] = React.useState({
@@ -715,6 +817,12 @@
       const next = normalizeViewMode(mode);
       setViewMode(next);
       storeViewMode(next);
+    }
+
+    function setAndStoreSortMode(mode) {
+      const next = normalizeSortMode(mode);
+      setSortMode(next);
+      storeSortMode(next);
     }
 
     React.useEffect(
@@ -791,14 +899,18 @@
     const filteredScenes = React.useMemo(
       function () {
         const q = searchQuery.toLowerCase();
-        if (!q) return scenes;
-        const tokens = q.split(/\s+/).filter(Boolean);
-        if (!tokens.length) return scenes;
-        return scenes.filter(function (scene) {
-          return sceneMatchesSearch(sceneSearchHaystack(scene), tokens);
-        });
+        let list = scenes;
+        if (q) {
+          const tokens = q.split(/\s+/).filter(Boolean);
+          if (tokens.length) {
+            list = scenes.filter(function (scene) {
+              return sceneMatchesSearch(sceneSearchHaystack(scene), tokens);
+            });
+          }
+        }
+        return sortScenes(list, sortMode);
       },
-      [scenes, searchQuery]
+      [scenes, searchQuery, sortMode]
     );
 
     if (tagState.loading) {
@@ -900,6 +1012,53 @@
                   "×"
                 )
               : null
+          ),
+          React.createElement(
+            "label",
+            { className: "tag-categories-sort", htmlFor: "tc-sort-mode" },
+            React.createElement(
+              "select",
+              {
+                id: "tc-sort-mode",
+                className: "form-control form-control-sm",
+                value: sortMode,
+                "aria-label": t(lang, "sortLabel"),
+                title: t(lang, "sortLabel"),
+                onChange: function (e) {
+                  setAndStoreSortMode(e.target.value);
+                },
+              },
+              React.createElement(
+                "option",
+                { value: "title-asc" },
+                t(lang, "sortTitleAsc")
+              ),
+              React.createElement(
+                "option",
+                { value: "title-desc" },
+                t(lang, "sortTitleDesc")
+              ),
+              React.createElement(
+                "option",
+                { value: "duration-desc" },
+                t(lang, "sortDurationDesc")
+              ),
+              React.createElement(
+                "option",
+                { value: "duration-asc" },
+                t(lang, "sortDurationAsc")
+              ),
+              React.createElement(
+                "option",
+                { value: "date-desc" },
+                t(lang, "sortDateDesc")
+              ),
+              React.createElement(
+                "option",
+                { value: "date-asc" },
+                t(lang, "sortDateAsc")
+              )
+            )
           ),
           React.createElement(
             "div",
