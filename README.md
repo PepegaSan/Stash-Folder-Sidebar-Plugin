@@ -144,7 +144,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.3.2-informational)
+![Version](https://img.shields.io/badge/version-1.3.3-informational)
 
 ## Requirements
 
@@ -171,7 +171,7 @@ Create **scene markers** from the scene player with **presets** (e.g. tag `Compi
 3. Use **Shift+I** at start, **Shift+O** at end → range marker with that preset’s tag.
 4. Or press **Shift+M** for an instant marker at the current time (active preset).
 5. Optional: floating **Quick Markers** panel (corner in settings; collapsed by default) — **drag the header** to move it, double-click header to reset; `Shift+[` / `Shift+]` also cycle presets.
-6. **Android / tablet:** touch bar (**IN** / **OUT** / **INSTANT** + presets) aligned to the player — sits under the player, or just above the seek/control bar if space is tight (theme-friendly). Auto-enabled on touch devices; override in settings.
+6. **Android / tablet:** touch bar (**IN** / **OUT** / **INSTANT** + presets) aligned to the player — sits under the player, or just above the seek/control bar if space is tight (theme-friendly). Use **Hide** / **▲ Quick Markers** to collapse or expand; remembered across scenes. Auto-enabled on touch devices; override in settings.
 
 Markers are saved via GraphQL; open the **Markers** tab or refresh if the list does not update immediately.
 
@@ -232,8 +232,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.3.2`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.3.2**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.3.3`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.3.3**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -514,6 +514,10 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.0`.
 ### Quick Markers 1.0.0
 
 - Initial release: presets, Shift+I/O range, Shift+1–9 instant, on-scene panel
+
+### Quick Markers 1.3.3
+
+- **Collapsible touch bar** — Hide / expand on Android & tablet; open/closed state stored in the browser and shared across scenes
 
 ### Folder Sidebar 1.4.6 / Tag Categories 1.2.2 / Quick Markers 1.3.2
 

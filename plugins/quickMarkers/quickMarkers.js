@@ -2,11 +2,13 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.3.2";
+  const PLUGIN_VERSION = "1.3.3";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
+  const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
   const TOUCH_BAR_GAP = 6;
   const TOUCH_BAR_FALLBACK_HEIGHT = 112;
+  const TOUCH_BAR_COLLAPSED_HEIGHT = 44;
   const DEFAULT_INSTANT_KEY = "shift+m";
   const PRESET_SELECT_KEY_RE = /^shift\+[1-9]$/;
   const VALID_PANEL_POSITIONS = [
@@ -136,6 +138,25 @@
   function storePanelOpen(open) {
     try {
       localStorage.setItem(PANEL_OPEN_STORAGE_KEY, open ? "1" : "0");
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function readStoredTouchBarOpen(fallbackOpen) {
+    try {
+      const stored = localStorage.getItem(TOUCH_BAR_OPEN_STORAGE_KEY);
+      if (stored === "1") return true;
+      if (stored === "0") return false;
+    } catch (e) {
+      /* ignore */
+    }
+    return fallbackOpen;
+  }
+
+  function storeTouchBarOpen(open) {
+    try {
+      localStorage.setItem(TOUCH_BAR_OPEN_STORAGE_KEY, open ? "1" : "0");
     } catch (e) {
       /* ignore */
     }
@@ -623,6 +644,9 @@
     const [inPoint, setInPoint] = React.useState(null);
     const [status, setStatus] = React.useState("");
     const [panelOpen, setPanelOpen] = React.useState(false);
+    const [touchBarOpen, setTouchBarOpen] = React.useState(function () {
+      return readStoredTouchBarOpen(true);
+    });
     const [panelPos, setPanelPos] = React.useState(readStoredPanelPos);
     const [panelDragging, setPanelDragging] = React.useState(false);
     const [playerLayout, setPlayerLayout] = React.useState(null);
@@ -680,7 +704,9 @@
           const barEl = touchBarRef.current;
           const barHeight = barEl
             ? barEl.getBoundingClientRect().height
-            : TOUCH_BAR_FALLBACK_HEIGHT;
+            : touchBarOpen
+              ? TOUCH_BAR_FALLBACK_HEIGHT
+              : TOUCH_BAR_COLLAPSED_HEIGHT;
           const next = measureTouchBarLayout(el, barHeight);
           if (!next) {
             if (!cancelled) setPlayerLayout(null);
@@ -718,13 +744,21 @@
           if (resizeObserver) resizeObserver.disconnect();
         };
       },
-      [scene.id, config]
+      [scene.id, config, touchBarOpen]
     );
 
     function togglePanelOpen() {
       setPanelOpen(function (open) {
         const next = !open;
         storePanelOpen(next);
+        return next;
+      });
+    }
+
+    function toggleTouchBarOpen() {
+      setTouchBarOpen(function (open) {
+        const next = !open;
+        storeTouchBarOpen(next);
         return next;
       });
     }
@@ -1170,84 +1204,117 @@
     var touchBar =
       showTouchBar && playerLayout
         ? React.createElement(
-          "div",
-          {
-            ref: touchBarRef,
-            className:
-              "quick-markers-touch-bar quick-markers-touch-bar-aligned placement-" +
-              (playerLayout.placement || "below-player"),
-            style: touchBarStyle,
-          },
-          React.createElement(
             "div",
-            { className: "quick-markers-touch-actions" },
+            {
+              ref: touchBarRef,
+              className:
+                "quick-markers-touch-bar quick-markers-touch-bar-aligned placement-" +
+                (playerLayout.placement || "below-player") +
+                (touchBarOpen ? "" : " quick-markers-touch-bar-collapsed"),
+              style: touchBarStyle,
+            },
             React.createElement(
-              "button",
-              {
-                type: "button",
-                className:
-                  "quick-markers-touch-btn quick-markers-touch-in" +
-                  (inPoint != null ? " active" : ""),
-                onClick: function () {
-                  onRangeIn(activePreset);
-                },
-              },
-              inPoint != null ? "IN " + formatTime(inPoint) : "IN"
-            ),
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                className: "quick-markers-touch-btn quick-markers-touch-out",
-                disabled: inPoint == null,
-                onClick: function () {
-                  onRangeOut(activePreset);
-                },
-              },
-              "OUT"
-            ),
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                className: "quick-markers-touch-btn quick-markers-touch-instant",
-                onClick: function () {
-                  onInstant(activePreset);
-                },
-              },
-              "INSTANT"
-            )
-          ),
-          React.createElement(
-            "div",
-            { className: "quick-markers-touch-presets" },
-            config.presets.map(function (preset, index) {
-              const isActive = index === activeIndex;
-              return React.createElement(
+              "div",
+              { className: "quick-markers-touch-bar-header" },
+              React.createElement(
                 "button",
                 {
-                  key: preset.id,
                   type: "button",
-                  className:
-                    "quick-markers-touch-preset" +
-                    (isActive ? " active" : ""),
-                  onClick: function () {
-                    setActiveIndex(index);
-                  },
+                  className: "quick-markers-touch-bar-toggle",
+                  onClick: toggleTouchBarOpen,
+                  title: touchBarOpen
+                    ? "Hide touch controls"
+                    : "Show touch controls",
+                  "aria-expanded": touchBarOpen,
                 },
-                preset.label
-              );
-            })
-          ),
-          status
-            ? React.createElement(
-                "div",
-                { className: "quick-markers-touch-status" },
-                status
-              )
-            : null
-        )
-      : null;
+                touchBarOpen ? "▼ Hide" : "▲ Quick Markers"
+              ),
+              !touchBarOpen
+                ? React.createElement(
+                    "span",
+                    { className: "quick-markers-touch-bar-active" },
+                    activePreset.label
+                  )
+                : null
+            ),
+            touchBarOpen
+              ? React.createElement(
+                  React.Fragment,
+                  null,
+                  React.createElement(
+                    "div",
+                    { className: "quick-markers-touch-actions" },
+                    React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className:
+                          "quick-markers-touch-btn quick-markers-touch-in" +
+                          (inPoint != null ? " active" : ""),
+                        onClick: function () {
+                          onRangeIn(activePreset);
+                        },
+                      },
+                      inPoint != null ? "IN " + formatTime(inPoint) : "IN"
+                    ),
+                    React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className:
+                          "quick-markers-touch-btn quick-markers-touch-out",
+                        disabled: inPoint == null,
+                        onClick: function () {
+                          onRangeOut(activePreset);
+                        },
+                      },
+                      "OUT"
+                    ),
+                    React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className:
+                          "quick-markers-touch-btn quick-markers-touch-instant",
+                        onClick: function () {
+                          onInstant(activePreset);
+                        },
+                      },
+                      "INSTANT"
+                    )
+                  ),
+                  React.createElement(
+                    "div",
+                    { className: "quick-markers-touch-presets" },
+                    config.presets.map(function (preset, index) {
+                      const isActive = index === activeIndex;
+                      return React.createElement(
+                        "button",
+                        {
+                          key: preset.id,
+                          type: "button",
+                          className:
+                            "quick-markers-touch-preset" +
+                            (isActive ? " active" : ""),
+                          onClick: function () {
+                            setActiveIndex(index);
+                          },
+                        },
+                        preset.label
+                      );
+                    })
+                  ),
+                  status
+                    ? React.createElement(
+                        "div",
+                        { className: "quick-markers-touch-status" },
+                        status
+                      )
+                    : null
+                )
+              : null
+          )
+        : null;
 
     return React.createElement(React.Fragment, null, floatingPanel, touchBar);
   }
