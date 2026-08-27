@@ -2,9 +2,10 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.4.0";
+  const PLUGIN_VERSION = "1.4.1";
   const SEARCH_DEBOUNCE_MS = 180;
-  const ROUTE_PATH = "/plugin/tag-categories";
+  const ROUTE_PATH = "/plugins/tag-categories";
+  const LEGACY_ROUTE_PATH = "/plugin/tag-categories";
   const ASSETS_CATEGORIES = "/plugin/" + PLUGIN_ID + "/assets/categories.json";
   const VIEW_MODE_STORAGE_KEY = "tagCategories.viewMode";
   const SORT_MODE_STORAGE_KEY = "tagCategories.sortMode";
@@ -1244,6 +1245,31 @@
 
   PluginApi.register.route(ROUTE_PATH, TagCategoriesPage);
 
+  function LegacyTagCategoriesRedirect() {
+    const location = useLocation();
+    const goTo = usePluginNavigate();
+    React.useEffect(
+      function () {
+        const search = (location && location.search) || "";
+        goTo(ROUTE_PATH + search);
+      },
+      [goTo, location]
+    );
+    return null;
+  }
+
+  PluginApi.register.route(LEGACY_ROUTE_PATH, LegacyTagCategoriesRedirect);
+
+  function isCategoriesPath(pathname) {
+    const p = String(pathname || "");
+    return (
+      p === ROUTE_PATH ||
+      p.indexOf(ROUTE_PATH + "/") === 0 ||
+      p === LEGACY_ROUTE_PATH ||
+      p.indexOf(LEGACY_ROUTE_PATH + "/") === 0
+    );
+  }
+
   function CategoriesNavMenuItem() {
     // No GQL in the shell — usePluginLang() would query config on every page.
     const location = useLocation();
@@ -1251,8 +1277,7 @@
       (location && location.pathname) ||
       (typeof window !== "undefined" && window.location.pathname) ||
       "";
-    const isActive =
-      pathname === ROUTE_PATH || pathname.indexOf(ROUTE_PATH + "/") === 0;
+    const isActive = isCategoriesPath(pathname);
     const components = PluginApi.components || {};
     const Icon = components.Icon;
     const faTags =

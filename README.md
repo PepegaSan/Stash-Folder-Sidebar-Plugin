@@ -326,7 +326,7 @@ Named **categories**, each with a list of Stash **tags**. Open **Categories** in
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.4.0-informational)
+![Version](https://img.shields.io/badge/version-1.4.1-informational)
 
 ## Features
 
@@ -405,11 +405,15 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.0`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.1`.
 
 ---
 
 ## Changelog
+
+### Tag Categories 1.4.1
+
+- Open **Categories** in a new browser tab (or refresh) without a server 404 — UI route is `/plugins/tag-categories` instead of `/plugin/…` (plugin asset path)
 
 ### Tag Categories 1.4.0
 
