@@ -2,8 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.3.8";
-  const SETTINGS_ROUTE = "/plugin/quick-markers-settings";
+  const PLUGIN_VERSION = "1.3.3";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -520,164 +519,11 @@
     return JSON.stringify(root, null, 2);
   }
 
-  var PRESET_FIELD_COUNT = 9;
-
-  function pluginBag(plugins) {
-    return (plugins && plugins[PLUGIN_ID]) || {};
-  }
-
-  function splitPresetParts(value) {
-    return String(value || "")
-      .split("|")
-      .map(function (part) {
-        return part.trim();
-      });
-  }
-
-  function presetFromParts(parts, index, claimed) {
-    var label = parts[0] || "";
-    var primaryTag = parts[1] || "";
-    if (!label && !primaryTag) return null;
-    var name = label || primaryTag;
-    var tag = primaryTag || label;
-    var selectSlot = normalizeSelectSlot(
-      parts[3] ? parts[3] : null,
-      99
-    );
-    if (selectSlot && claimed[selectSlot]) selectSlot = null;
-    if (selectSlot) claimed[selectSlot] = true;
-    return {
-      id: name.toLowerCase().replace(/\s+/g, "-") || "preset-" + index,
-      label: name,
-      primaryTag: tag,
-      tags: normalizePresetTags(parts[2] || "", tag),
-      title: name,
-      rangeInKey: parts[4] || "shift+i",
-      rangeOutKey: parts[5] || "shift+o",
-      instantKey: normalizeInstantKey(parts[6] || ""),
-      selectSlot: selectSlot,
-    };
-  }
-
-  function hasPresetFields(bag) {
-    for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
-      if (String(bag["p" + i] || "").trim()) return true;
-      if (
-        String(bag["p" + i + "Label"] || "").trim() ||
-        String(bag["p" + i + "Tag"] || "").trim()
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  function hasCompactPresetFields(bag) {
-    for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
-      if (String(bag["p" + i] || "").trim()) return true;
-    }
-    return false;
-  }
-
-  function presetsFromFields(bag) {
-    var presets = [];
-    var claimed = {};
-    for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
-      var line = String(bag["p" + i] || "").trim();
-      var preset = null;
-      if (line) {
-        preset = presetFromParts(splitPresetParts(line), i, claimed);
-      } else {
-        preset = presetFromParts(
-          [
-            bag["p" + i + "Label"],
-            bag["p" + i + "Tag"],
-            bag["p" + i + "Extra"],
-            bag["p" + i + "Select"],
-            bag["p" + i + "In"],
-            bag["p" + i + "Out"],
-            bag["p" + i + "Instant"],
-          ],
-          i,
-          claimed
-        );
-      }
-      if (preset) presets.push(preset);
-    }
-    return presets;
-  }
-
-  function applyPanelFields(cfg, bag) {
-    if (!cfg || !bag) return cfg;
-    if (bag.panelPosition) {
-      cfg.panelPosition = normalizePanelPosition(bag.panelPosition);
-    }
-    if (typeof bag.panelCollapsed === "boolean") {
-      cfg.panelCollapsed = bag.panelCollapsed;
-    }
-    if (bag.touchControls) {
-      cfg.touchControls = normalizeTouchControls(bag.touchControls);
-    }
-    if (
-      bag.defaultPreset !== undefined &&
-      bag.defaultPreset !== null &&
-      bag.defaultPreset !== ""
-    ) {
-      var n = Number(bag.defaultPreset);
-      if (!isNaN(n)) {
-        var idx = n >= 1 ? n - 1 : 0;
-        cfg.defaultPresetIndex = idx;
-      }
-    }
-    if (cfg.defaultPresetIndex < 0) cfg.defaultPresetIndex = 0;
-    if (cfg.presets && cfg.defaultPresetIndex >= cfg.presets.length) {
-      cfg.defaultPresetIndex = 0;
-    }
-    return cfg;
-  }
-
-  function fieldsFromConfig(config) {
-    var input = {
-      presetsJson: presetsToJson(config),
-      panelPosition: config.panelPosition || "top-left",
-      panelCollapsed: config.panelCollapsed !== false,
-      touchControls: config.touchControls || "auto",
-      defaultPreset: (config.defaultPresetIndex || 0) + 1,
-    };
-    var presets = config.presets || [];
-    for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
-      var p = presets[i - 1];
-      input["p" + i] = p
-        ? [
-            p.label || "",
-            p.primaryTag || "",
-            p.tags && p.tags.length ? p.tags.join(", ") : "",
-            p.selectSlot ? String(p.selectSlot) : "",
-            p.rangeInKey || "",
-            p.rangeOutKey || "",
-            p.instantKey || "",
-          ].join(" | ")
-        : "";
-      input["p" + i + "Label"] = "";
-      input["p" + i + "Tag"] = "";
-      input["p" + i + "Extra"] = "";
-      input["p" + i + "Select"] = "";
-      input["p" + i + "In"] = "";
-      input["p" + i + "Out"] = "";
-      input["p" + i + "Instant"] = "";
-    }
-    return input;
-  }
-
   function getPresetsFromSettings(plugins) {
-    var bag = pluginBag(plugins);
-    if (hasPresetFields(bag)) {
-      var cfg = getDefaultPresetsConfig();
-      cfg.presets = presetsFromFields(bag);
-      return applyPanelFields(cfg, bag);
-    }
-    if (!bag.presetsJson || !String(bag.presetsJson).trim()) return null;
-    return applyPanelFields(parsePresetsJson(bag.presetsJson), bag);
+    if (!plugins || typeof plugins !== "object") return null;
+    const raw = plugins[PLUGIN_ID] && plugins[PLUGIN_ID].presetsJson;
+    if (!raw || !String(raw).trim()) return null;
+    return parsePresetsJson(raw);
   }
 
   async function loadPresetsFromFile() {
@@ -689,13 +535,7 @@
   function usePresetsConfig() {
     const [config, setConfig] = React.useState(getDefaultPresetsConfig);
     const [error, setError] = React.useState(null);
-    const { data } = GQL.useConfigurationQuery({
-      fetchPolicy: "cache-and-network",
-    });
-    const mutateHook = GQL.useConfigurePluginMutation;
-    const configurePlugin =
-      (typeof mutateHook === "function" ? mutateHook() : [null])[0];
-    const migrated = React.useRef(false);
+    const { data } = GQL.useConfigurationQuery({ fetchPolicy: "cache-first" });
 
     React.useEffect(function () {
       let cancelled = false;
@@ -704,32 +544,6 @@
         try {
           const plugins =
             data && data.configuration ? data.configuration.plugins : null;
-          const bag = pluginBag(plugins);
-          if (
-            !migrated.current &&
-            !hasCompactPresetFields(bag) &&
-            (hasPresetFields(bag) ||
-              (bag.presetsJson && String(bag.presetsJson).trim())) &&
-            typeof configurePlugin === "function"
-          ) {
-            migrated.current = true;
-            try {
-              var parsed =
-                hasPresetFields(bag)
-                  ? getPresetsFromSettings(plugins)
-                  : parsePresetsJson(bag.presetsJson);
-              if (parsed) {
-                configurePlugin({
-                  variables: {
-                    plugin_id: PLUGIN_ID,
-                    input: Object.assign({}, bag, fieldsFromConfig(parsed)),
-                  },
-                });
-              }
-            } catch (migrateErr) {
-              /* keep the previous field layout */
-            }
-          }
           let cfg = getPresetsFromSettings(plugins);
           if (!cfg) cfg = await loadPresetsFromFile();
           if (!cfg) cfg = getDefaultPresetsConfig();
@@ -745,7 +559,7 @@
       return function () {
         cancelled = true;
       };
-    }, [data, configurePlugin]);
+    }, [data]);
 
     return { config, error };
   }
@@ -1656,48 +1470,12 @@
     );
   }
 
-  function useOwnPluginSettings() {
-    const query = GQL.useConfigurationQuery({
-      fetchPolicy: "cache-and-network",
-    });
-    const mutateHook = GQL.useConfigurePluginMutation;
-    const tuple = typeof mutateHook === "function" ? mutateHook() : [null];
-    const configurePlugin = tuple[0];
-    const data = query && query.data;
-    const plugins =
-      (data && data.configuration && data.configuration.plugins) || {};
-    const iface =
-      data && data.configuration && data.configuration.interface;
-    const savePluginSettings = React.useCallback(
-      function (pluginId, input) {
-        const current =
-          plugins[pluginId] && typeof plugins[pluginId] === "object"
-            ? plugins[pluginId]
-            : {};
-        if (typeof configurePlugin !== "function") {
-          return Promise.reject(new Error("Cannot save plugin settings"));
-        }
-        return configurePlugin({
-          variables: {
-            plugin_id: pluginId,
-            input: Object.assign({}, current, input),
-          },
-        }).then(function () {
-          if (query && query.refetch) return query.refetch();
-        });
-      },
-      [configurePlugin, plugins, query]
-    );
-    return {
-      plugins: plugins,
-      savePluginSettings: savePluginSettings,
-      loading: !!(query && query.loading),
-      interface: iface,
-    };
-  }
-
   function QuickMarkersSettings() {
-    const { plugins, savePluginSettings, loading } = useOwnPluginSettings();
+    const settingsApi =
+      typeof hooks.useSettings === "function"
+        ? hooks.useSettings()
+        : { plugins: {}, savePluginSettings: function () {}, loading: false };
+    const { plugins, savePluginSettings, loading } = settingsApi;
     const Toast = useSafeToast();
     const tagsHelpT = TAGS_HELP_I18N[getTagsHelpLang()];
 
@@ -1805,7 +1583,9 @@
         },
         updates
       );
-      savePluginSettings(PLUGIN_ID, fieldsFromConfig(nextConfig));
+      savePluginSettings(PLUGIN_ID, {
+        presetsJson: presetsToJson(nextConfig),
+      });
       setConfig(nextConfig);
       setUsingFile(false);
       setUsingDefaults(false);
@@ -1950,27 +1730,6 @@
         "p",
         { className: "quick-markers-settings-version text-muted" },
         "Quick Markers v" + PLUGIN_VERSION + " — if you do not see this version, Stash is still using old plugin files."
-      ),
-      React.createElement(
-        "p",
-        { className: "text-muted small" },
-        "This form: ",
-        React.createElement(
-          "a",
-          { href: SETTINGS_ROUTE },
-          SETTINGS_ROUTE
-        ),
-        " — in Stash UI open Extensions, or ",
-        React.createElement(
-          "a",
-          {
-            href:
-              "/plugin/stashui/assets/index.html#/extern/classic?path=" +
-              encodeURIComponent(SETTINGS_ROUTE),
-          },
-          "open it there"
-        ),
-        "."
       ),
       React.createElement(
         "p",
@@ -2588,16 +2347,6 @@
         : null
     );
   }
-
-  function QuickMarkersSettingsPage() {
-    return React.createElement(
-      "div",
-      { className: "container-fluid p-3" },
-      React.createElement(QuickMarkersSettings, null)
-    );
-  }
-
-  PluginApi.register.route("/plugin/quick-markers-settings", QuickMarkersSettingsPage);
 
   PluginApi.patch.instead("PluginSettings", function () {
     var args = Array.prototype.slice.call(arguments);

@@ -519,26 +519,6 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.1`.
 
 - Initial release: presets, Shift+I/O range, Shift+1–9 instant, on-scene panel
 
-### Quick Markers 1.3.8 / Folder Sidebar 1.5.1 / Tag Categories 1.4.6
-
-- **Stash UI form** matches the classic list: one preset, folder, or category at a time, with separate fields. Open it from **Project page** on the plugin card.
-
-### Quick Markers 1.3.7 / Folder Sidebar 1.5.0 / Tag Categories 1.4.5
-
-- **Shorter Stash UI settings** — one line per preset, folder, or category instead of a separate field for every option
-
-### Quick Markers 1.3.6 / Folder Sidebar 1.4.9 / Tag Categories 1.4.4
-
-- **Stash UI plugin card** shows normal fields (preset/folder/category slots) instead of one JSON box. Existing JSON is copied into those fields the next time classic Stash loads the plugin.
-
-### Quick Markers 1.3.5 / Folder Sidebar 1.4.8 / Tag Categories 1.4.3
-
-- **Stash UI form page** at `plugins/<id>/assets/app/` — the Plugins card in Stash UI can only show the JSON field; open **Extensions** in the left menu (or `/plugin/quickMarkers/assets/app/`) for the simple form
-
-### Quick Markers 1.3.4 / Folder Sidebar 1.4.7 / Tag Categories 1.4.2
-
-- **Simple settings page** for both UIs: `/plugin/quick-markers-settings`, `/plugin/folder-sidebar-settings`, `/plugin/tag-categories-settings` (classic Stash directly; Stash UI under Extensions)
-
 ### Quick Markers 1.3.3
 
 - **Collapsible touch bar** — Hide / expand on Android & tablet; open/closed state stored in the browser and shared across scenes

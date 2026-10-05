@@ -1,7 +1,7 @@
 name: Quick Markers
-description: "Preset list with separate fields is on the Project page link. Settings here are only the panel options."
-version: 1.3.8
-url: /plugin/quickMarkers/assets/app/
+description: Create scene markers with hotkeys and presets (Shift+1–9 select, Shift+I/O range, Shift+M instant)
+version: 1.3.3
+url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:
     - quickMarkers.js
@@ -10,18 +10,7 @@ ui:
   assets:
     /: .
 settings:
-  panelPosition:
-    displayName: Scene panel position
-    description: "top-left, top-right, bottom-left, bottom-right, or hidden"
+  presetsJson:
+    displayName: Marker presets (JSON)
+    description: "Presets with primaryTag, optional tags array, and hotkeys. See presets.json.example."
     type: STRING
-  panelCollapsed:
-    displayName: Start scene panel collapsed
-    type: BOOLEAN
-  touchControls:
-    displayName: Touch controls
-    description: "auto, on, or off"
-    type: STRING
-  defaultPreset:
-    displayName: Default preset
-    description: "1-9. Used by Shift+I/O and Shift+M until you select another preset."
-    type: NUMBER

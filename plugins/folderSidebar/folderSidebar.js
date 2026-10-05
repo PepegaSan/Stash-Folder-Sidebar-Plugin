@@ -3,7 +3,6 @@
 
   const PLUGIN_ID = "folderSidebar";
   const ROUTE_PATH = "/plugin/folder-sidebar";
-  const SETTINGS_ROUTE = "/plugin/folder-sidebar-settings";
   const ASSETS_JSON = "/plugin/" + PLUGIN_ID + "/assets/folders.json";
 
   const PluginApi = window.PluginApi;
@@ -223,76 +222,11 @@
     return JSON.stringify(data, null, 2);
   }
 
-  var FOLDER_FIELD_COUNT = 12;
-
-  function folderBag(plugins) {
-    return (plugins && plugins[PLUGIN_ID]) || {};
-  }
-
-  function hasFolderFields(bag) {
-    for (var i = 1; i <= FOLDER_FIELD_COUNT; i++) {
-      if (String(bag["f" + i] || "").trim()) return true;
-      if (
-        String(bag["f" + i + "Label"] || "").trim() ||
-        String(bag["f" + i + "Path"] || "").trim()
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  function hasCompactFolderFields(bag) {
-    for (var i = 1; i <= FOLDER_FIELD_COUNT; i++) {
-      if (String(bag["f" + i] || "").trim()) return true;
-    }
-    return false;
-  }
-
-  function foldersFromFields(bag) {
-    var list = [];
-    for (var i = 1; i <= FOLDER_FIELD_COUNT; i++) {
-      var line = String(bag["f" + i] || "").trim();
-      var label = "";
-      var path = "";
-      if (line) {
-        var parts = line.split("|");
-        label = (parts[0] || "").trim();
-        path = parts.slice(1).join("|").trim();
-      } else {
-        label = String(bag["f" + i + "Label"] || "").trim();
-        path = String(bag["f" + i + "Path"] || "").trim();
-      }
-      if (!label && !path) continue;
-      list.push({
-        id: String(list.length),
-        label: label || path,
-        path: ensureTrailingSep(path),
-      });
-    }
-    return list;
-  }
-
-  function fieldsFromFolders(folders) {
-    var input = { foldersJson: foldersToJsonString(folders) };
-    for (var i = 1; i <= FOLDER_FIELD_COUNT; i++) {
-      var entry = folders[i - 1];
-      input["f" + i] = entry
-        ? (entry.label || "") +
-          " | " +
-          String(entry.path || "").replace(/[/\\]+$/, "")
-        : "";
-      input["f" + i + "Label"] = "";
-      input["f" + i + "Path"] = "";
-    }
-    return input;
-  }
-
   function getFoldersFromPluginSettings(plugins) {
-    var bag = folderBag(plugins);
-    if (hasFolderFields(bag)) return foldersFromFields(bag);
-    if (!bag.foldersJson || !String(bag.foldersJson).trim()) return null;
-    return parseFoldersJson(bag.foldersJson);
+    if (!plugins || typeof plugins !== "object") return null;
+    const raw = plugins[PLUGIN_ID] && plugins[PLUGIN_ID].foldersJson;
+    if (!raw || !String(raw).trim()) return null;
+    return parseFoldersJson(raw);
   }
 
   /** In-memory browse cache (survives navigation to a scene and browser back). */
@@ -337,14 +271,10 @@
     const [folders, setFolders] = React.useState([]);
     const [error, setError] = React.useState(null);
     const [loading, setLoading] = React.useState(true);
-    const migrated = React.useRef(false);
 
     const { data: configData } = GQL.useConfigurationQuery({
       fetchPolicy: "cache-and-network",
     });
-    const mutateHook = GQL.useConfigurePluginMutation;
-    const configurePlugin =
-      (typeof mutateHook === "function" ? mutateHook() : [null])[0];
 
     React.useEffect(function () {
       let cancelled = false;
@@ -357,29 +287,6 @@
             configData && configData.configuration
               ? configData.configuration.plugins
               : null;
-          const bag = folderBag(plugins);
-          if (
-            !migrated.current &&
-            !hasCompactFolderFields(bag) &&
-            (hasFolderFields(bag) ||
-              (bag.foldersJson && String(bag.foldersJson).trim())) &&
-            typeof configurePlugin === "function"
-          ) {
-            migrated.current = true;
-            try {
-              var migratedList = hasFolderFields(bag)
-                ? getFoldersFromPluginSettings(plugins)
-                : parseFoldersJson(bag.foldersJson) || [];
-              configurePlugin({
-                variables: {
-                  plugin_id: PLUGIN_ID,
-                  input: Object.assign({}, bag, fieldsFromFolders(migratedList || [])),
-                },
-              });
-            } catch (migrateErr) {
-              /* keep the previous field layout */
-            }
-          }
           let list = getFoldersFromPluginSettings(plugins);
           if (!list) {
             list = await loadFoldersFromFile();
@@ -406,7 +313,7 @@
       return function () {
         cancelled = true;
       };
-    }, [configData, configurePlugin]);
+    }, [configData]);
 
     return { folders, error, loading };
   }
@@ -794,55 +701,8 @@
 
   PluginApi.register.route(ROUTE_PATH, FolderSidebarPage);
 
-  function FolderSidebarSettingsPage() {
-    return React.createElement(
-      "div",
-      { className: "container-fluid p-3" },
-      React.createElement(FolderPluginSettings, null)
-    );
-  }
-
-  PluginApi.register.route("/plugin/folder-sidebar-settings", FolderSidebarSettingsPage);
-
-  function useOwnPluginSettings() {
-    const query = GQL.useConfigurationQuery({
-      fetchPolicy: "cache-and-network",
-    });
-    const mutateHook = GQL.useConfigurePluginMutation;
-    const tuple = typeof mutateHook === "function" ? mutateHook() : [null];
-    const configurePlugin = tuple[0];
-    const data = query && query.data;
-    const plugins =
-      (data && data.configuration && data.configuration.plugins) || {};
-    const savePluginSettings = React.useCallback(
-      function (pluginId, input) {
-        const current =
-          plugins[pluginId] && typeof plugins[pluginId] === "object"
-            ? plugins[pluginId]
-            : {};
-        if (typeof configurePlugin !== "function") {
-          return Promise.reject(new Error("Cannot save plugin settings"));
-        }
-        return configurePlugin({
-          variables: {
-            plugin_id: pluginId,
-            input: Object.assign({}, current, input),
-          },
-        }).then(function () {
-          if (query && query.refetch) return query.refetch();
-        });
-      },
-      [configurePlugin, plugins, query]
-    );
-    return {
-      plugins: plugins,
-      savePluginSettings: savePluginSettings,
-      loading: !!(query && query.loading),
-    };
-  }
-
   function FolderPluginSettings() {
-    const { plugins, savePluginSettings, loading } = useOwnPluginSettings();
+    const { plugins, savePluginSettings, loading } = PluginApi.hooks.useSettings();
     const Toast = PluginApi.hooks.useToast();
     const [folders, setFolders] = React.useState([]);
     const [newLabel, setNewLabel] = React.useState("");
@@ -895,7 +755,9 @@
     );
 
     function persistFolders(nextFolders) {
-      savePluginSettings(PLUGIN_ID, fieldsFromFolders(nextFolders));
+      savePluginSettings(PLUGIN_ID, {
+        foldersJson: foldersToJsonString(nextFolders),
+      });
       setFolders(
         nextFolders.map(function (entry, index) {
           return {
@@ -962,23 +824,6 @@
         "Root folders shown in the ",
         React.createElement("strong", null, "Folder"),
         " navigation page."
-      ),
-      React.createElement(
-        "p",
-        { className: "text-muted small" },
-        "This form: ",
-        React.createElement("a", { href: SETTINGS_ROUTE }, SETTINGS_ROUTE),
-        " — in Stash UI open Extensions, or ",
-        React.createElement(
-          "a",
-          {
-            href:
-              "/plugin/stashui/assets/index.html#/extern/classic?path=" +
-              encodeURIComponent(SETTINGS_ROUTE),
-          },
-          "open it there"
-        ),
-        "."
       ),
       usingFile
         ? React.createElement(
