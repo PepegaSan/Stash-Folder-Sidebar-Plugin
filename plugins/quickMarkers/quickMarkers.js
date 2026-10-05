@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.3.6";
+  const PLUGIN_VERSION = "1.3.7";
   const SETTINGS_ROUTE = "/plugin/quick-markers-settings";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
@@ -526,8 +526,42 @@
     return (plugins && plugins[PLUGIN_ID]) || {};
   }
 
+  function splitPresetParts(value) {
+    return String(value || "")
+      .split("|")
+      .map(function (part) {
+        return part.trim();
+      });
+  }
+
+  function presetFromParts(parts, index, claimed) {
+    var label = parts[0] || "";
+    var primaryTag = parts[1] || "";
+    if (!label && !primaryTag) return null;
+    var name = label || primaryTag;
+    var tag = primaryTag || label;
+    var selectSlot = normalizeSelectSlot(
+      parts[3] ? parts[3] : null,
+      99
+    );
+    if (selectSlot && claimed[selectSlot]) selectSlot = null;
+    if (selectSlot) claimed[selectSlot] = true;
+    return {
+      id: name.toLowerCase().replace(/\s+/g, "-") || "preset-" + index,
+      label: name,
+      primaryTag: tag,
+      tags: normalizePresetTags(parts[2] || "", tag),
+      title: name,
+      rangeInKey: parts[4] || "shift+i",
+      rangeOutKey: parts[5] || "shift+o",
+      instantKey: normalizeInstantKey(parts[6] || ""),
+      selectSlot: selectSlot,
+    };
+  }
+
   function hasPresetFields(bag) {
     for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
+      if (String(bag["p" + i] || "").trim()) return true;
       if (
         String(bag["p" + i + "Label"] || "").trim() ||
         String(bag["p" + i + "Tag"] || "").trim()
@@ -538,33 +572,37 @@
     return false;
   }
 
+  function hasCompactPresetFields(bag) {
+    for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
+      if (String(bag["p" + i] || "").trim()) return true;
+    }
+    return false;
+  }
+
   function presetsFromFields(bag) {
     var presets = [];
     var claimed = {};
     for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
-      var label = String(bag["p" + i + "Label"] || "").trim();
-      var primaryTag = String(bag["p" + i + "Tag"] || "").trim();
-      if (!label && !primaryTag) continue;
-      var name = label || primaryTag;
-      var tag = primaryTag || label;
-      var selectRaw = String(bag["p" + i + "Select"] || "").trim();
-      var selectSlot = normalizeSelectSlot(
-        selectRaw === "" ? null : selectRaw,
-        99
-      );
-      if (selectSlot && claimed[selectSlot]) selectSlot = null;
-      if (selectSlot) claimed[selectSlot] = true;
-      presets.push({
-        id: name.toLowerCase().replace(/\s+/g, "-") || "preset-" + i,
-        label: name,
-        primaryTag: tag,
-        tags: normalizePresetTags(bag["p" + i + "Extra"], tag),
-        title: name,
-        rangeInKey: String(bag["p" + i + "In"] || "").trim() || "shift+i",
-        rangeOutKey: String(bag["p" + i + "Out"] || "").trim() || "shift+o",
-        instantKey: normalizeInstantKey(bag["p" + i + "Instant"]),
-        selectSlot: selectSlot,
-      });
+      var line = String(bag["p" + i] || "").trim();
+      var preset = null;
+      if (line) {
+        preset = presetFromParts(splitPresetParts(line), i, claimed);
+      } else {
+        preset = presetFromParts(
+          [
+            bag["p" + i + "Label"],
+            bag["p" + i + "Tag"],
+            bag["p" + i + "Extra"],
+            bag["p" + i + "Select"],
+            bag["p" + i + "In"],
+            bag["p" + i + "Out"],
+            bag["p" + i + "Instant"],
+          ],
+          i,
+          claimed
+        );
+      }
+      if (preset) presets.push(preset);
     }
     return presets;
   }
@@ -609,14 +647,24 @@
     var presets = config.presets || [];
     for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
       var p = presets[i - 1];
-      input["p" + i + "Label"] = p ? p.label || "" : "";
-      input["p" + i + "Tag"] = p ? p.primaryTag || "" : "";
-      input["p" + i + "Extra"] =
-        p && p.tags && p.tags.length ? p.tags.join(", ") : "";
-      input["p" + i + "Select"] = p && p.selectSlot ? String(p.selectSlot) : "";
-      input["p" + i + "In"] = p ? p.rangeInKey || "" : "";
-      input["p" + i + "Out"] = p ? p.rangeOutKey || "" : "";
-      input["p" + i + "Instant"] = p ? p.instantKey || "" : "";
+      input["p" + i] = p
+        ? [
+            p.label || "",
+            p.primaryTag || "",
+            p.tags && p.tags.length ? p.tags.join(", ") : "",
+            p.selectSlot ? String(p.selectSlot) : "",
+            p.rangeInKey || "",
+            p.rangeOutKey || "",
+            p.instantKey || "",
+          ].join(" | ")
+        : "";
+      input["p" + i + "Label"] = "";
+      input["p" + i + "Tag"] = "";
+      input["p" + i + "Extra"] = "";
+      input["p" + i + "Select"] = "";
+      input["p" + i + "In"] = "";
+      input["p" + i + "Out"] = "";
+      input["p" + i + "Instant"] = "";
     }
     return input;
   }
@@ -659,22 +707,27 @@
           const bag = pluginBag(plugins);
           if (
             !migrated.current &&
-            bag.presetsJson &&
-            String(bag.presetsJson).trim() &&
-            !hasPresetFields(bag) &&
+            !hasCompactPresetFields(bag) &&
+            (hasPresetFields(bag) ||
+              (bag.presetsJson && String(bag.presetsJson).trim())) &&
             typeof configurePlugin === "function"
           ) {
             migrated.current = true;
             try {
-              var parsed = parsePresetsJson(bag.presetsJson);
-              configurePlugin({
-                variables: {
-                  plugin_id: PLUGIN_ID,
-                  input: Object.assign({}, bag, fieldsFromConfig(parsed)),
-                },
-              });
+              var parsed =
+                hasPresetFields(bag)
+                  ? getPresetsFromSettings(plugins)
+                  : parsePresetsJson(bag.presetsJson);
+              if (parsed) {
+                configurePlugin({
+                  variables: {
+                    plugin_id: PLUGIN_ID,
+                    input: Object.assign({}, bag, fieldsFromConfig(parsed)),
+                  },
+                });
+              }
             } catch (migrateErr) {
-              /* keep JSON fallback */
+              /* keep the previous field layout */
             }
           }
           let cfg = getPresetsFromSettings(plugins);

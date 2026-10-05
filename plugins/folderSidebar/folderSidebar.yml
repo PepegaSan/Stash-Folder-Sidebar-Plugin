@@ -1,6 +1,6 @@
 name: Folder Sidebar
 description: Sidebar with configurable folder shortcuts; browse subfolders and list scenes by path without filters
-version: 1.4.9
+version: 1.5.0
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:
@@ -10,87 +10,63 @@ ui:
   assets:
     /: .
 settings:
-  f1Label:
-    displayName: "1 - Folder name"
+
+  f1:
+    displayName: "Folder 1"
+    description: "Name | path. Example: AMV | D:/Media/AMV"
     type: STRING
-  f1Path:
-    displayName: "1 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
+
+  f2:
+    displayName: "Folder 2"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING
-  f2Label:
-    displayName: "2 - Folder name"
+
+  f3:
+    displayName: "Folder 3"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING
-  f2Path:
-    displayName: "2 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
+
+  f4:
+    displayName: "Folder 4"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING
-  f3Label:
-    displayName: "3 - Folder name"
+
+  f5:
+    displayName: "Folder 5"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING
-  f3Path:
-    displayName: "3 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
+
+  f6:
+    displayName: "Folder 6"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING
-  f4Label:
-    displayName: "4 - Folder name"
+
+  f7:
+    displayName: "Folder 7"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING
-  f4Path:
-    displayName: "4 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
+
+  f8:
+    displayName: "Folder 8"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING
-  f5Label:
-    displayName: "5 - Folder name"
+
+  f9:
+    displayName: "Folder 9"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING
-  f5Path:
-    displayName: "5 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
+
+  f10:
+    displayName: "Folder 10"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING
-  f6Label:
-    displayName: "6 - Folder name"
+
+  f11:
+    displayName: "Folder 11"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING
-  f6Path:
-    displayName: "6 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
-    type: STRING
-  f7Label:
-    displayName: "7 - Folder name"
-    type: STRING
-  f7Path:
-    displayName: "7 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
-    type: STRING
-  f8Label:
-    displayName: "8 - Folder name"
-    type: STRING
-  f8Path:
-    displayName: "8 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
-    type: STRING
-  f9Label:
-    displayName: "9 - Folder name"
-    type: STRING
-  f9Path:
-    displayName: "9 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
-    type: STRING
-  f10Label:
-    displayName: "10 - Folder name"
-    type: STRING
-  f10Path:
-    displayName: "10 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
-    type: STRING
-  f11Label:
-    displayName: "11 - Folder name"
-    type: STRING
-  f11Path:
-    displayName: "11 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
-    type: STRING
-  f12Label:
-    displayName: "12 - Folder name"
-    type: STRING
-  f12Path:
-    displayName: "12 - Path"
-    description: "Example D:\Media\AMV or /data/AMV"
+
+  f12:
+    displayName: "Folder 12"
+    description: "Same format as Folder 1. Leave empty to skip."
     type: STRING

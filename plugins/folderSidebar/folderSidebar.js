@@ -231,6 +231,7 @@
 
   function hasFolderFields(bag) {
     for (var i = 1; i <= FOLDER_FIELD_COUNT; i++) {
+      if (String(bag["f" + i] || "").trim()) return true;
       if (
         String(bag["f" + i + "Label"] || "").trim() ||
         String(bag["f" + i + "Path"] || "").trim()
@@ -241,11 +242,27 @@
     return false;
   }
 
+  function hasCompactFolderFields(bag) {
+    for (var i = 1; i <= FOLDER_FIELD_COUNT; i++) {
+      if (String(bag["f" + i] || "").trim()) return true;
+    }
+    return false;
+  }
+
   function foldersFromFields(bag) {
     var list = [];
     for (var i = 1; i <= FOLDER_FIELD_COUNT; i++) {
-      var label = String(bag["f" + i + "Label"] || "").trim();
-      var path = String(bag["f" + i + "Path"] || "").trim();
+      var line = String(bag["f" + i] || "").trim();
+      var label = "";
+      var path = "";
+      if (line) {
+        var parts = line.split("|");
+        label = (parts[0] || "").trim();
+        path = parts.slice(1).join("|").trim();
+      } else {
+        label = String(bag["f" + i + "Label"] || "").trim();
+        path = String(bag["f" + i + "Path"] || "").trim();
+      }
       if (!label && !path) continue;
       list.push({
         id: String(list.length),
@@ -260,10 +277,13 @@
     var input = { foldersJson: foldersToJsonString(folders) };
     for (var i = 1; i <= FOLDER_FIELD_COUNT; i++) {
       var entry = folders[i - 1];
-      input["f" + i + "Label"] = entry ? entry.label || "" : "";
-      input["f" + i + "Path"] = entry
-        ? String(entry.path || "").replace(/[/\\]+$/, "")
+      input["f" + i] = entry
+        ? (entry.label || "") +
+          " | " +
+          String(entry.path || "").replace(/[/\\]+$/, "")
         : "";
+      input["f" + i + "Label"] = "";
+      input["f" + i + "Path"] = "";
     }
     return input;
   }
@@ -340,25 +360,24 @@
           const bag = folderBag(plugins);
           if (
             !migrated.current &&
-            bag.foldersJson &&
-            String(bag.foldersJson).trim() &&
-            !hasFolderFields(bag) &&
+            !hasCompactFolderFields(bag) &&
+            (hasFolderFields(bag) ||
+              (bag.foldersJson && String(bag.foldersJson).trim())) &&
             typeof configurePlugin === "function"
           ) {
             migrated.current = true;
             try {
+              var migratedList = hasFolderFields(bag)
+                ? getFoldersFromPluginSettings(plugins)
+                : parseFoldersJson(bag.foldersJson) || [];
               configurePlugin({
                 variables: {
                   plugin_id: PLUGIN_ID,
-                  input: Object.assign(
-                    {},
-                    bag,
-                    fieldsFromFolders(parseFoldersJson(bag.foldersJson) || [])
-                  ),
+                  input: Object.assign({}, bag, fieldsFromFolders(migratedList || [])),
                 },
               });
             } catch (migrateErr) {
-              /* keep JSON fallback */
+              /* keep the previous field layout */
             }
           }
           let list = getFoldersFromPluginSettings(plugins);

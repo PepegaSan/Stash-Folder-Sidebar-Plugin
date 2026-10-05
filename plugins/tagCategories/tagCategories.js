@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.4.4";
+  const PLUGIN_VERSION = "1.4.5";
   const SEARCH_DEBOUNCE_MS = 180;
   const ROUTE_PATH = "/plugins/tag-categories";
   const LEGACY_ROUTE_PATH = "/plugin/tag-categories";
@@ -399,6 +399,7 @@
 
   function hasCategoryFields(bag) {
     for (var i = 1; i <= CATEGORY_FIELD_COUNT; i++) {
+      if (String(bag["c" + i] || "").trim()) return true;
       if (
         String(bag["c" + i + "Name"] || "").trim() ||
         String(bag["c" + i + "Tags"] || "").trim()
@@ -409,11 +410,27 @@
     return false;
   }
 
+  function hasCompactCategoryFields(bag) {
+    for (var i = 1; i <= CATEGORY_FIELD_COUNT; i++) {
+      if (String(bag["c" + i] || "").trim()) return true;
+    }
+    return false;
+  }
+
   function categoriesFromFields(bag) {
     var categories = [];
     for (var i = 1; i <= CATEGORY_FIELD_COUNT; i++) {
-      var name = String(bag["c" + i + "Name"] || "").trim();
-      var tags = uniqueStrings(parseTagsList(bag["c" + i + "Tags"]));
+      var line = String(bag["c" + i] || "").trim();
+      var name = "";
+      var tags = [];
+      if (line) {
+        var parts = line.split("|");
+        name = (parts[0] || "").trim();
+        tags = uniqueStrings(parseTagsList(parts.slice(1).join("|")));
+      } else {
+        name = String(bag["c" + i + "Name"] || "").trim();
+        tags = uniqueStrings(parseTagsList(bag["c" + i + "Tags"]));
+      }
       if (!name && !tags.length) continue;
       categories.push(
         normalizeCategory(
@@ -427,12 +444,18 @@
 
   function fieldsFromCategories(config) {
     var list = (config && config.categories) || [];
-    var input = { categoriesJson: categoriesToJson(config || { categories: [] }) };
+    var input = {
+      categoriesJson: categoriesToJson(config || { categories: [] }),
+    };
     for (var i = 1; i <= CATEGORY_FIELD_COUNT; i++) {
       var cat = list[i - 1];
-      input["c" + i + "Name"] = cat ? cat.name || "" : "";
-      input["c" + i + "Tags"] =
-        cat && cat.tags && cat.tags.length ? cat.tags.join(", ") : "";
+      input["c" + i] = cat
+        ? (cat.name || "") +
+          " | " +
+          (cat.tags && cat.tags.length ? cat.tags.join(", ") : "")
+        : "";
+      input["c" + i + "Name"] = "";
+      input["c" + i + "Tags"] = "";
     }
     return input;
   }
@@ -672,25 +695,30 @@
             const bag = categoryBag(plugins);
             if (
               !migrated.current &&
-              bag.categoriesJson &&
-              String(bag.categoriesJson).trim() &&
-              !hasCategoryFields(bag) &&
+              !hasCompactCategoryFields(bag) &&
+              (hasCategoryFields(bag) ||
+                (bag.categoriesJson && String(bag.categoriesJson).trim())) &&
               typeof configurePlugin === "function"
             ) {
               migrated.current = true;
               try {
-                configurePlugin({
-                  variables: {
-                    plugin_id: PLUGIN_ID,
-                    input: Object.assign(
-                      {},
-                      bag,
-                      fieldsFromCategories(parseCategoriesJson(bag.categoriesJson))
-                    ),
-                  },
-                });
+                var migratedCfg = hasCategoryFields(bag)
+                  ? getConfigFromSettings(plugins)
+                  : parseCategoriesJson(bag.categoriesJson);
+                if (migratedCfg) {
+                  configurePlugin({
+                    variables: {
+                      plugin_id: PLUGIN_ID,
+                      input: Object.assign(
+                        {},
+                        bag,
+                        fieldsFromCategories(migratedCfg)
+                      ),
+                    },
+                  });
+                }
               } catch (migrateErr) {
-                /* keep JSON fallback */
+                /* keep the previous field layout */
               }
             }
             let cfg = getConfigFromSettings(plugins);
