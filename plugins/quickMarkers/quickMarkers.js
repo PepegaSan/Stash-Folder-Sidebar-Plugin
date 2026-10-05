@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.3.5";
+  const PLUGIN_VERSION = "1.3.6";
   const SETTINGS_ROUTE = "/plugin/quick-markers-settings";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
@@ -520,11 +520,116 @@
     return JSON.stringify(root, null, 2);
   }
 
+  var PRESET_FIELD_COUNT = 9;
+
+  function pluginBag(plugins) {
+    return (plugins && plugins[PLUGIN_ID]) || {};
+  }
+
+  function hasPresetFields(bag) {
+    for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
+      if (
+        String(bag["p" + i + "Label"] || "").trim() ||
+        String(bag["p" + i + "Tag"] || "").trim()
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function presetsFromFields(bag) {
+    var presets = [];
+    var claimed = {};
+    for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
+      var label = String(bag["p" + i + "Label"] || "").trim();
+      var primaryTag = String(bag["p" + i + "Tag"] || "").trim();
+      if (!label && !primaryTag) continue;
+      var name = label || primaryTag;
+      var tag = primaryTag || label;
+      var selectRaw = String(bag["p" + i + "Select"] || "").trim();
+      var selectSlot = normalizeSelectSlot(
+        selectRaw === "" ? null : selectRaw,
+        99
+      );
+      if (selectSlot && claimed[selectSlot]) selectSlot = null;
+      if (selectSlot) claimed[selectSlot] = true;
+      presets.push({
+        id: name.toLowerCase().replace(/\s+/g, "-") || "preset-" + i,
+        label: name,
+        primaryTag: tag,
+        tags: normalizePresetTags(bag["p" + i + "Extra"], tag),
+        title: name,
+        rangeInKey: String(bag["p" + i + "In"] || "").trim() || "shift+i",
+        rangeOutKey: String(bag["p" + i + "Out"] || "").trim() || "shift+o",
+        instantKey: normalizeInstantKey(bag["p" + i + "Instant"]),
+        selectSlot: selectSlot,
+      });
+    }
+    return presets;
+  }
+
+  function applyPanelFields(cfg, bag) {
+    if (!cfg || !bag) return cfg;
+    if (bag.panelPosition) {
+      cfg.panelPosition = normalizePanelPosition(bag.panelPosition);
+    }
+    if (typeof bag.panelCollapsed === "boolean") {
+      cfg.panelCollapsed = bag.panelCollapsed;
+    }
+    if (bag.touchControls) {
+      cfg.touchControls = normalizeTouchControls(bag.touchControls);
+    }
+    if (
+      bag.defaultPreset !== undefined &&
+      bag.defaultPreset !== null &&
+      bag.defaultPreset !== ""
+    ) {
+      var n = Number(bag.defaultPreset);
+      if (!isNaN(n)) {
+        var idx = n >= 1 ? n - 1 : 0;
+        cfg.defaultPresetIndex = idx;
+      }
+    }
+    if (cfg.defaultPresetIndex < 0) cfg.defaultPresetIndex = 0;
+    if (cfg.presets && cfg.defaultPresetIndex >= cfg.presets.length) {
+      cfg.defaultPresetIndex = 0;
+    }
+    return cfg;
+  }
+
+  function fieldsFromConfig(config) {
+    var input = {
+      presetsJson: presetsToJson(config),
+      panelPosition: config.panelPosition || "top-left",
+      panelCollapsed: config.panelCollapsed !== false,
+      touchControls: config.touchControls || "auto",
+      defaultPreset: (config.defaultPresetIndex || 0) + 1,
+    };
+    var presets = config.presets || [];
+    for (var i = 1; i <= PRESET_FIELD_COUNT; i++) {
+      var p = presets[i - 1];
+      input["p" + i + "Label"] = p ? p.label || "" : "";
+      input["p" + i + "Tag"] = p ? p.primaryTag || "" : "";
+      input["p" + i + "Extra"] =
+        p && p.tags && p.tags.length ? p.tags.join(", ") : "";
+      input["p" + i + "Select"] = p && p.selectSlot ? String(p.selectSlot) : "";
+      input["p" + i + "In"] = p ? p.rangeInKey || "" : "";
+      input["p" + i + "Out"] = p ? p.rangeOutKey || "" : "";
+      input["p" + i + "Instant"] = p ? p.instantKey || "" : "";
+    }
+    return input;
+  }
+
   function getPresetsFromSettings(plugins) {
-    if (!plugins || typeof plugins !== "object") return null;
-    const raw = plugins[PLUGIN_ID] && plugins[PLUGIN_ID].presetsJson;
-    if (!raw || !String(raw).trim()) return null;
-    return parsePresetsJson(raw);
+    var bag = pluginBag(plugins);
+    if (hasPresetFields(bag)) {
+      var cfg = getDefaultPresetsConfig();
+      cfg.presets = presetsFromFields(bag);
+      return applyPanelFields(cfg, bag);
+    }
+    if (!bag.presetsJson || !String(bag.presetsJson).trim()) return null;
+    return applyPanelFields(parsePresetsJson(bag.presetsJson), bag);
   }
 
   async function loadPresetsFromFile() {
@@ -536,7 +641,13 @@
   function usePresetsConfig() {
     const [config, setConfig] = React.useState(getDefaultPresetsConfig);
     const [error, setError] = React.useState(null);
-    const { data } = GQL.useConfigurationQuery({ fetchPolicy: "cache-first" });
+    const { data } = GQL.useConfigurationQuery({
+      fetchPolicy: "cache-and-network",
+    });
+    const mutateHook = GQL.useConfigurePluginMutation;
+    const configurePlugin =
+      (typeof mutateHook === "function" ? mutateHook() : [null])[0];
+    const migrated = React.useRef(false);
 
     React.useEffect(function () {
       let cancelled = false;
@@ -545,6 +656,27 @@
         try {
           const plugins =
             data && data.configuration ? data.configuration.plugins : null;
+          const bag = pluginBag(plugins);
+          if (
+            !migrated.current &&
+            bag.presetsJson &&
+            String(bag.presetsJson).trim() &&
+            !hasPresetFields(bag) &&
+            typeof configurePlugin === "function"
+          ) {
+            migrated.current = true;
+            try {
+              var parsed = parsePresetsJson(bag.presetsJson);
+              configurePlugin({
+                variables: {
+                  plugin_id: PLUGIN_ID,
+                  input: Object.assign({}, bag, fieldsFromConfig(parsed)),
+                },
+              });
+            } catch (migrateErr) {
+              /* keep JSON fallback */
+            }
+          }
           let cfg = getPresetsFromSettings(plugins);
           if (!cfg) cfg = await loadPresetsFromFile();
           if (!cfg) cfg = getDefaultPresetsConfig();
@@ -560,7 +692,7 @@
       return function () {
         cancelled = true;
       };
-    }, [data]);
+    }, [data, configurePlugin]);
 
     return { config, error };
   }
@@ -1620,9 +1752,7 @@
         },
         updates
       );
-      savePluginSettings(PLUGIN_ID, {
-        presetsJson: presetsToJson(nextConfig),
-      });
+      savePluginSettings(PLUGIN_ID, fieldsFromConfig(nextConfig));
       setConfig(nextConfig);
       setUsingFile(false);
       setUsingDefaults(false);

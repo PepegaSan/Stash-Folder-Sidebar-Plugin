@@ -1,6 +1,6 @@
 name: Quick Markers
-description: Create scene markers with hotkeys and presets (Shift+1–9 select, Shift+I/O range, Shift+M instant)
-version: 1.3.5
+description: Create scene markers with hotkeys and presets (Shift+1-9 select, Shift+I/O range, Shift+M instant)
+version: 1.3.6
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:
@@ -10,7 +10,261 @@ ui:
   assets:
     /: .
 settings:
-  presetsJson:
-    displayName: Marker presets (JSON)
-    description: "This card only stores JSON. Simple form: left menu Extensions → Quick Markers, or /plugin/quickMarkers/assets/app/"
+  panelPosition:
+    displayName: Scene panel position
+    description: "top-left, top-right, bottom-left, bottom-right, or hidden"
+    type: STRING
+  panelCollapsed:
+    displayName: Start scene panel collapsed
+    type: BOOLEAN
+  touchControls:
+    displayName: Touch controls
+    description: "auto, on, or off"
+    type: STRING
+  defaultPreset:
+    displayName: Default preset
+    description: "1-9. Used by Shift+I/O and Shift+M until you select another preset."
+    type: NUMBER
+  p1Label:
+    displayName: "1 - Label"
+    type: STRING
+  p1Tag:
+    displayName: "1 - Primary tag"
+    description: "Must already exist under Tags."
+    type: STRING
+  p1Extra:
+    displayName: "1 - Extra tags"
+    description: "Comma-separated. Leave empty for none."
+    type: STRING
+  p1Select:
+    displayName: "1 - Select key"
+    description: "1-9, or empty. Shift+that number selects this preset."
+    type: STRING
+  p1In:
+    displayName: "1 - In key"
+    description: "Empty uses shift+i"
+    type: STRING
+  p1Out:
+    displayName: "1 - Out key"
+    description: "Empty uses shift+o"
+    type: STRING
+  p1Instant:
+    displayName: "1 - Instant key"
+    description: "Empty uses shift+m"
+    type: STRING
+  p2Label:
+    displayName: "2 - Label"
+    type: STRING
+  p2Tag:
+    displayName: "2 - Primary tag"
+    description: "Must already exist under Tags."
+    type: STRING
+  p2Extra:
+    displayName: "2 - Extra tags"
+    description: "Comma-separated. Leave empty for none."
+    type: STRING
+  p2Select:
+    displayName: "2 - Select key"
+    description: "1-9, or empty. Shift+that number selects this preset."
+    type: STRING
+  p2In:
+    displayName: "2 - In key"
+    description: "Empty uses shift+i"
+    type: STRING
+  p2Out:
+    displayName: "2 - Out key"
+    description: "Empty uses shift+o"
+    type: STRING
+  p2Instant:
+    displayName: "2 - Instant key"
+    description: "Empty uses shift+m"
+    type: STRING
+  p3Label:
+    displayName: "3 - Label"
+    type: STRING
+  p3Tag:
+    displayName: "3 - Primary tag"
+    description: "Must already exist under Tags."
+    type: STRING
+  p3Extra:
+    displayName: "3 - Extra tags"
+    description: "Comma-separated. Leave empty for none."
+    type: STRING
+  p3Select:
+    displayName: "3 - Select key"
+    description: "1-9, or empty. Shift+that number selects this preset."
+    type: STRING
+  p3In:
+    displayName: "3 - In key"
+    description: "Empty uses shift+i"
+    type: STRING
+  p3Out:
+    displayName: "3 - Out key"
+    description: "Empty uses shift+o"
+    type: STRING
+  p3Instant:
+    displayName: "3 - Instant key"
+    description: "Empty uses shift+m"
+    type: STRING
+  p4Label:
+    displayName: "4 - Label"
+    type: STRING
+  p4Tag:
+    displayName: "4 - Primary tag"
+    description: "Must already exist under Tags."
+    type: STRING
+  p4Extra:
+    displayName: "4 - Extra tags"
+    description: "Comma-separated. Leave empty for none."
+    type: STRING
+  p4Select:
+    displayName: "4 - Select key"
+    description: "1-9, or empty. Shift+that number selects this preset."
+    type: STRING
+  p4In:
+    displayName: "4 - In key"
+    description: "Empty uses shift+i"
+    type: STRING
+  p4Out:
+    displayName: "4 - Out key"
+    description: "Empty uses shift+o"
+    type: STRING
+  p4Instant:
+    displayName: "4 - Instant key"
+    description: "Empty uses shift+m"
+    type: STRING
+  p5Label:
+    displayName: "5 - Label"
+    type: STRING
+  p5Tag:
+    displayName: "5 - Primary tag"
+    description: "Must already exist under Tags."
+    type: STRING
+  p5Extra:
+    displayName: "5 - Extra tags"
+    description: "Comma-separated. Leave empty for none."
+    type: STRING
+  p5Select:
+    displayName: "5 - Select key"
+    description: "1-9, or empty. Shift+that number selects this preset."
+    type: STRING
+  p5In:
+    displayName: "5 - In key"
+    description: "Empty uses shift+i"
+    type: STRING
+  p5Out:
+    displayName: "5 - Out key"
+    description: "Empty uses shift+o"
+    type: STRING
+  p5Instant:
+    displayName: "5 - Instant key"
+    description: "Empty uses shift+m"
+    type: STRING
+  p6Label:
+    displayName: "6 - Label"
+    type: STRING
+  p6Tag:
+    displayName: "6 - Primary tag"
+    description: "Must already exist under Tags."
+    type: STRING
+  p6Extra:
+    displayName: "6 - Extra tags"
+    description: "Comma-separated. Leave empty for none."
+    type: STRING
+  p6Select:
+    displayName: "6 - Select key"
+    description: "1-9, or empty. Shift+that number selects this preset."
+    type: STRING
+  p6In:
+    displayName: "6 - In key"
+    description: "Empty uses shift+i"
+    type: STRING
+  p6Out:
+    displayName: "6 - Out key"
+    description: "Empty uses shift+o"
+    type: STRING
+  p6Instant:
+    displayName: "6 - Instant key"
+    description: "Empty uses shift+m"
+    type: STRING
+  p7Label:
+    displayName: "7 - Label"
+    type: STRING
+  p7Tag:
+    displayName: "7 - Primary tag"
+    description: "Must already exist under Tags."
+    type: STRING
+  p7Extra:
+    displayName: "7 - Extra tags"
+    description: "Comma-separated. Leave empty for none."
+    type: STRING
+  p7Select:
+    displayName: "7 - Select key"
+    description: "1-9, or empty. Shift+that number selects this preset."
+    type: STRING
+  p7In:
+    displayName: "7 - In key"
+    description: "Empty uses shift+i"
+    type: STRING
+  p7Out:
+    displayName: "7 - Out key"
+    description: "Empty uses shift+o"
+    type: STRING
+  p7Instant:
+    displayName: "7 - Instant key"
+    description: "Empty uses shift+m"
+    type: STRING
+  p8Label:
+    displayName: "8 - Label"
+    type: STRING
+  p8Tag:
+    displayName: "8 - Primary tag"
+    description: "Must already exist under Tags."
+    type: STRING
+  p8Extra:
+    displayName: "8 - Extra tags"
+    description: "Comma-separated. Leave empty for none."
+    type: STRING
+  p8Select:
+    displayName: "8 - Select key"
+    description: "1-9, or empty. Shift+that number selects this preset."
+    type: STRING
+  p8In:
+    displayName: "8 - In key"
+    description: "Empty uses shift+i"
+    type: STRING
+  p8Out:
+    displayName: "8 - Out key"
+    description: "Empty uses shift+o"
+    type: STRING
+  p8Instant:
+    displayName: "8 - Instant key"
+    description: "Empty uses shift+m"
+    type: STRING
+  p9Label:
+    displayName: "9 - Label"
+    type: STRING
+  p9Tag:
+    displayName: "9 - Primary tag"
+    description: "Must already exist under Tags."
+    type: STRING
+  p9Extra:
+    displayName: "9 - Extra tags"
+    description: "Comma-separated. Leave empty for none."
+    type: STRING
+  p9Select:
+    displayName: "9 - Select key"
+    description: "1-9, or empty. Shift+that number selects this preset."
+    type: STRING
+  p9In:
+    displayName: "9 - In key"
+    description: "Empty uses shift+i"
+    type: STRING
+  p9Out:
+    displayName: "9 - Out key"
+    description: "Empty uses shift+o"
+    type: STRING
+  p9Instant:
+    displayName: "9 - Instant key"
+    description: "Empty uses shift+m"
     type: STRING

@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.4.3";
+  const PLUGIN_VERSION = "1.4.4";
   const SEARCH_DEBOUNCE_MS = 180;
   const ROUTE_PATH = "/plugins/tag-categories";
   const LEGACY_ROUTE_PATH = "/plugin/tag-categories";
@@ -391,12 +391,58 @@
     );
   }
 
+  var CATEGORY_FIELD_COUNT = 12;
+
+  function categoryBag(plugins) {
+    return (plugins && plugins[PLUGIN_ID]) || {};
+  }
+
+  function hasCategoryFields(bag) {
+    for (var i = 1; i <= CATEGORY_FIELD_COUNT; i++) {
+      if (
+        String(bag["c" + i + "Name"] || "").trim() ||
+        String(bag["c" + i + "Tags"] || "").trim()
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function categoriesFromFields(bag) {
+    var categories = [];
+    for (var i = 1; i <= CATEGORY_FIELD_COUNT; i++) {
+      var name = String(bag["c" + i + "Name"] || "").trim();
+      var tags = uniqueStrings(parseTagsList(bag["c" + i + "Tags"]));
+      if (!name && !tags.length) continue;
+      categories.push(
+        normalizeCategory(
+          { name: name || tags[0], tags: tags },
+          categories.length
+        )
+      );
+    }
+    return { categories: categories.filter(Boolean) };
+  }
+
+  function fieldsFromCategories(config) {
+    var list = (config && config.categories) || [];
+    var input = { categoriesJson: categoriesToJson(config || { categories: [] }) };
+    for (var i = 1; i <= CATEGORY_FIELD_COUNT; i++) {
+      var cat = list[i - 1];
+      input["c" + i + "Name"] = cat ? cat.name || "" : "";
+      input["c" + i + "Tags"] =
+        cat && cat.tags && cat.tags.length ? cat.tags.join(", ") : "";
+    }
+    return input;
+  }
+
   function getConfigFromSettings(plugins) {
-    const raw =
-      plugins && plugins[PLUGIN_ID] && plugins[PLUGIN_ID].categoriesJson;
-    if (!raw || !String(raw).trim()) return null;
+    var bag = categoryBag(plugins);
+    if (hasCategoryFields(bag)) return categoriesFromFields(bag);
+    if (!bag.categoriesJson || !String(bag.categoriesJson).trim()) return null;
     try {
-      return parseCategoriesJson(raw);
+      return parseCategoriesJson(bag.categoriesJson);
     } catch (e) {
       return null;
     }
@@ -604,9 +650,13 @@
     const [config, setConfig] = React.useState(DEFAULT_CONFIG);
     const [error, setError] = React.useState(null);
     const [loading, setLoading] = React.useState(true);
+    const migrated = React.useRef(false);
     const { data: configData } = GQL.useConfigurationQuery({
       fetchPolicy: "cache-and-network",
     });
+    const mutateHook = GQL.useConfigurePluginMutation;
+    const configurePlugin =
+      (typeof mutateHook === "function" ? mutateHook() : [null])[0];
 
     React.useEffect(
       function () {
@@ -619,6 +669,30 @@
               configData && configData.configuration
                 ? configData.configuration.plugins
                 : null;
+            const bag = categoryBag(plugins);
+            if (
+              !migrated.current &&
+              bag.categoriesJson &&
+              String(bag.categoriesJson).trim() &&
+              !hasCategoryFields(bag) &&
+              typeof configurePlugin === "function"
+            ) {
+              migrated.current = true;
+              try {
+                configurePlugin({
+                  variables: {
+                    plugin_id: PLUGIN_ID,
+                    input: Object.assign(
+                      {},
+                      bag,
+                      fieldsFromCategories(parseCategoriesJson(bag.categoriesJson))
+                    ),
+                  },
+                });
+              } catch (migrateErr) {
+                /* keep JSON fallback */
+              }
+            }
             let cfg = getConfigFromSettings(plugins);
             if (!cfg) cfg = await loadCategoriesFromFile();
             if (!cfg) cfg = DEFAULT_CONFIG;
@@ -637,7 +711,7 @@
           cancelled = true;
         };
       },
-      [configData]
+      [configData, configurePlugin]
     );
 
     const lang = getUiLang(
@@ -1572,9 +1646,7 @@
         { categories: config.categories },
         updates
       );
-      savePluginSettings(PLUGIN_ID, {
-        categoriesJson: categoriesToJson(nextConfig),
-      });
+      savePluginSettings(PLUGIN_ID, fieldsFromCategories(nextConfig));
       setConfig(nextConfig);
       setUsingFile(false);
       setUsingDefaults(false);

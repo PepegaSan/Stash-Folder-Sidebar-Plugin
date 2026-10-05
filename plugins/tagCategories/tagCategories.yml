@@ -1,6 +1,6 @@
 name: Tag Categories
-description: Browse scenes by named categories — each category lists tags; click to show scenes matching any of those tags
-version: 1.4.3
+description: Browse scenes by named categories - each category lists tags; click to show scenes matching any of those tags
+version: 1.4.4
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:
@@ -10,7 +10,87 @@ ui:
   assets:
     /: .
 settings:
-  categoriesJson:
-    displayName: Categories (JSON)
-    description: "This card only stores JSON. Simple form: left menu Extensions → Tag Categories, or /plugin/tagCategories/assets/app/"
+  c1Name:
+    displayName: "1 - Category name"
+    type: STRING
+  c1Tags:
+    displayName: "1 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c2Name:
+    displayName: "2 - Category name"
+    type: STRING
+  c2Tags:
+    displayName: "2 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c3Name:
+    displayName: "3 - Category name"
+    type: STRING
+  c3Tags:
+    displayName: "3 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c4Name:
+    displayName: "4 - Category name"
+    type: STRING
+  c4Tags:
+    displayName: "4 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c5Name:
+    displayName: "5 - Category name"
+    type: STRING
+  c5Tags:
+    displayName: "5 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c6Name:
+    displayName: "6 - Category name"
+    type: STRING
+  c6Tags:
+    displayName: "6 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c7Name:
+    displayName: "7 - Category name"
+    type: STRING
+  c7Tags:
+    displayName: "7 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c8Name:
+    displayName: "8 - Category name"
+    type: STRING
+  c8Tags:
+    displayName: "8 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c9Name:
+    displayName: "9 - Category name"
+    type: STRING
+  c9Tags:
+    displayName: "9 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c10Name:
+    displayName: "10 - Category name"
+    type: STRING
+  c10Tags:
+    displayName: "10 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c11Name:
+    displayName: "11 - Category name"
+    type: STRING
+  c11Tags:
+    displayName: "11 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
+    type: STRING
+  c12Name:
+    displayName: "12 - Category name"
+    type: STRING
+  c12Tags:
+    displayName: "12 - Tags"
+    description: "Comma-separated. A scene matches if it has any of these tags."
     type: STRING
