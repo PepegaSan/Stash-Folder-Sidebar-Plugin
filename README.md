@@ -519,6 +519,10 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.1`.
 
 - Initial release: presets, Shift+I/O range, Shift+1–9 instant, on-scene panel
 
+### Quick Markers 1.3.5 / Folder Sidebar 1.4.8 / Tag Categories 1.4.3
+
+- **Stash UI form page** at `plugins/<id>/assets/app/` — the Plugins card in Stash UI can only show the JSON field; open **Extensions** in the left menu (or `/plugin/quickMarkers/assets/app/`) for the simple form
+
 ### Quick Markers 1.3.4 / Folder Sidebar 1.4.7 / Tag Categories 1.4.2
 
 - **Simple settings page** for both UIs: `/plugin/quick-markers-settings`, `/plugin/folder-sidebar-settings`, `/plugin/tag-categories-settings` (classic Stash directly; Stash UI under Extensions)

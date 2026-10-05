@@ -1,6 +1,6 @@
 name: Tag Categories
 description: Browse scenes by named categories — each category lists tags; click to show scenes matching any of those tags
-version: 1.4.2
+version: 1.4.3
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:
@@ -12,5 +12,5 @@ ui:
 settings:
   categoriesJson:
     displayName: Categories (JSON)
-    description: "JSON storage. Simple form: /plugin/tag-categories-settings (classic Stash, or Stash UI → Extensions)."
+    description: "This card only stores JSON. Simple form: left menu Extensions → Tag Categories, or /plugin/tagCategories/assets/app/"
     type: STRING
