@@ -1,7 +1,7 @@
 name: Folder Sidebar
-description: Sidebar with configurable folder shortcuts; browse subfolders and list scenes by path without filters
-version: 1.5.0
-url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
+description: "Folder list with separate name and path fields is on the Project page link."
+version: 1.5.1
+url: /plugin/folderSidebar/assets/app/
 ui:
   javascript:
     - folderSidebar.js
@@ -9,64 +9,3 @@ ui:
     - folderSidebar.css
   assets:
     /: .
-settings:
-
-  f1:
-    displayName: "Folder 1"
-    description: "Name | path. Example: AMV | D:/Media/AMV"
-    type: STRING
-
-  f2:
-    displayName: "Folder 2"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING
-
-  f3:
-    displayName: "Folder 3"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING
-
-  f4:
-    displayName: "Folder 4"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING
-
-  f5:
-    displayName: "Folder 5"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING
-
-  f6:
-    displayName: "Folder 6"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING
-
-  f7:
-    displayName: "Folder 7"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING
-
-  f8:
-    displayName: "Folder 8"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING
-
-  f9:
-    displayName: "Folder 9"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING
-
-  f10:
-    displayName: "Folder 10"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING
-
-  f11:
-    displayName: "Folder 11"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING
-
-  f12:
-    displayName: "Folder 12"
-    description: "Same format as Folder 1. Leave empty to skip."
-    type: STRING

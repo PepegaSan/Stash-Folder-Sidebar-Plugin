@@ -3,12 +3,294 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Quick Markers settings</title>
+  <title>Quick Markers</title>
   <style>
-    html, body, iframe { margin: 0; height: 100%; width: 100%; border: 0; background: #140e18; }
+    :root {
+      color-scheme: dark;
+      --bg: #16121c;
+      --card: #221c2b;
+      --line: rgba(255,255,255,.12);
+      --text: #f4eef8;
+      --muted: rgba(244,238,248,.68);
+      --pink: #e85d9a;
+      --danger: #d4536a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.45 Bahnschrift, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main { max-width: 920px; margin: 0 auto; padding: 1.25rem; }
+    a { color: var(--pink); }
+    h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
+    .muted { color: var(--muted); }
+    .row { display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
+    button, .btn {
+      border: 0;
+      border-radius: .4rem;
+      padding: .45rem .8rem;
+      font: inherit;
+      cursor: pointer;
+      color: white;
+      background: #3a3344;
+    }
+    button.primary { background: var(--pink); color: #1a0d14; font-weight: 650; }
+    button.danger { background: var(--danger); }
+    button:disabled { opacity: .45; cursor: default; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: .55rem .4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { font-size: .75rem; letter-spacing: .04em; color: var(--muted); }
+    code { color: var(--pink); }
+    form.editor, .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: .6rem;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    label { display: block; margin: .75rem 0 .25rem; font-weight: 650; }
+    label span { display: block; font-weight: 400; color: var(--muted); font-size: .85rem; }
+    input, select {
+      width: 100%;
+      padding: .55rem .65rem;
+      border-radius: .4rem;
+      border: 1px solid var(--line);
+      background: #100d15;
+      color: var(--text);
+      font: inherit;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .actions { display: flex; gap: .5rem; margin-top: 1rem; }
+    .status { min-height: 1.2rem; margin-top: .75rem; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
-  <iframe title="Quick Markers settings" src="/plugin/quick-markers-settings"></iframe>
+<main>
+  <div class="row">
+    <div>
+      <h1>Quick Markers</h1>
+      <p class="muted">Same overview as the classic settings: pick a preset, then edit its fields separately. Extra tags are additional marker tags, not sub-tags of the primary tag.</p>
+    </div>
+    <a href="/plugin/stashui/assets/index.html#/plugins?focus=quickMarkers">Back</a>
+  </div>
+  <div id="list"></div>
+  <form class="editor" id="editor">
+    <h2 id="editorTitle">Add preset</h2>
+    <label>Label<input id="label" required placeholder="Compilation"></label>
+    <label>Primary tag<span>Must already exist under Tags. This is the marker's main tag.</span><input id="tag" required placeholder="Compilation"></label>
+    <label>Additional tags<span>Comma-separated tags that are also added to the marker. Not children of the primary tag.</span><input id="extra" placeholder="Favorite, Outdoor"></label>
+    <div class="grid">
+      <label>Select key<span>1–9, or empty. Shift+that number selects this preset.</span><input id="select" placeholder="1"></label>
+      <label>Instant key<span>Empty uses shift+m.</span><input id="instant" placeholder="shift+m"></label>
+      <label>In key<span>Empty uses shift+i.</span><input id="inKey" placeholder="shift+i"></label>
+      <label>Out key<span>Empty uses shift+o.</span><input id="outKey" placeholder="shift+o"></label>
+    </div>
+    <div class="actions">
+      <button class="primary" type="submit" id="saveBtn">Add</button>
+      <button type="button" id="cancelBtn">Cancel</button>
+    </div>
+  </form>
+  <p class="status" id="status"></p>
+</main>
+<script>
+const PLUGIN = "quickMarkers";
+let bag = {};
+let presets = [];
+let editIndex = -1;
+
+function esc(s) {
+  return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+async function gql(query, variables) {
+  const res = await fetch("/graphql", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables })
+  });
+  const json = await res.json();
+  if (!res.ok || json.errors) throw new Error((json.errors || []).map((e) => e.message).join("; ") || res.statusText);
+  return json.data;
+}
+function splitLine(value) {
+  return String(value || "").split("|").map((part) => part.trim());
+}
+function presetFromParts(parts) {
+  const label = parts[0] || "";
+  const tag = parts[1] || "";
+  if (!label && !tag) return null;
+  const name = label || tag;
+  const primary = tag || label;
+  const extra = (parts[2] || "").split(",").map((t) => t.trim()).filter((t) => t && t.toLowerCase() !== primary.toLowerCase());
+  return {
+    id: name.toLowerCase().replace(/\s+/g, "-"),
+    label: name,
+    primaryTag: primary,
+    tags: extra,
+    selectSlot: parts[3] ? Number(parts[3]) : null,
+    rangeInKey: parts[4] || "shift+i",
+    rangeOutKey: parts[5] || "shift+o",
+    instantKey: parts[6] || "shift+m"
+  };
+}
+function presetsFromBag(data) {
+  const fromLines = [];
+  for (let i = 1; i <= 9; i++) {
+    const line = String(data["p" + i] || "").trim();
+    const preset = line
+      ? presetFromParts(splitLine(line))
+      : presetFromParts([
+          data["p" + i + "Label"], data["p" + i + "Tag"], data["p" + i + "Extra"],
+          data["p" + i + "Select"], data["p" + i + "In"], data["p" + i + "Out"], data["p" + i + "Instant"]
+        ]);
+    if (preset) fromLines.push(preset);
+  }
+  if (data.presetsJson && String(data.presetsJson).trim()) {
+    try {
+      const parsed = JSON.parse(data.presetsJson);
+      const list = Array.isArray(parsed.presets) ? parsed.presets : [];
+      if (list.length) {
+        return list.map((p) => ({
+          id: p.id || String(p.label || "").toLowerCase().replace(/\s+/g, "-"),
+          label: p.label || p.primaryTag,
+          primaryTag: p.primaryTag || p.label,
+          tags: p.tags || [],
+          selectSlot: p.selectSlot || null,
+          rangeInKey: p.rangeInKey || "shift+i",
+          rangeOutKey: p.rangeOutKey || "shift+o",
+          instantKey: p.instantKey || "shift+m"
+        }));
+      }
+    } catch (e) { /* use field rows */ }
+  }
+  return fromLines;
+}
+function lineFromPreset(p) {
+  if (!p) return "";
+  return [p.label, p.primaryTag, (p.tags || []).join(", "), p.selectSlot || "", p.rangeInKey || "", p.rangeOutKey || "", p.instantKey || ""].join(" | ");
+}
+function keysOf(p) {
+  return ["Select: shift+" + (p.selectSlot || "—"), "In: " + p.rangeInKey, "Out: " + p.rangeOutKey, "Instant: " + p.instantKey].join(" · ");
+}
+function render() {
+  const rows = presets.map((p, i) => `
+    <tr>
+      <td>${esc(p.label)}</td>
+      <td><code>${esc(p.primaryTag)}</code>${p.tags.length ? " + " + esc(p.tags.join(", ")) : ""}</td>
+      <td class="muted">${esc(keysOf(p))}</td>
+      <td><button type="button" data-edit="${i}">Edit</button> <button type="button" class="danger" data-del="${i}">Delete</button></td>
+    </tr>`).join("");
+  document.getElementById("list").innerHTML = `
+    <table>
+      <thead><tr><th>Label</th><th>Tags</th><th>Keys</th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="4" class="muted">No presets yet.</td></tr>`}</tbody>
+    </table>
+    <button type="button" id="addBtn">Add preset</button>`;
+}
+function fillForm(p) {
+  document.getElementById("label").value = p ? p.label : "";
+  document.getElementById("tag").value = p ? p.primaryTag : "";
+  document.getElementById("extra").value = p && p.tags.length ? p.tags.join(", ") : "";
+  document.getElementById("select").value = p && p.selectSlot ? p.selectSlot : "";
+  document.getElementById("instant").value = p ? p.instantKey : "shift+m";
+  document.getElementById("inKey").value = p ? p.rangeInKey : "shift+i";
+  document.getElementById("outKey").value = p ? p.rangeOutKey : "shift+o";
+  document.getElementById("editorTitle").textContent = p ? "Edit preset" : "Add preset";
+  document.getElementById("saveBtn").textContent = p ? "Save changes" : "Add";
+}
+function readForm() {
+  const label = document.getElementById("label").value.trim();
+  const tag = document.getElementById("tag").value.trim() || label;
+  if (!label || !tag) throw new Error("Label and primary tag are required.");
+  const extra = document.getElementById("extra").value.split(",").map((t) => t.trim()).filter((t) => t && t.toLowerCase() !== tag.toLowerCase());
+  const select = document.getElementById("select").value.trim();
+  return {
+    id: label.toLowerCase().replace(/\s+/g, "-"),
+    label,
+    primaryTag: tag,
+    tags: extra,
+    selectSlot: select ? Number(select) : null,
+    rangeInKey: document.getElementById("inKey").value.trim() || "shift+i",
+    rangeOutKey: document.getElementById("outKey").value.trim() || "shift+o",
+    instantKey: document.getElementById("instant").value.trim() || "shift+m"
+  };
+}
+async function persist(next) {
+  const input = Object.assign({}, bag, {
+    presetsJson: JSON.stringify({
+      defaultPresetIndex: Math.max(0, Number(bag.defaultPreset || 1) - 1),
+      panelPosition: bag.panelPosition || "top-left",
+      panelCollapsed: bag.panelCollapsed !== false,
+      touchControls: bag.touchControls || "auto",
+      presets: next.map((p) => ({
+        id: p.id, label: p.label, primaryTag: p.primaryTag, title: p.label,
+        tags: p.tags, selectSlot: p.selectSlot, rangeInKey: p.rangeInKey,
+        rangeOutKey: p.rangeOutKey, instantKey: p.instantKey
+      }))
+    }, null, 2)
+  });
+  for (let i = 1; i <= 9; i++) {
+    input["p" + i] = lineFromPreset(next[i - 1]);
+    ["Label", "Tag", "Extra", "Select", "In", "Out", "Instant"].forEach((suffix) => { input["p" + i + suffix] = ""; });
+  }
+  await gql("mutation($id: ID!, $input: Map!) { configurePlugin(plugin_id: $id, input: $input) { plugins } }", { id: PLUGIN, input });
+  bag = input;
+  presets = next;
+}
+document.getElementById("list").addEventListener("click", async (e) => {
+  const edit = e.target.closest("[data-edit]");
+  const del = e.target.closest("[data-del]");
+  const add = e.target.closest("#addBtn");
+  if (edit) {
+    editIndex = Number(edit.dataset.edit);
+    fillForm(presets[editIndex]);
+  } else if (add) {
+    editIndex = -1;
+    fillForm(null);
+  } else if (del) {
+    const i = Number(del.dataset.del);
+    if (!confirm('Remove preset "' + presets[i].label + '"?')) return;
+    const next = presets.filter((_, idx) => idx !== i);
+    await persist(next);
+    if (editIndex === i) { editIndex = -1; fillForm(null); }
+    render();
+    document.getElementById("status").textContent = "Preset removed.";
+  }
+});
+document.getElementById("cancelBtn").onclick = () => { editIndex = -1; fillForm(null); };
+document.getElementById("editor").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    const preset = readForm();
+    const next = presets.slice();
+    if (preset.selectSlot) {
+      next.forEach((p, i) => { if (i !== editIndex && p.selectSlot === preset.selectSlot) p.selectSlot = null; });
+    }
+    if (editIndex >= 0) next[editIndex] = Object.assign({}, next[editIndex], preset);
+    else next.push(preset);
+    await persist(next);
+    editIndex = -1;
+    fillForm(null);
+    render();
+    document.getElementById("status").textContent = "Saved.";
+  } catch (err) {
+    document.getElementById("status").textContent = err.message;
+  }
+};
+(async function init() {
+  try {
+    const data = await gql("query { configuration { plugins } }");
+    bag = (data.configuration.plugins && data.configuration.plugins[PLUGIN]) || {};
+    presets = presetsFromBag(bag);
+    render();
+    fillForm(null);
+  } catch (err) {
+    document.getElementById("status").textContent = err.message;
+  }
+})();
+</script>
 </body>
 </html>

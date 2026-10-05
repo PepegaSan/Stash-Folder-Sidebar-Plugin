@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.4.5";
+  const PLUGIN_VERSION = "1.4.6";
   const SEARCH_DEBOUNCE_MS = 180;
   const ROUTE_PATH = "/plugins/tag-categories";
   const LEGACY_ROUTE_PATH = "/plugin/tag-categories";

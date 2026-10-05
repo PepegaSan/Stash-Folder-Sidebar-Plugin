@@ -1,7 +1,7 @@
 name: Tag Categories
-description: Browse scenes by named categories. Each category lists tags; a scene matches if it has any of them.
-version: 1.4.5
-url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
+description: "Category list with separate name and tag fields is on the Project page link."
+version: 1.4.6
+url: /plugin/tagCategories/assets/app/
 ui:
   javascript:
     - tagCategories.js
@@ -9,64 +9,3 @@ ui:
     - tagCategories.css
   assets:
     /: .
-settings:
-
-  c1:
-    displayName: "Category 1"
-    description: "Name | tag1, tag2. A scene matches if it has any of these tags."
-    type: STRING
-
-  c2:
-    displayName: "Category 2"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING
-
-  c3:
-    displayName: "Category 3"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING
-
-  c4:
-    displayName: "Category 4"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING
-
-  c5:
-    displayName: "Category 5"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING
-
-  c6:
-    displayName: "Category 6"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING
-
-  c7:
-    displayName: "Category 7"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING
-
-  c8:
-    displayName: "Category 8"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING
-
-  c9:
-    displayName: "Category 9"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING
-
-  c10:
-    displayName: "Category 10"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING
-
-  c11:
-    displayName: "Category 11"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING
-
-  c12:
-    displayName: "Category 12"
-    description: "Same format as Category 1. Leave empty to skip."
-    type: STRING

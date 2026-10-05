@@ -519,6 +519,10 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.1`.
 
 - Initial release: presets, Shift+I/O range, Shift+1–9 instant, on-scene panel
 
+### Quick Markers 1.3.8 / Folder Sidebar 1.5.1 / Tag Categories 1.4.6
+
+- **Stash UI form** matches the classic list: one preset, folder, or category at a time, with separate fields. Open it from **Project page** on the plugin card.
+
 ### Quick Markers 1.3.7 / Folder Sidebar 1.5.0 / Tag Categories 1.4.5
 
 - **Shorter Stash UI settings** — one line per preset, folder, or category instead of a separate field for every option
