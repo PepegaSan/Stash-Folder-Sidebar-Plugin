@@ -1,6 +1,6 @@
 name: Quick Markers
 description: Create scene markers with hotkeys and presets (Shift+1–9 select, Shift+I/O range, Shift+M instant)
-version: 1.3.3
+version: 1.3.4
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:
@@ -12,5 +12,5 @@ ui:
 settings:
   presetsJson:
     displayName: Marker presets (JSON)
-    description: "Presets with primaryTag, optional tags array, and hotkeys. See presets.json.example."
+    description: "JSON storage. Simple form: /plugin/quick-markers-settings (classic Stash, or Stash UI → Extensions)."
     type: STRING

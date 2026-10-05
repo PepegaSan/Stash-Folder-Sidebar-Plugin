@@ -3,6 +3,7 @@
 
   const PLUGIN_ID = "folderSidebar";
   const ROUTE_PATH = "/plugin/folder-sidebar";
+  const SETTINGS_ROUTE = "/plugin/folder-sidebar-settings";
   const ASSETS_JSON = "/plugin/" + PLUGIN_ID + "/assets/folders.json";
 
   const PluginApi = window.PluginApi;
@@ -701,8 +702,55 @@
 
   PluginApi.register.route(ROUTE_PATH, FolderSidebarPage);
 
+  function FolderSidebarSettingsPage() {
+    return React.createElement(
+      "div",
+      { className: "container-fluid p-3" },
+      React.createElement(FolderPluginSettings, null)
+    );
+  }
+
+  PluginApi.register.route("/plugin/folder-sidebar-settings", FolderSidebarSettingsPage);
+
+  function useOwnPluginSettings() {
+    const query = GQL.useConfigurationQuery({
+      fetchPolicy: "cache-and-network",
+    });
+    const mutateHook = GQL.useConfigurePluginMutation;
+    const tuple = typeof mutateHook === "function" ? mutateHook() : [null];
+    const configurePlugin = tuple[0];
+    const data = query && query.data;
+    const plugins =
+      (data && data.configuration && data.configuration.plugins) || {};
+    const savePluginSettings = React.useCallback(
+      function (pluginId, input) {
+        const current =
+          plugins[pluginId] && typeof plugins[pluginId] === "object"
+            ? plugins[pluginId]
+            : {};
+        if (typeof configurePlugin !== "function") {
+          return Promise.reject(new Error("Cannot save plugin settings"));
+        }
+        return configurePlugin({
+          variables: {
+            plugin_id: pluginId,
+            input: Object.assign({}, current, input),
+          },
+        }).then(function () {
+          if (query && query.refetch) return query.refetch();
+        });
+      },
+      [configurePlugin, plugins, query]
+    );
+    return {
+      plugins: plugins,
+      savePluginSettings: savePluginSettings,
+      loading: !!(query && query.loading),
+    };
+  }
+
   function FolderPluginSettings() {
-    const { plugins, savePluginSettings, loading } = PluginApi.hooks.useSettings();
+    const { plugins, savePluginSettings, loading } = useOwnPluginSettings();
     const Toast = PluginApi.hooks.useToast();
     const [folders, setFolders] = React.useState([]);
     const [newLabel, setNewLabel] = React.useState("");
@@ -824,6 +872,23 @@
         "Root folders shown in the ",
         React.createElement("strong", null, "Folder"),
         " navigation page."
+      ),
+      React.createElement(
+        "p",
+        { className: "text-muted small" },
+        "This form: ",
+        React.createElement("a", { href: SETTINGS_ROUTE }, SETTINGS_ROUTE),
+        " — in Stash UI open Extensions, or ",
+        React.createElement(
+          "a",
+          {
+            href:
+              "/plugin/stashui/assets/index.html#/extern/classic?path=" +
+              encodeURIComponent(SETTINGS_ROUTE),
+          },
+          "open it there"
+        ),
+        "."
       ),
       usingFile
         ? React.createElement(

@@ -519,6 +519,10 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.1`.
 
 - Initial release: presets, Shift+I/O range, Shift+1–9 instant, on-scene panel
 
+### Quick Markers 1.3.4 / Folder Sidebar 1.4.7 / Tag Categories 1.4.2
+
+- **Simple settings page** for both UIs: `/plugin/quick-markers-settings`, `/plugin/folder-sidebar-settings`, `/plugin/tag-categories-settings` (classic Stash directly; Stash UI under Extensions)
+
 ### Quick Markers 1.3.3
 
 - **Collapsible touch bar** — Hide / expand on Android & tablet; open/closed state stored in the browser and shared across scenes

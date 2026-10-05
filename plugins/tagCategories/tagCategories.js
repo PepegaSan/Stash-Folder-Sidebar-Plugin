@@ -2,10 +2,11 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.4.1";
+  const PLUGIN_VERSION = "1.4.2";
   const SEARCH_DEBOUNCE_MS = 180;
   const ROUTE_PATH = "/plugins/tag-categories";
   const LEGACY_ROUTE_PATH = "/plugin/tag-categories";
+  const SETTINGS_ROUTE = "/plugin/tag-categories-settings";
   const ASSETS_CATEGORIES = "/plugin/" + PLUGIN_ID + "/assets/categories.json";
   const VIEW_MODE_STORAGE_KEY = "tagCategories.viewMode";
   const SORT_MODE_STORAGE_KEY = "tagCategories.sortMode";
@@ -1260,6 +1261,16 @@
 
   PluginApi.register.route(LEGACY_ROUTE_PATH, LegacyTagCategoriesRedirect);
 
+  function TagCategoriesSettingsPage() {
+    return React.createElement(
+      "div",
+      { className: "container-fluid p-3" },
+      React.createElement(TagCategoriesSettings, null)
+    );
+  }
+
+  PluginApi.register.route("/plugin/tag-categories-settings", TagCategoriesSettingsPage);
+
   function isCategoriesPath(pathname) {
     const p = String(pathname || "");
     return (
@@ -1423,18 +1434,49 @@
     );
   }
 
+  function useOwnPluginSettings() {
+    const query = GQL.useConfigurationQuery({
+      fetchPolicy: "cache-and-network",
+    });
+    const mutateHook = GQL.useConfigurePluginMutation;
+    const tuple = typeof mutateHook === "function" ? mutateHook() : [null];
+    const configurePlugin = tuple[0];
+    const data = query && query.data;
+    const plugins =
+      (data && data.configuration && data.configuration.plugins) || {};
+    const iface =
+      data && data.configuration && data.configuration.interface;
+    const savePluginSettings = React.useCallback(
+      function (pluginId, input) {
+        const current =
+          plugins[pluginId] && typeof plugins[pluginId] === "object"
+            ? plugins[pluginId]
+            : {};
+        if (typeof configurePlugin !== "function") {
+          return Promise.reject(new Error("Cannot save plugin settings"));
+        }
+        return configurePlugin({
+          variables: {
+            plugin_id: pluginId,
+            input: Object.assign({}, current, input),
+          },
+        }).then(function () {
+          if (query && query.refetch) return query.refetch();
+        });
+      },
+      [configurePlugin, plugins, query]
+    );
+    return {
+      plugins: plugins,
+      savePluginSettings: savePluginSettings,
+      loading: !!(query && query.loading),
+      interface: iface,
+    };
+  }
+
   function TagCategoriesSettings() {
-    const settingsApi =
-      PluginApi.hooks && typeof PluginApi.hooks.useSettings === "function"
-        ? PluginApi.hooks.useSettings()
-        : {
-            plugins: {},
-            savePluginSettings: function () {},
-            loading: false,
-            interface: null,
-          };
     const { plugins, savePluginSettings, loading, interface: iface } =
-      settingsApi;
+      useOwnPluginSettings();
     const toastApi =
       PluginApi.hooks && typeof PluginApi.hooks.useToast === "function"
         ? PluginApi.hooks.useToast()
@@ -1645,6 +1687,23 @@
         "p",
         { className: "tag-categories-settings-version text-muted" },
         t(lang, "versionLine")
+      ),
+      React.createElement(
+        "p",
+        { className: "text-muted small" },
+        "This form: ",
+        React.createElement("a", { href: SETTINGS_ROUTE }, SETTINGS_ROUTE),
+        " — in Stash UI open Extensions, or ",
+        React.createElement(
+          "a",
+          {
+            href:
+              "/plugin/stashui/assets/index.html#/extern/classic?path=" +
+              encodeURIComponent(SETTINGS_ROUTE),
+          },
+          "open it there"
+        ),
+        "."
       ),
       React.createElement(
         "p",
