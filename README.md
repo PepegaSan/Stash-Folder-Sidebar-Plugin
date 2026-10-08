@@ -244,7 +244,7 @@ If the version line is missing or an old version number appears, the old `quickM
 Adds **scene tags** from text in **square brackets** in the filename — e.g. `[Joi]` and `[Talk]` in `My Clip [Joi] [Talk].mp4`. Simpler than generic filename parsers: no regex config, just run a task or enable auto-tagging on scan.
 
 ![Stash](https://img.shields.io/badge/Stash-task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.0.0-informational)
+![Version](https://img.shields.io/badge/version-1.1.0-informational)
 
 ## Features
 
@@ -253,7 +253,8 @@ Adds **scene tags** from text in **square brackets** in the filename — e.g. `[
 - **Create missing tags** — optional; on by default (no manual tag setup required)
 - **Manual task** — process the whole library once from **Tasks**
 - **Auto on new scenes** — optional hook after library scan (new scenes only)
-- Skips **organized** scenes; only **adds** tags, never removes existing ones
+- Skips **organized** scenes and scenes without any `[...]` in the filename
+- **Remove stale bracket tags** — optional; when a `[bracket]` disappears from the filename (e.g. after a rename), its tag is removed from the scene. Off by default: then tags are only added, never removed
 
 ## Requirements
 
@@ -281,6 +282,7 @@ Then **Settings → Plugins → Reload plugins**.
 |---------|---------|-------------|
 | **Create missing tags** | on | Create tags in Stash when the bracket name does not exist yet |
 | **Auto on new scenes** | off | Apply bracket tags automatically when a scene is created (e.g. after scan) |
+| **Remove stale bracket tags** | off | Remove tags whose `[bracket]` is no longer in the filename. All bracket tags are grouped under the parent tag **Bracket Tags** so the plugin knows which tags it manages; a manually added tag with the same name is removed too |
 
 ## Usage
 

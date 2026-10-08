@@ -1,6 +1,12 @@
 (function () {
   var PLUGIN_ID = "bracketTags";
   var BRACKET_RE = /\[([^\]]+)\]/g;
+  // Parent tag that marks every tag this plugin manages (only used with removeStaleTags)
+  var PARENT_TAG = "Bracket Tags";
+
+  // Per-run caches: one Stash lookup per tag name instead of one per scene
+  var tagCache = {}; // lower-case name -> tag id (or null if missing and not created)
+  var parentChecked = {}; // tag id -> true once it is a child of PARENT_TAG
 
   function ok(output) {
     return { output: output || "ok" };
@@ -18,6 +24,7 @@
     return {
       createMissingTags: cfg.createMissingTags !== false,
       autoOnScan: !!cfg.autoOnScan,
+      removeStaleTags: !!cfg.removeStaleTags,
     };
   }
 
@@ -88,25 +95,72 @@
     return null;
   }
 
-  function createTag(name) {
+  function createTag(name, parentId) {
     var mutation =
       "mutation TagCreate($input: TagCreateInput!) {\
         tagCreate(input: $input) { id name }\
       }";
-    var result = gql.Do(mutation, { input: { name: name } });
+    var input = { name: name };
+    if (parentId) input.parent_ids = [String(parentId)];
+    var result = gql.Do(mutation, { input: input });
     return result.tagCreate;
   }
 
-  function resolveTagId(name, createMissingTags) {
-    var existing = findTagByName(name);
+  function ensureParentTag() {
+    var existing = findTagByName(PARENT_TAG);
     if (existing) return existing.id;
-    if (!createMissingTags) {
-      log.Warn('Tag "' + name + '" not found; skipped.');
-      return null;
-    }
-    var created = createTag(name);
-    log.Info('Created tag "' + name + '"');
+    var created = createTag(PARENT_TAG, null);
+    log.Info('Created tag "' + PARENT_TAG + '"');
     return created.id;
+  }
+
+  function addParent(tagId, parentId) {
+    if (parentChecked[tagId] || String(tagId) === String(parentId)) return;
+    var result = gql.Do(
+      "query FindTagParents($id: ID!) { findTag(id: $id) { parents { id } } }",
+      { id: String(tagId) }
+    );
+    var parents = [];
+    var found = result.findTag && result.findTag.parents ? result.findTag.parents : [];
+    for (var i = 0; i < found.length; i++) parents.push(String(found[i].id));
+    if (!includesId(parents, parentId)) {
+      // parent_ids replaces all parents, so keep the existing ones
+      gql.Do(
+        "mutation TagUpdate($input: TagUpdateInput!) { tagUpdate(input: $input) { id } }",
+        { input: { id: String(tagId), parent_ids: parents.concat([String(parentId)]) } }
+      );
+    }
+    parentChecked[tagId] = true;
+  }
+
+  function getManagedTagIds(parentId) {
+    var result = gql.Do(
+      "query FindTagChildren($id: ID!) { findTag(id: $id) { children { id } } }",
+      { id: String(parentId) }
+    );
+    var ids = [];
+    var children = result.findTag && result.findTag.children ? result.findTag.children : [];
+    for (var i = 0; i < children.length; i++) ids.push(String(children[i].id));
+    return ids;
+  }
+
+  function resolveTagId(name, settings, parentId) {
+    var key = name.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(tagCache, key)) return tagCache[key];
+    var id = null;
+    var existing = findTagByName(name);
+    if (existing) {
+      id = existing.id;
+    } else if (settings.createMissingTags) {
+      id = createTag(name, parentId).id;
+      log.Info('Created tag "' + name + '"');
+      if (parentId) parentChecked[id] = true;
+    } else {
+      log.Warn('Tag "' + name + '" not found; skipped.');
+    }
+    if (id && parentId) addParent(id, parentId);
+    tagCache[key] = id;
+    return id;
   }
 
   function getScene(sceneId) {
@@ -171,53 +225,68 @@
     });
   }
 
-  function processScene(scene, settings) {
-    if (!scene) return { added: 0, skipped: "missing scene" };
-    if (scene.organized) return { added: 0, skipped: "organized" };
-
+  // Scenes the plugin works on: not organized and with at least one [bracket] in the filename.
+  // Scenes without brackets are never touched, also not by the stale-tag removal.
+  function bracketNames(scene) {
+    if (!scene) return { skipped: "missing scene" };
+    if (scene.organized) return { skipped: "organized" };
     var filename = getSceneFilename(scene);
-    if (!filename) return { added: 0, skipped: "no file" };
-
+    if (!filename) return { skipped: "no file" };
     var names = extractBracketTags(filename);
-    if (!names.length) return { added: 0, skipped: "no brackets" };
-
-    var existingIds = [];
-    if (scene.tags) {
-      for (var i = 0; i < scene.tags.length; i++) {
-        existingIds.push(scene.tags[i].id);
-      }
-    }
-
-    var newIds = [];
-    for (var j = 0; j < names.length; j++) {
-      var tagId = resolveTagId(names[j], settings.createMissingTags);
-      if (!tagId) continue;
-      if (!includesId(existingIds, tagId) && !includesId(newIds, tagId)) {
-        newIds.push(tagId);
-      }
-    }
-
-    if (!newIds.length) return { added: 0, skipped: "already tagged" };
-
-    setSceneTags(scene.id, existingIds.concat(newIds));
-    log.Info(
-      "Scene " +
-        scene.id +
-        ' ("' +
-        filename +
-        '"): added tags ' +
-        names.join(", ")
-    );
-    return { added: newIds.length };
+    if (!names.length) return { skipped: "no brackets" };
+    return { filename: filename, names: names };
   }
 
-  function processSceneById(sceneId, settings) {
-    return processScene(getScene(sceneId), settings);
+  // ctx.parentId / ctx.managed are set only when removeStaleTags is on
+  function processScene(scene, settings, ctx) {
+    var info = bracketNames(scene);
+    if (info.skipped) return { added: 0, removed: 0, skipped: info.skipped };
+
+    var wanted = [];
+    for (var j = 0; j < info.names.length; j++) {
+      var tagId = resolveTagId(info.names[j], settings, ctx.parentId);
+      if (tagId && !includesId(wanted, tagId)) wanted.push(tagId);
+    }
+
+    var keep = [];
+    var removed = [];
+    var tags = scene.tags || [];
+    for (var i = 0; i < tags.length; i++) {
+      var id = tags[i].id;
+      // A managed tag whose bracket is no longer in the filename is stale
+      if (ctx.managed && includesId(ctx.managed, id) && !includesId(wanted, id)) {
+        removed.push(id);
+      } else {
+        keep.push(id);
+      }
+    }
+    var added = [];
+    for (var k = 0; k < wanted.length; k++) {
+      if (!includesId(keep, wanted[k])) added.push(wanted[k]);
+    }
+
+    if (!added.length && !removed.length) return { added: 0, removed: 0, skipped: "already tagged" };
+
+    setSceneTags(scene.id, keep.concat(added));
+    log.Info(
+      "Scene " + scene.id + ' ("' + info.filename + '"): ' +
+        (added.length ? "added " + added.length + " tag(s)" : "") +
+        (added.length && removed.length ? ", " : "") +
+        (removed.length ? "removed " + removed.length + " stale tag(s)" : "") +
+        " [" + info.names.join(", ") + "]"
+    );
+    return { added: added.length, removed: removed.length };
+  }
+
+  function makeContext(settings) {
+    if (!settings.removeStaleTags) return { parentId: null, managed: null };
+    return { parentId: ensureParentTag(), managed: null };
   }
 
   function main() {
     var settings = getSettings();
     var mode = input.Args && input.Args.mode ? input.Args.mode : "allScenes";
+    var ctx;
 
     if (mode === "hook") {
       if (!settings.autoOnScan) {
@@ -228,22 +297,41 @@
       if (!hookContext || !hookContext.id) {
         return ok("no scene id");
       }
-      processSceneById(hookContext.id, settings);
+      var scene = getScene(hookContext.id);
+      ctx = makeContext(settings);
+      if (ctx.parentId) {
+        // resolve this scene's brackets first, so their tags are managed before stale ones are computed
+        var info = bracketNames(scene);
+        for (var h = 0; info.names && h < info.names.length; h++) resolveTagId(info.names[h], settings, ctx.parentId);
+        ctx.managed = getManagedTagIds(ctx.parentId);
+      }
+      processScene(scene, settings, ctx);
       return ok("hook done");
     }
 
     if (mode === "allScenes") {
       var scenes = getAllScenes();
+      ctx = makeContext(settings);
+      log.Info("Processing " + scenes.length + " scenes" + (ctx.parentId ? " (removing stale bracket tags)" : ""));
+      if (ctx.parentId) {
+        // Pass 1: resolve every bracket name once, so all current bracket tags carry the parent tag
+        for (var a = 0; a < scenes.length; a++) {
+          var names = bracketNames(scenes[a]).names || [];
+          for (var b = 0; b < names.length; b++) resolveTagId(names[b], settings, ctx.parentId);
+        }
+        ctx.managed = getManagedTagIds(ctx.parentId);
+      }
       var updated = 0;
-      log.Info("Processing " + scenes.length + " scenes");
+      var removedTotal = 0;
       for (var i = 0; i < scenes.length; i++) {
-        var result = processScene(scenes[i], settings);
-        if (result.added > 0) updated += 1;
+        var result = processScene(scenes[i], settings, ctx);
+        if (result.added > 0 || result.removed > 0) updated += 1;
+        removedTotal += result.removed || 0;
         if (scenes.length > 0) {
           log.Progress((i + 1) / scenes.length);
         }
       }
-      log.Info("Done. Updated " + updated + " scene(s).");
+      log.Info("Done. Updated " + updated + " scene(s)" + (ctx.parentId ? ", removed " + removedTotal + " stale tag(s)." : "."));
       return ok("updated " + updated);
     }
 
