@@ -1,13 +1,51 @@
+/* ── Design tokens ──
+   Stash ships Bootstrap 4 (--primary, --info …, no --bs-*). With the Stash UI plugin,
+   classic Stash also gets --st-* colours; prefer those so the panel follows its theme. */
+
+.quick-markers-panel,
+.quick-markers-touch-bar,
+.quick-markers-settings,
+.quick-markers-modal {
+  --qm-accent: var(--st-flush, var(--primary, #137cbd));
+  --qm-on-accent: var(--st-ink, #fff);
+  --qm-surface: var(--st-ink-2, #293742);
+  --qm-surface-2: var(--st-ink-3, #394b59);
+  --qm-text: var(--st-paper, #f5f8fa);
+  --qm-muted: var(--st-faint, #a7b6c2);
+  --qm-line: rgba(255, 255, 255, 0.12);
+  --qm-in: var(--st-shine, var(--info, #48aff0));
+  --qm-rec: var(--danger, #db3737);
+  --qm-ok: var(--success, #0f9960);
+  --qm-warn: var(--warning, #d9822b);
+  --qm-radius: 12px;
+  --qm-radius-sm: 8px;
+  --qm-font: var(--st-font, inherit);
+  --qm-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Floating scene panel ── */
+
 .quick-markers-panel {
   position: fixed;
   z-index: 1025;
-  max-width: 22rem;
-  padding: 0.65rem 0.75rem;
-  background: var(--bs-body-bg, #1a1a1a);
-  border: 1px solid var(--bs-border-color, #444);
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  width: max-content;
+  max-width: min(24rem, calc(100vw - 2rem));
+  padding: 0.6rem 0.7rem 0.7rem;
+  color: var(--qm-text);
+  font-family: var(--qm-font);
   font-size: 0.875rem;
+  background: color-mix(in srgb, var(--qm-surface) 86%, transparent);
+  border: 1px solid var(--qm-line);
+  border-radius: var(--qm-radius);
+  box-shadow: var(--qm-shadow);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+}
+
+@supports not (background: color-mix(in srgb, white 50%, transparent)) {
+  .quick-markers-panel {
+    background: var(--qm-surface);
+  }
 }
 
 .quick-markers-panel-pos-top-left {
@@ -39,96 +77,199 @@
 
 .quick-markers-panel-dragging {
   user-select: none;
-  opacity: 0.95;
+  opacity: 0.92;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
 }
 
 .quick-markers-panel-collapsed {
-  max-width: none;
-  padding: 0.4rem 0.55rem;
+  padding: 0.35rem 0.6rem 0.35rem 0.4rem;
+  border-radius: 999px;
 }
 
 .quick-markers-panel-collapsed .quick-markers-panel-header {
   flex-wrap: nowrap;
 }
 
-.quick-markers-panel-ui {
-  margin-bottom: 1rem;
-}
-
 .quick-markers-panel-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
   flex-wrap: wrap;
   cursor: grab;
   touch-action: none;
+  user-select: none;
 }
 
 .quick-markers-panel-dragging .quick-markers-panel-header {
   cursor: grabbing;
 }
 
-.quick-markers-panel-header .quick-markers-toggle {
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
 .quick-markers-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
   border: none;
+  border-radius: 50%;
   background: transparent;
   color: inherit;
-  padding: 0 0.25rem;
   cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.15s;
+}
+
+.quick-markers-toggle:hover {
+  background: var(--qm-line);
+}
+
+.quick-markers-chevron {
+  display: block;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.2s ease;
+}
+
+.quick-markers-toggle[aria-expanded="true"] .quick-markers-chevron {
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.quick-markers-title {
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .quick-markers-active {
-  font-size: 0.8rem;
-  opacity: 0.85;
-}
-
-.quick-markers-hint {
-  margin: 0.5rem 0 0;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
   font-size: 0.75rem;
-  line-height: 1.35;
+  font-weight: 600;
+  color: var(--qm-on-accent);
+  background: var(--qm-accent);
+  white-space: nowrap;
 }
 
-.quick-markers-hint kbd,
-.quick-markers-in-point kbd,
-.quick-markers-key {
-  font-size: 0.7rem;
-  padding: 0.1rem 0.35rem;
-  border-radius: 0.2rem;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.quick-markers-in-point {
-  margin: 0.35rem 0 0;
-  color: var(--bs-info, #6cf);
-}
-
-.quick-markers-status {
-  margin: 0.25rem 0 0;
+/* Recording badge: visible even when the panel is collapsed */
+.quick-markers-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--qm-rec);
+}
+
+.quick-markers-rec::before,
+.quick-markers-action-in.active .quick-markers-dot {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--qm-rec);
+  animation: quick-markers-pulse 1.4s ease-out infinite;
+}
+
+@keyframes quick-markers-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--qm-rec) 70%, transparent); }
+  100% { box-shadow: 0 0 0 0.45rem transparent; }
+}
+
+.quick-markers-actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.quick-markers-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--qm-line);
+  border-radius: var(--qm-radius-sm);
+  background: var(--qm-surface-2);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.quick-markers-action:hover:not(:disabled) {
+  border-color: var(--qm-accent);
+}
+
+.quick-markers-action:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.quick-markers-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.quick-markers-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+}
+
+.quick-markers-action-in.active {
+  border-color: var(--qm-rec);
+  background: color-mix(in srgb, var(--qm-rec) 18%, var(--qm-surface-2));
+}
+
+.quick-markers-action-in.active .quick-markers-dot {
+  border: none;
+}
+
+.quick-markers-action-instant {
+  border-color: var(--qm-accent);
+  background: var(--qm-accent);
+  color: var(--qm-on-accent);
+}
+
+.quick-markers-action-instant:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.quick-markers-action-clear {
+  min-width: 2rem;
+  padding: 0;
+  font-size: 1.1rem;
+  font-weight: 400;
+  background: transparent;
 }
 
 .quick-markers-presets {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.5rem;
+  gap: 0.3rem;
+  margin-top: 0.55rem;
 }
 
 .quick-markers-preset-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.4rem 0.25rem 0.65rem;
+  font: inherit;
   font-size: 0.8rem;
-  border: 1px solid var(--bs-border-color, #555);
-  border-radius: 0.35rem;
+  border: 1px solid var(--qm-line);
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
   color: inherit;
   cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .quick-markers-preset-btn:hover {
@@ -136,19 +277,73 @@
 }
 
 .quick-markers-preset-btn.active {
-  border-color: var(--bs-primary, #0d6efd);
-  background: rgba(13, 110, 253, 0.2);
+  border-color: var(--qm-accent);
+  background: color-mix(in srgb, var(--qm-accent) 24%, transparent);
+  font-weight: 600;
+}
+
+.quick-markers-panel kbd,
+.quick-markers-settings kbd,
+.quick-markers-modal kbd {
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.3rem;
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.quick-markers-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--qm-muted);
+}
+
+.quick-markers-status::before {
+  content: "✓";
+  color: var(--qm-ok);
+  font-weight: 700;
+}
+
+.quick-markers-hint {
+  margin: 0.55rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--qm-line);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--qm-muted);
+}
+
+/* ── Plugin settings (classic Stash) ── */
+
+.quick-markers-settings {
+  max-width: 48rem;
+}
+
+.quick-markers-settings-version {
+  font-size: 0.8rem;
 }
 
 .quick-markers-settings-intro {
   margin-bottom: 0.75rem;
+  line-height: 1.8;
 }
 
 .quick-markers-settings-note {
   font-size: 0.9rem;
   margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--qm-accent);
+  border-radius: 0 var(--qm-radius-sm) var(--qm-radius-sm) 0;
+  background: rgba(255, 255, 255, 0.04);
 }
 
+.quick-markers-panel-ui,
 .quick-markers-default-preset {
   margin-bottom: 1rem;
 }
@@ -163,8 +358,8 @@
 }
 
 .quick-markers-settings-list {
-  border: 1px solid var(--bs-border-color, #444);
-  border-radius: 0.35rem;
+  border: 1px solid var(--qm-line);
+  border-radius: var(--qm-radius-sm);
   overflow: hidden;
 }
 
@@ -174,7 +369,26 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(9.5rem, auto);
   gap: 0.5rem;
   align-items: center;
-  padding: 0.45rem 0.65rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.quick-markers-settings-list-header {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--qm-muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.quick-markers-settings-list-row {
+  border-top: 1px solid var(--qm-line);
+  font-size: 0.9rem;
+  transition: background 0.15s;
+}
+
+.quick-markers-settings-list-row:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .quick-markers-settings-list-actions {
@@ -183,26 +397,6 @@
   gap: 0.35rem;
   justify-content: flex-end;
   min-width: 9.5rem;
-}
-
-.quick-markers-settings-form-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.quick-markers-settings-list-header {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  opacity: 0.75;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.quick-markers-settings-list-row {
-  border-top: 1px solid var(--bs-border-color, #333);
-  font-size: 0.9rem;
 }
 
 .quick-markers-settings-keys {
@@ -215,9 +409,32 @@
   word-break: break-word;
 }
 
-.quick-markers-tags-help-link {
-  font-size: inherit;
-  vertical-align: baseline;
+.quick-markers-settings-add-body {
+  padding: 0.75rem 1rem 0.5rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--qm-line);
+  border-radius: var(--qm-radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.quick-markers-settings-key-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.quick-markers-settings-form-actions,
+.quick-markers-settings-json-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.quick-markers-settings .quick-markers-json,
+.quick-markers-modal .quick-markers-json {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85rem;
 }
 
 .quick-markers-tags-help-body p {
@@ -242,36 +459,16 @@
   padding: 0.65rem 0.75rem;
   font-size: 0.8rem;
   line-height: 1.4;
-  border-radius: 0.35rem;
+  color: var(--qm-text);
+  border-radius: var(--qm-radius-sm);
   background: rgba(0, 0, 0, 0.25);
-  border: 1px solid var(--bs-border-color, #444);
+  border: 1px solid var(--qm-line);
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.quick-markers-settings-json-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.quick-markers-settings-add-body {
-  padding: 0.5rem 0 0.25rem;
-}
-
-.quick-markers-settings-key-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-}
-
-.quick-markers-settings .quick-markers-json,
-.quick-markers-json-modal .quick-markers-json {
-  font-family: ui-monospace, monospace;
-  font-size: 0.85rem;
-}
+/* ── Modals (JSON editor, tags help) ── */
 
 .quick-markers-modal-backdrop {
   position: fixed;
@@ -282,6 +479,8 @@
   justify-content: center;
   padding: 1rem;
   background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .quick-markers-modal {
@@ -289,18 +488,20 @@
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  background: var(--bs-body-bg, #1a1a1a);
-  border: 1px solid var(--bs-border-color, #444);
-  border-radius: 0.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  color: var(--qm-text);
+  font-family: var(--qm-font);
+  background: var(--qm-surface);
+  border: 1px solid var(--qm-line);
+  border-radius: var(--qm-radius);
+  box-shadow: var(--qm-shadow);
 }
 
 .quick-markers-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--bs-border-color, #333);
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--qm-line);
 }
 
 .quick-markers-modal-title {
@@ -309,18 +510,21 @@
 }
 
 .quick-markers-modal-close {
+  width: 2rem;
+  height: 2rem;
   border: none;
+  border-radius: 50%;
   background: transparent;
   color: inherit;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   line-height: 1;
-  padding: 0 0.35rem;
   cursor: pointer;
   opacity: 0.75;
 }
 
 .quick-markers-modal-close:hover {
   opacity: 1;
+  background: var(--qm-line);
 }
 
 .quick-markers-modal-body {
@@ -334,45 +538,33 @@
   justify-content: flex-end;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  border-top: 1px solid var(--bs-border-color, #333);
+  border-top: 1px solid var(--qm-line);
 }
 
-/* ── Touch bar (Android / tablet) ── */
-/* Anchored to the player (not viewport bottom) so theme control/seek bars stay usable. */
+/* ── Touch bar (Android / tablet) ──
+   Lives in the page flow under the video (inside Stash's .VideoPlayer flex column),
+   never on top of it: the video shrinks a little instead of the controls being covered. */
+
+.quick-markers-touch-host {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+}
 
 .quick-markers-touch-bar {
-  /* Never full-bleed by default — only shown with .quick-markers-touch-bar-aligned
-     after JS measured the player (theme-safe vs seek/control bars). */
-  position: fixed;
-  z-index: 1020;
   box-sizing: border-box;
-  display: none;
-  padding: 0.45rem 0.65rem
-    calc(0.45rem + env(safe-area-inset-bottom, 0px));
-  color: var(--bs-body-color, inherit);
-  background: color-mix(
-    in srgb,
-    var(--bs-body-bg, #1a1a1a) 92%,
-    transparent
-  );
-  border-top: 1px solid var(--bs-border-color, rgba(255, 255, 255, 0.15));
-  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(6px);
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  color: var(--qm-text);
+  font-family: var(--qm-font);
+  background: var(--qm-surface);
+  border-bottom: 1px solid var(--qm-line);
+  border-radius: 0 0 var(--qm-radius-sm) var(--qm-radius-sm);
 }
 
-@supports not (background: color-mix(in srgb, white 50%, transparent)) {
-  .quick-markers-touch-bar {
-    background: var(--bs-body-bg, rgba(26, 26, 26, 0.94));
-  }
-}
-
-.quick-markers-touch-bar-aligned {
-  display: block;
-  right: auto;
-  bottom: auto;
-  margin: 0;
-  border: 1px solid var(--bs-border-color, rgba(255, 255, 255, 0.15));
-  border-radius: 0.5rem;
+.quick-markers-touch-bar-collapsed {
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 
 .quick-markers-touch-bar-header {
@@ -380,7 +572,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.45rem;
 }
 
 .quick-markers-touch-bar-collapsed .quick-markers-touch-bar-header {
@@ -389,11 +581,12 @@
 
 .quick-markers-touch-bar-toggle {
   min-height: 36px;
-  padding: 0.35rem 0.75rem;
-  border: 1px solid var(--bs-border-color, #555);
-  border-radius: 0.35rem;
-  background: rgba(255, 255, 255, 0.08);
+  padding: 0.35rem 0.85rem;
+  border: 1px solid var(--qm-line);
+  border-radius: 999px;
+  background: var(--qm-surface-2);
   color: inherit;
+  font: inherit;
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -406,87 +599,85 @@
 }
 
 .quick-markers-touch-bar-active {
+  max-width: 55%;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
   font-size: 0.8rem;
-  opacity: 0.8;
+  font-weight: 600;
+  color: var(--qm-on-accent);
+  background: var(--qm-accent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 55%;
-}
-
-.quick-markers-touch-bar.placement-below-player {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-}
-
-.quick-markers-touch-bar.placement-above-controls {
-  /* Over video, above seek/controls — keep it light so themes stay readable */
-  background: color-mix(
-    in srgb,
-    var(--bs-body-bg, #1a1a1a) 78%,
-    transparent
-  );
-  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
-}
-
-@supports not (background: color-mix(in srgb, white 50%, transparent)) {
-  .quick-markers-touch-bar.placement-above-controls {
-    background: rgba(20, 20, 20, 0.82);
-  }
 }
 
 .quick-markers-touch-actions {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.4rem;
+  gap: 0.45rem;
+  margin-bottom: 0.45rem;
 }
 
 .quick-markers-touch-btn {
   flex: 1;
-  min-height: 44px;
+  min-height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0.5rem 0.75rem;
+  font: inherit;
   font-size: 0.95rem;
-  font-weight: 600;
-  border: 2px solid transparent;
-  border-radius: 0.5rem;
-  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--qm-line);
+  border-radius: var(--qm-radius-sm);
+  background: var(--qm-surface-2);
+  color: var(--qm-text);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
-  transition: opacity 0.15s, transform 0.1s;
+  transition: background 0.15s, transform 0.1s;
 }
 
-.quick-markers-touch-btn:active {
+.quick-markers-touch-btn:active:not(:disabled) {
   transform: scale(0.95);
 }
 
 .quick-markers-touch-in {
-  background: var(--bs-info, #0dcaf0);
-  color: #000;
+  border-color: var(--qm-in);
+  box-shadow: inset 0 -3px 0 var(--qm-in);
 }
 
 .quick-markers-touch-in.active {
-  background: #0aa2c0;
-  border-color: #fff;
+  border-color: var(--qm-rec);
+  box-shadow: inset 0 -3px 0 var(--qm-rec);
+  background: color-mix(in srgb, var(--qm-rec) 22%, var(--qm-surface-2));
 }
 
 .quick-markers-touch-out {
-  background: var(--bs-success, #198754);
+  border-color: var(--qm-ok);
+  box-shadow: inset 0 -3px 0 var(--qm-ok);
 }
 
 .quick-markers-touch-out:disabled {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.3);
+  opacity: 0.35;
+  box-shadow: none;
+  border-color: var(--qm-line);
   cursor: default;
-  transform: none;
 }
 
 .quick-markers-touch-instant {
-  background: var(--bs-warning, #ffc107);
-  color: #000;
+  border-color: var(--qm-accent);
+  background: var(--qm-accent);
+  color: var(--qm-on-accent);
+}
+
+.quick-markers-touch-clear {
+  flex: 0 0 46px;
+  padding: 0;
+  font-size: 1.3rem;
+  font-weight: 400;
+  background: transparent;
 }
 
 .quick-markers-touch-presets {
@@ -496,13 +687,14 @@
 }
 
 .quick-markers-touch-preset {
-  padding: 0.35rem 0.75rem;
   min-height: 36px;
+  padding: 0.35rem 0.85rem;
+  font: inherit;
   font-size: 0.85rem;
   font-weight: 500;
-  border: 1px solid var(--bs-border-color, #555);
-  border-radius: 0.35rem;
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--qm-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
   color: inherit;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -510,20 +702,87 @@
 }
 
 .quick-markers-touch-preset.active {
-  border-color: var(--bs-primary, #0d6efd);
-  background: rgba(13, 110, 253, 0.25);
+  border-color: var(--qm-accent);
+  background: color-mix(in srgb, var(--qm-accent) 26%, transparent);
   font-weight: 600;
 }
 
 .quick-markers-touch-status {
-  margin-top: 0.3rem;
+  min-width: 0;
+  overflow: hidden;
   font-size: 0.8rem;
-  opacity: 0.75;
-  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--qm-muted);
+}
+
+/* Little height (phone in landscape): everything in one scrollable row, so the video keeps its space. */
+@media (max-height: 520px) {
+  .quick-markers-touch-bar:not(.quick-markers-touch-bar-collapsed) {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.5rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .quick-markers-touch-bar:not(.quick-markers-touch-bar-collapsed) .quick-markers-touch-bar-header,
+  .quick-markers-touch-bar:not(.quick-markers-touch-bar-collapsed) .quick-markers-touch-actions,
+  .quick-markers-touch-bar:not(.quick-markers-touch-bar-collapsed) .quick-markers-touch-presets {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    margin: 0;
+  }
+
+  .quick-markers-touch-bar:not(.quick-markers-touch-bar-collapsed) .quick-markers-touch-status {
+    display: none;
+  }
+
+  .quick-markers-touch-btn {
+    flex: 0 0 auto;
+    min-height: 36px;
+    min-width: 4.5rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .quick-markers-touch-clear {
+    flex-basis: 36px;
+    min-width: 36px;
+  }
+
+  .quick-markers-touch-bar-toggle,
+  .quick-markers-touch-preset {
+    min-height: 36px;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
+}
+
+/* ── Focus, touch, motion ── */
+
+.quick-markers-panel button:focus-visible,
+.quick-markers-touch-bar button:focus-visible {
+  outline: 2px solid var(--qm-accent);
+  outline-offset: 2px;
 }
 
 @media (pointer: coarse) {
   .quick-markers-panel .quick-markers-hint {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-markers-rec::before,
+  .quick-markers-action-in.active .quick-markers-dot {
+    animation: none;
+  }
+
+  .quick-markers-chevron,
+  .quick-markers-action,
+  .quick-markers-touch-btn {
+    transition: none;
   }
 }

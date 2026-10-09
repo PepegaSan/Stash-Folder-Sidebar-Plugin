@@ -144,7 +144,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.3.3-informational)
+![Version](https://img.shields.io/badge/version-1.4.0-informational)
 
 ## Requirements
 
@@ -170,10 +170,22 @@ Create **scene markers** from the scene player with **presets** (e.g. tag `Compi
 2. Press **Shift+3** (etc.) to select the preset assigned to that slot, **or** click it in the panel.
 3. Use **Shift+I** at start, **Shift+O** at end → range marker with that preset’s tag.
 4. Or press **Shift+M** for an instant marker at the current time (active preset).
-5. Optional: floating **Quick Markers** panel (corner in settings; collapsed by default) — **drag the header** to move it, double-click header to reset; `Shift+[` / `Shift+]` also cycle presets.
-6. **Android / tablet:** touch bar (**IN** / **OUT** / **INSTANT** + presets) aligned to the player — sits under the player, or just above the seek/control bar if space is tight (theme-friendly). Use **Hide** / **▲ Quick Markers** to collapse or expand; remembered across scenes. Auto-enabled on touch devices; override in settings.
+5. Optional: floating **Quick Markers** panel (corner in settings; collapsed by default) — **In / Out / + Instant** buttons, preset chips with their `⇧1–9` slot, and a red recording badge with the in time (also when collapsed; **×** discards the in point). **Drag the header** to move it, double-click header to reset; `Shift+[` / `Shift+]` also cycle presets.
+6. **Android / tablet:** touch bar (**IN** / **OUT** / **INSTANT** + presets) directly under the video, part of the page — never on top of the player, so the seek bar and player settings stay reachable; the video gets a little smaller instead. One compact row on low screens (phone in landscape), **×** discards the in point. Use **Hide** / **▲ Quick Markers** to collapse or expand; remembered across scenes. Auto-enabled on touch devices; override in settings.
 
 Markers are saved via GraphQL; open the **Markers** tab or refresh if the list does not update immediately.
+
+## Stash UI
+
+With the [Stash UI](https://github.com/AffordObedienceUntamed/stash-pmv-plugins) plugin (alternative interface, extension API v2), Quick Markers loads `stashui.js` from this plugin automatically — nothing to configure:
+
+- **Player info bar → Quick Markers** — In / Out / Instant buttons, preset chips, live range while recording (`0:12 → 0:30`); the markers list and timeline pins refresh after each marker
+- **Same hotkeys** as in classic Stash. They are caught before the Stash UI player, so `Shift+I` / `Shift+O` / `Shift+M` no longer also fold the info bar, add an O or mute. Plain `I` / `O` / `M` keep their player function. Shift+1–9 works on any keyboard layout
+- **Missing tag** — the error message has a **Create tag** button and then saves the marker
+- **Settings → Plugins → Quick Markers** — preset list with **edit** (label, tags, select slot, In / Out / Instant keys) and delete, default preset, add preset, JSON editor; same storage (`presetsJson`) as classic Stash
+- Follows Stash UI's colour presets, liquid glass and interface language (English / German)
+
+The classic panel and touch bar also pick up the Stash UI colours when Stash UI restyles classic Stash.
 
 ## Configuration
 
@@ -232,8 +244,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.3.3`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.3.3**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.4.0`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.4.0**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -424,6 +436,13 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.1`.
 ---
 
 ## Changelog
+
+### Quick Markers 1.4.0
+
+- **Stash UI support** — section in the player info bar, hotkeys that no longer clash with the Stash UI player (`Shift+I/O/M`), settings page under Settings → Plugins (add / edit / delete presets), *Create tag* for missing tags
+- **Modern scene panel** — In / Out / + Instant buttons, pill-shaped preset chips with `⇧1–9` badges, recording badge with in time (visible when collapsed), discard in point
+- **Touch bar under the video** — no longer floats over the player (it used to jump into the picture or cover the seek bar / player settings depending on the player); it sits in the page right under the video, keeps its height when you press IN, one row in landscape
+- **Theme colours** — panel, touch bar and settings use Stash's real colour variables (Bootstrap 4) and the Stash UI theme when present, instead of fixed fallbacks
 
 ### Tag Categories 1.4.1
 

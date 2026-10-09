@@ -2,13 +2,11 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.3.3";
+  const PLUGIN_VERSION = "1.4.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
-  const TOUCH_BAR_GAP = 6;
-  const TOUCH_BAR_FALLBACK_HEIGHT = 112;
-  const TOUCH_BAR_COLLAPSED_HEIGHT = 44;
+  const TOUCH_HOST_CLASS = "quick-markers-touch-host";
   const DEFAULT_INSTANT_KEY = "shift+m";
   const PRESET_SELECT_KEY_RE = /^shift\+[1-9]$/;
   const VALID_PANEL_POSITIONS = [
@@ -28,6 +26,11 @@
   }
 
   const React = PluginApi.React;
+  const ReactDOM = PluginApi.ReactDOM || window.ReactDOM;
+  const createPortal =
+    ReactDOM && typeof ReactDOM.createPortal === "function"
+      ? ReactDOM.createPortal
+      : null;
   const GQL = PluginApi.GQL;
   const utils = PluginApi.utils || {};
   const libraries = PluginApi.libraries || {};
@@ -206,102 +209,20 @@
     };
   }
 
-  function findPlayerElement() {
-    const preferred = [
-      ".video-js",
-      "#VideoJsPlayer",
-      ".VideoPlayer",
-      ".scene-player",
-    ];
-    for (let i = 0; i < preferred.length; i++) {
-      const el = document.querySelector(preferred[i]);
-      if (el && el.getBoundingClientRect().width > 40) return el;
+  /**
+   * Where the touch bar sits: in the page flow right under the video, inside
+   * Stash's .VideoPlayer (a height-capped flex column), so the video gets a
+   * little smaller instead of being covered. Nothing is positioned over the
+   * player, so its seek bar and settings stay reachable in every theme.
+   */
+  function findTouchBarAnchor() {
+    const wrapper = document.querySelector(".VideoPlayer > .video-wrapper");
+    if (wrapper) return wrapper;
+    const player = document.querySelector(".video-js, #VideoJsPlayer");
+    if (player && player.parentElement) {
+      return player.closest(".video-wrapper") || player;
     }
-    const tech = document.querySelector(".vjs-tech, video");
-    if (!tech) return null;
-    const wrap = tech.closest(".video-js, .VideoPlayer, .scene-player");
-    return wrap || tech.parentElement || tech;
-  }
-
-  function findPlayerControls(playerEl) {
-    if (!playerEl || !playerEl.querySelector) return null;
-    const controlBar =
-      playerEl.querySelector(".vjs-control-bar") ||
-      playerEl.querySelector("[class*='control-bar']");
-    const progress =
-      playerEl.querySelector(".vjs-progress-control") ||
-      playerEl.querySelector(".vjs-progress-holder") ||
-      (controlBar &&
-        controlBar.querySelector(
-          ".vjs-progress-control, .vjs-progress-holder, [class*='progress']"
-        ));
-    return { controlBar: controlBar, progress: progress };
-  }
-
-  function measureTouchBarLayout(playerEl, barHeight) {
-    const rect = playerEl.getBoundingClientRect();
-    if (rect.width < 40) return null;
-
-    const left = Math.round(rect.left);
-    const width = Math.round(rect.width);
-    const height = barHeight > 0 ? barHeight : TOUCH_BAR_FALLBACK_HEIGHT;
-    const controls = findPlayerControls(playerEl);
-
-    let anchorBottom = rect.bottom;
-    let controlsTop = null;
-
-    if (controls) {
-      if (controls.controlBar) {
-        const cb = controls.controlBar.getBoundingClientRect();
-        if (cb.width > 0 && cb.height > 0) {
-          anchorBottom = Math.max(anchorBottom, cb.bottom);
-          controlsTop = cb.top;
-        }
-      }
-      if (controls.progress) {
-        const pr = controls.progress.getBoundingClientRect();
-        if (pr.width > 0 && pr.height > 0) {
-          anchorBottom = Math.max(anchorBottom, pr.bottom);
-          controlsTop =
-            controlsTop == null ? pr.top : Math.min(controlsTop, pr.top);
-        }
-      }
-    }
-
-    const spaceBelow = window.innerHeight - anchorBottom - TOUCH_BAR_GAP;
-    let top;
-    let placement;
-
-    if (spaceBelow >= height) {
-      top = Math.round(anchorBottom + TOUCH_BAR_GAP);
-      placement = "below-player";
-    } else if (
-      controlsTop != null &&
-      controlsTop - height - TOUCH_BAR_GAP > rect.top + 8
-    ) {
-      // Keep the seek/control bar free: sit just above it (over video).
-      top = Math.round(controlsTop - height - TOUCH_BAR_GAP);
-      placement = "above-controls";
-    } else {
-      top = Math.round(
-        Math.max(TOUCH_BAR_GAP, window.innerHeight - height - TOUCH_BAR_GAP)
-      );
-      if (controlsTop != null && top + height > controlsTop - TOUCH_BAR_GAP) {
-        top = Math.round(
-          Math.max(rect.top + 8, controlsTop - height - TOUCH_BAR_GAP)
-        );
-        placement = "above-controls";
-      } else {
-        placement = "viewport-bottom";
-      }
-    }
-
-    return {
-      left: left,
-      width: width,
-      top: top,
-      placement: placement,
-    };
+    return null;
   }
 
   function getDefaultPresetsConfig() {
@@ -649,10 +570,9 @@
     });
     const [panelPos, setPanelPos] = React.useState(readStoredPanelPos);
     const [panelDragging, setPanelDragging] = React.useState(false);
-    const [playerLayout, setPlayerLayout] = React.useState(null);
+    const [touchHost, setTouchHost] = React.useState(null);
     const panelInitRef = React.useRef(false);
     const panelRef = React.useRef(null);
-    const touchBarRef = React.useRef(null);
     const dragRef = React.useRef(null);
     const panelPosRef = React.useRef(panelPos);
 
@@ -673,78 +593,34 @@
       [config]
     );
 
+    const touchEnabled =
+      !!config && isTouchActive(normalizeTouchControls(config.touchControls));
+
     React.useEffect(
       function () {
-        let cancelled = false;
-        let resizeObserver = null;
-        const observed = [];
+        if (!touchEnabled) return;
+        const host = document.createElement("div");
+        host.className = TOUCH_HOST_CLASS;
 
-        function observeEl(el) {
-          if (!el || !resizeObserver || observed.indexOf(el) >= 0) return;
-          try {
-            resizeObserver.observe(el);
-            observed.push(el);
-          } catch (e) {
-            /* ignore */
+        // The player can re-mount (scene change, theme, quality switch): put the host back under it.
+        function place() {
+          const anchor = findTouchBarAnchor();
+          if (!anchor || !anchor.parentElement) return;
+          if (host.parentElement !== anchor.parentElement || host.previousElementSibling !== anchor) {
+            anchor.parentElement.insertBefore(host, anchor.nextSibling);
           }
+          setTouchHost(host);
         }
 
-        function updatePlayerLayout() {
-          const el = findPlayerElement();
-          if (!el) {
-            if (!cancelled) setPlayerLayout(null);
-            return;
-          }
-          observeEl(el);
-          const controls = findPlayerControls(el);
-          if (controls) {
-            observeEl(controls.controlBar);
-            observeEl(controls.progress);
-          }
-          const barEl = touchBarRef.current;
-          const barHeight = barEl
-            ? barEl.getBoundingClientRect().height
-            : touchBarOpen
-              ? TOUCH_BAR_FALLBACK_HEIGHT
-              : TOUCH_BAR_COLLAPSED_HEIGHT;
-          const next = measureTouchBarLayout(el, barHeight);
-          if (!next) {
-            if (!cancelled) setPlayerLayout(null);
-            return;
-          }
-          if (!cancelled) {
-            setPlayerLayout(function (prev) {
-              if (
-                prev &&
-                prev.left === next.left &&
-                prev.width === next.width &&
-                prev.top === next.top &&
-                prev.placement === next.placement
-              ) {
-                return prev;
-              }
-              return next;
-            });
-          }
-        }
-
-        if (typeof ResizeObserver !== "undefined") {
-          resizeObserver = new ResizeObserver(updatePlayerLayout);
-        }
-        updatePlayerLayout();
-        const intervalId = setInterval(updatePlayerLayout, 400);
-        window.addEventListener("resize", updatePlayerLayout);
-        window.addEventListener("scroll", updatePlayerLayout, true);
-
+        place();
+        const intervalId = setInterval(place, 1000);
         return function () {
-          cancelled = true;
           clearInterval(intervalId);
-          window.removeEventListener("resize", updatePlayerLayout);
-          window.removeEventListener("scroll", updatePlayerLayout, true);
-          if (resizeObserver) resizeObserver.disconnect();
+          if (host.parentElement) host.parentElement.removeChild(host);
+          setTouchHost(null);
         };
       },
-      [scene.id, config, touchBarOpen]
+      [scene.id, touchEnabled]
     );
 
     function togglePanelOpen() {
@@ -939,6 +815,15 @@
       [createAt, scene.id, Toast]
     );
 
+    const onClearIn = React.useCallback(
+      function () {
+        inPointByScene.delete(scene.id);
+        setInPoint(null);
+        setStatus("");
+      },
+      [scene.id]
+    );
+
     React.useEffect(
       function () {
         if (!config || !scene) return;
@@ -1047,10 +932,6 @@
     const panelPosition = normalizePanelPosition(
       config.panelPosition || "top-left"
     );
-    const showTouchBar = isTouchActive(
-      normalizeTouchControls(config.touchControls)
-    );
-
     var panelStyle = panelPos
       ? {
           left: panelPos.left + "px",
@@ -1092,60 +973,105 @@
                   className: "quick-markers-toggle",
                   onClick: togglePanelOpen,
                   title: panelOpen ? "Collapse" : "Expand",
+                  "aria-expanded": panelOpen,
                 },
-                panelOpen ? "▼" : "▶"
+                React.createElement("span", {
+                  className: "quick-markers-chevron",
+                  "aria-hidden": true,
+                })
               ),
-              React.createElement("strong", null, "Quick Markers"),
+              React.createElement(
+                "strong",
+                { className: "quick-markers-title" },
+                "Quick Markers"
+              ),
               React.createElement(
                 "span",
                 { className: "quick-markers-active" },
                 activePreset.label
-              )
+              ),
+              inPoint != null
+                ? React.createElement(
+                    "span",
+                    {
+                      className: "quick-markers-rec",
+                      title: "Recording — press " + (activePreset.rangeOutKey || "Out") + " to save",
+                    },
+                    formatTime(inPoint)
+                  )
+                : null
             ),
             panelOpen
               ? React.createElement(
                   React.Fragment,
                   null,
                   React.createElement(
-                    "p",
-                    { className: "quick-markers-hint text-muted" },
-                    "Range: ",
-                    React.createElement("kbd", null, activePreset.rangeInKey || "—"),
-                    " In / ",
-                    React.createElement("kbd", null, activePreset.rangeOutKey || "—"),
-                    " Out · Instant: ",
-                    React.createElement("kbd", null, activePreset.instantKey || "—"),
-                    " · Preset: ",
-                    React.createElement("kbd", null, "shift+1"),
-                    "–",
-                    React.createElement("kbd", null, "9")
+                    "div",
+                    { className: "quick-markers-actions" },
+                    React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className:
+                          "quick-markers-action quick-markers-action-in" +
+                          (inPoint != null ? " active" : ""),
+                        title: "In point (" + (activePreset.rangeInKey || "—") + ")",
+                        onClick: function () {
+                          onRangeIn(activePreset);
+                        },
+                      },
+                      React.createElement("span", {
+                        className: "quick-markers-dot",
+                        "aria-hidden": true,
+                      }),
+                      inPoint != null ? "In " + formatTime(inPoint) : "In"
+                    ),
+                    React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className: "quick-markers-action",
+                        disabled: inPoint == null,
+                        title: "Out point + save range (" + (activePreset.rangeOutKey || "—") + ")",
+                        onClick: function () {
+                          onRangeOut(activePreset);
+                        },
+                      },
+                      "Out"
+                    ),
+                    React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className: "quick-markers-action quick-markers-action-instant",
+                        title: "Instant marker (" + (activePreset.instantKey || "—") + ")",
+                        onClick: function () {
+                          onInstant(activePreset);
+                        },
+                      },
+                      "+ Instant"
+                    ),
+                    inPoint != null
+                      ? React.createElement(
+                          "button",
+                          {
+                            type: "button",
+                            className: "quick-markers-action quick-markers-action-clear",
+                            title: "Discard in point",
+                            "aria-label": "Discard in point",
+                            onClick: onClearIn,
+                          },
+                          "×"
+                        )
+                      : null
                   ),
-                  inPoint != null
-                    ? React.createElement(
-                        "p",
-                        { className: "quick-markers-in-point" },
-                        "In: ",
-                        formatTime(inPoint),
-                        " — press ",
-                        React.createElement("kbd", null, activePreset.rangeOutKey || "Out"),
-                        " to save"
-                      )
-                    : null,
-                  status
-                    ? React.createElement(
-                        "p",
-                        { className: "quick-markers-status text-muted" },
-                        status
-                      )
-                    : null,
                   React.createElement(
                     "div",
                     { className: "quick-markers-presets" },
                     config.presets.map(function (preset, index) {
                       const isActive = index === activeIndex;
-                      const selectKey = selectSlotToKey(
-                        normalizeSelectSlot(preset.selectSlot, index)
-                      );
+                      const slot = normalizeSelectSlot(preset.selectSlot, index);
+                      const selectKey = selectSlotToKey(slot);
                       return React.createElement(
                         "button",
                         {
@@ -1154,6 +1080,7 @@
                           className:
                             "quick-markers-preset-btn" +
                             (isActive ? " active" : ""),
+                          "aria-pressed": isActive,
                           title: selectKey
                             ? "Click or " +
                               selectKey +
@@ -1167,15 +1094,34 @@
                           },
                         },
                         preset.label,
-                        selectKey
+                        slot
                           ? React.createElement(
-                              "span",
+                              "kbd",
                               { className: "quick-markers-key" },
-                              selectKey
+                              "⇧" + slot
                             )
                           : null
                       );
                     })
+                  ),
+                  status
+                    ? React.createElement(
+                        "p",
+                        { className: "quick-markers-status" },
+                        status
+                      )
+                    : null,
+                  React.createElement(
+                    "p",
+                    { className: "quick-markers-hint" },
+                    React.createElement("kbd", null, activePreset.rangeInKey || "—"),
+                    " In · ",
+                    React.createElement("kbd", null, activePreset.rangeOutKey || "—"),
+                    " Out · ",
+                    React.createElement("kbd", null, activePreset.instantKey || "—"),
+                    " Instant · ",
+                    React.createElement("kbd", null, "shift+1–9"),
+                    " Preset"
                   ),
                   configError
                     ? React.createElement(
@@ -1189,29 +1135,14 @@
           )
         : null;
 
-    var touchBarStyle = playerLayout
-      ? {
-          left: playerLayout.left + "px",
-          width: playerLayout.width + "px",
-          top: playerLayout.top + "px",
-          right: "auto",
-          bottom: "auto",
-        }
-      : undefined;
-
-    // Only mount when player geometry is known — avoids covering theme seek bars
-    // with the full-bleed CSS fallback (bottom:0; left:0; right:0).
     var touchBar =
-      showTouchBar && playerLayout
-        ? React.createElement(
+      touchEnabled && touchHost && createPortal
+        ? createPortal(React.createElement(
             "div",
             {
-              ref: touchBarRef,
               className:
-                "quick-markers-touch-bar quick-markers-touch-bar-aligned placement-" +
-                (playerLayout.placement || "below-player") +
+                "quick-markers-touch-bar" +
                 (touchBarOpen ? "" : " quick-markers-touch-bar-collapsed"),
-              style: touchBarStyle,
             },
             React.createElement(
               "div",
@@ -1229,13 +1160,18 @@
                 },
                 touchBarOpen ? "▼ Hide" : "▲ Quick Markers"
               ),
-              !touchBarOpen
+              // Status sits in the header row, so a new message never changes the bar height (no video jump).
+              touchBarOpen
                 ? React.createElement(
+                    "span",
+                    { className: "quick-markers-touch-status" },
+                    status
+                  )
+                : React.createElement(
                     "span",
                     { className: "quick-markers-touch-bar-active" },
                     activePreset.label
                   )
-                : null
             ),
             touchBarOpen
               ? React.createElement(
@@ -1281,7 +1217,20 @@
                         },
                       },
                       "INSTANT"
-                    )
+                    ),
+                    inPoint != null
+                      ? React.createElement(
+                          "button",
+                          {
+                            type: "button",
+                            className:
+                              "quick-markers-touch-btn quick-markers-touch-clear",
+                            "aria-label": "Discard in point",
+                            onClick: onClearIn,
+                          },
+                          "×"
+                        )
+                      : null
                   ),
                   React.createElement(
                     "div",
@@ -1303,17 +1252,10 @@
                         preset.label
                       );
                     })
-                  ),
-                  status
-                    ? React.createElement(
-                        "div",
-                        { className: "quick-markers-touch-status" },
-                        status
-                      )
-                    : null
+                  )
                 )
               : null
-          )
+          ), touchHost)
         : null;
 
     return React.createElement(React.Fragment, null, floatingPanel, touchBar);
@@ -1879,7 +1821,7 @@
         React.createElement(
           "p",
           { className: "text-muted small mb-0" },
-          "Shows IN / OUT / INSTANT under the player (or just above the seek bar if there is no room). Width follows the player so themes keep their timeline usable. Auto-detect: touch devices on, desktop off."
+          "Shows IN / OUT / INSTANT directly under the video, in the page (never on top of the player), so the seek bar and player settings stay reachable. One compact row when the screen is low (phone in landscape). Auto-detect: touch devices on, desktop off."
         )
       ),
       config.presets.length > 0
