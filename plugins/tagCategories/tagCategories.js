@@ -2,8 +2,10 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.4.1";
-  const SEARCH_DEBOUNCE_MS = 180;
+  const PLUGIN_VERSION = "1.5.0";
+  const SEARCH_DEBOUNCE_MS = 250;
+  const PAGE_SIZE = 60; // scenes per request; more are loaded while scrolling
+  const CHIPS_COLLAPSED = 24; // tag chips shown before "+N more"
   const ROUTE_PATH = "/plugins/tag-categories";
   const LEGACY_ROUTE_PATH = "/plugin/tag-categories";
   const ASSETS_CATEGORIES = "/plugin/" + PLUGIN_ID + "/assets/categories.json";
@@ -18,6 +20,16 @@
     "date-desc",
     "date-asc",
   ];
+  // Sort modes are applied by the Stash server (sort + direction of the scene query)
+  const SORT_QUERY = {
+    "title-asc": { sort: "title", direction: "ASC" },
+    "title-desc": { sort: "title", direction: "DESC" },
+    "duration-desc": { sort: "duration", direction: "DESC" },
+    "duration-asc": { sort: "duration", direction: "ASC" },
+    "date-desc": { sort: "date", direction: "DESC" },
+    "date-asc": { sort: "date", direction: "ASC" },
+  };
+  const EMPTY_SEL = { on: [], not: [], mode: "any" };
 
   const PluginApi = window.PluginApi;
   if (!PluginApi || !PluginApi.React) {
@@ -109,7 +121,7 @@
         PLUGIN_VERSION +
         " — if you do not see this version, Stash is still using old plugin files.",
       intro:
-        "Define named categories with comma-separated tags. Open Categories in the main menu, click a category, and see every scene that has any of those tags.",
+        "Define named categories with comma-separated tags (optionally with their sub-tags). Open Categories in the main menu, click a category, and see every scene that has any of those tags. Narrow it down with the tag chips.",
       loadedFromFile: "Loaded from",
       loadedFromFileSuffix: ". Saving here overrides the file.",
       usingDefaultsPrefix: "Using built-in defaults (no",
@@ -139,7 +151,7 @@
       helpJson: "Help: categories JSON",
       jsonModalTitle: "Edit categories (JSON)",
       jsonModalHint:
-        "categories array: name, tags. Optional id = fixed browser URL.",
+        "categories array: name, tags. Optional: subTags: true = include sub-tags, id = fixed browser URL.",
       close: "Close",
       save: "Save",
       nameRequired: "Category name is required.",
@@ -168,7 +180,6 @@
       searchPlaceholder: "Search in this category…",
       searchClear: "Clear search",
       noSearchMatches: "No scenes match this search.",
-      scenesFiltered: "{shown} of {total}",
       sortLabel: "Sort",
       sortTitleAsc: "Title A–Z",
       sortTitleDesc: "Title Z–A",
@@ -190,6 +201,24 @@
         "Click Save in the JSON dialog, then Reload plugins / Reload UI if the menu page does not update.",
       helpWarning:
         "Matching is OR: a scene appears if it has at least one of the category tags. Tag names must match Stash exactly (case-insensitive lookup).",
+      subTagsLabel: "Include sub-tags",
+      subTagsHelp:
+        "Scenes with a child tag of these tags count too (Stash tag hierarchy, any depth). Handy for a parent tag: new child tags show up in the category automatically.",
+      subTagsShort: "+ sub-tags",
+      chipsHint: "Click: select · Right-click: exclude",
+      matchLabel: "Selected tags",
+      matchAny: "Any of them",
+      matchAll: "All",
+      chipsReset: "Reset",
+      chipsMore: "+{n} more",
+      chipsLess: "Show less",
+      excludedTitle: "Excluded – click to remove",
+      loadMore: "Load more ({shown} of {total})",
+      openInStash: "Open in Stash",
+      openInStashTitle:
+        "Same selection as a regular Stash scene list: pages, bulk edit, queue",
+      noSelectionMatches: "No scenes match this tag selection.",
+      totalDuration: "{d} in total",
       helpOk: "OK",
     },
     de: {
@@ -199,7 +228,7 @@
         PLUGIN_VERSION +
         " — wenn diese Version fehlt, nutzt Stash noch alte Plugin-Dateien.",
       intro:
-        "Kategorien mit komma-getrennten Tags anlegen. Im Hauptmenü Kategorien öffnen, eine Kategorie anklicken — dann erscheinen alle Szenen, die eines dieser Tags haben.",
+        "Kategorien mit komma-getrennten Tags anlegen (auf Wunsch samt Unter-Tags). Im Hauptmenü Kategorien öffnen, eine Kategorie anklicken — dann erscheinen alle Szenen, die eines dieser Tags haben. Mit den Tag-Chips weiter eingrenzen.",
       loadedFromFile: "Geladen aus",
       loadedFromFileSuffix: ". Speichern hier überschreibt die Datei.",
       usingDefaultsPrefix: "Eingebaute Defaults (keine",
@@ -229,7 +258,7 @@
       helpJson: "Hilfe: Kategorien-JSON",
       jsonModalTitle: "Kategorien bearbeiten (JSON)",
       jsonModalHint:
-        "categories-Array: name, tags. Optionale id = feste URL im Browser.",
+        "categories-Array: name, tags. Optional: subTags: true = Unter-Tags einbeziehen, id = feste URL im Browser.",
       close: "Schließen",
       save: "Speichern",
       nameRequired: "Kategoriename ist erforderlich.",
@@ -258,7 +287,6 @@
       searchPlaceholder: "In dieser Kategorie suchen…",
       searchClear: "Suche leeren",
       noSearchMatches: "Keine Szenen passen zur Suche.",
-      scenesFiltered: "{shown} von {total}",
       sortLabel: "Sortierung",
       sortTitleAsc: "Titel A–Z",
       sortTitleDesc: "Titel Z–A",
@@ -280,6 +308,24 @@
         "Im JSON-Dialog Speichern — danach ggf. Reload plugins / Reload UI.",
       helpWarning:
         "ODER-Logik: Eine Szene erscheint, wenn sie mindestens eines der Tags hat. Tag-Namen müssen zu Stash passen (Suche ohne Groß-/Kleinschreibung).",
+      subTagsLabel: "Unter-Tags einbeziehen",
+      subTagsHelp:
+        "Szenen mit einem Unter-Tag dieser Tags zählen mit (Tag-Hierarchie in Stash, beliebig tief). Praktisch für einen Eltern-Tag: neue Unter-Tags landen automatisch in der Kategorie.",
+      subTagsShort: "+ Unter-Tags",
+      chipsHint: "Klick: auswählen · Rechtsklick: ausschließen",
+      matchLabel: "Ausgewählte Tags",
+      matchAny: "Eines davon",
+      matchAll: "Alle",
+      chipsReset: "Zurücksetzen",
+      chipsMore: "+{n} weitere",
+      chipsLess: "Weniger",
+      excludedTitle: "Ausgeschlossen – Klick hebt es auf",
+      loadMore: "Mehr laden ({shown} von {total})",
+      openInStash: "In Stash öffnen",
+      openInStashTitle:
+        "Dieselbe Auswahl als normale Szenenliste in Stash: Seiten, Mehrfach-Bearbeitung, Warteschlange",
+      noSelectionMatches: "Keine Szenen passen zu dieser Tag-Auswahl.",
+      totalDuration: "{d} insgesamt",
       helpOk: "OK",
     },
   };
@@ -350,7 +396,7 @@
     if (!name) return null;
     const tags = uniqueStrings(parseTagsList(raw.tags));
     const id = String(raw.id || "").trim() || slugId(name) + "-" + index;
-    return { id: id, name: name, tags: tags };
+    return { id: id, name: name, tags: tags, subTags: !!raw.subTags };
   }
 
   function parseCategoriesJson(text) {
@@ -378,11 +424,13 @@
     return JSON.stringify(
       {
         categories: (config.categories || []).map(function (c) {
-          return {
+          const out = {
             id: c.id,
             name: c.name,
             tags: c.tags || [],
           };
+          if (c.subTags) out.subTags = true;
+          return out;
         }),
       },
       null,
@@ -489,63 +537,6 @@
     }
   }
 
-  function durationSortValue(scene) {
-    const d = sceneDuration(scene);
-    if (d == null || isNaN(d)) return null;
-    return d;
-  }
-
-  function dateSortValue(scene) {
-    if (!scene || !scene.date) return 0;
-    const t = Date.parse(scene.date);
-    return isNaN(t) ? 0 : t;
-  }
-
-  function compareTitles(a, b) {
-    return sceneTitle(a).localeCompare(sceneTitle(b), undefined, {
-      sensitivity: "base",
-      numeric: true,
-    });
-  }
-
-  function compareNullableNumbers(a, b, descending) {
-    if (a == null && b == null) return 0;
-    if (a == null) return 1;
-    if (b == null) return -1;
-    return descending ? b - a : a - b;
-  }
-
-  function sortScenes(list, mode) {
-    const copy = list.slice();
-    copy.sort(function (a, b) {
-      let cmp = 0;
-      if (mode === "duration-desc") {
-        cmp = compareNullableNumbers(
-          durationSortValue(a),
-          durationSortValue(b),
-          true
-        );
-      } else if (mode === "duration-asc") {
-        cmp = compareNullableNumbers(
-          durationSortValue(a),
-          durationSortValue(b),
-          false
-        );
-      } else if (mode === "date-desc") {
-        cmp = dateSortValue(b) - dateSortValue(a);
-      } else if (mode === "date-asc") {
-        cmp = dateSortValue(a) - dateSortValue(b);
-      } else if (mode === "title-desc") {
-        cmp = compareTitles(b, a);
-      } else {
-        cmp = compareTitles(a, b);
-      }
-      if (cmp !== 0) return cmp;
-      return compareTitles(a, b);
-    });
-    return copy;
-  }
-
   function sceneTitle(scene) {
     const path = sceneFilePath(scene);
     if (scene.title && scene.title.trim()) return scene.title.trim();
@@ -562,34 +553,6 @@
       paths.webp ||
       ""
     );
-  }
-
-  function sceneSearchHaystack(scene) {
-    const parts = [sceneTitle(scene), sceneFilePath(scene)];
-    if (scene.details) parts.push(scene.details);
-    if (scene.studio && scene.studio.name) parts.push(scene.studio.name);
-    if (scene.performers) {
-      for (let i = 0; i < scene.performers.length; i++) {
-        if (scene.performers[i] && scene.performers[i].name) {
-          parts.push(scene.performers[i].name);
-        }
-      }
-    }
-    if (scene.tags) {
-      for (let j = 0; j < scene.tags.length; j++) {
-        if (scene.tags[j] && scene.tags[j].name) {
-          parts.push(scene.tags[j].name);
-        }
-      }
-    }
-    return parts.join(" ").toLowerCase();
-  }
-
-  function sceneMatchesSearch(haystack, tokens) {
-    for (let i = 0; i < tokens.length; i++) {
-      if (haystack.indexOf(tokens[i]) === -1) return false;
-    }
-    return true;
   }
 
   function usePluginLang() {
@@ -648,28 +611,51 @@
     return { config: config, error: error, loading: loading, lang: lang };
   }
 
-  const tagIdCache = new Map();
+  function criterionModifier(name, fallback) {
+    return GQL.CriterionModifier && GQL.CriterionModifier[name]
+      ? GQL.CriterionModifier[name]
+      : fallback;
+  }
+  const MOD = {
+    equals: criterionModifier("Equals", "EQUALS"),
+    includes: criterionModifier("Includes", "INCLUDES"),
+    includesAll: criterionModifier("IncludesAll", "INCLUDES_ALL"),
+  };
 
-  function useResolveTagIds() {
+  const tagCache = new Map(); // lower-case tag name -> Stash tag
+  const childCache = new Map(); // sorted parent ids -> all sub-tags (any depth)
+
+  function clearTagCaches() {
+    tagCache.clear();
+    childCache.clear();
+  }
+
+  function tagCount(tag, withSubTags) {
+    if (!tag) return 0;
+    const n =
+      withSubTags && tag.scene_count_all != null
+        ? tag.scene_count_all
+        : tag.scene_count;
+    return n || 0;
+  }
+
+  function formatCount(n) {
+    return n == null ? "" : Number(n).toLocaleString();
+  }
+
+  // Tag names -> Stash tags (exact name, case-insensitive). withSubTags: also every sub-tag, any depth.
+  function useResolveTags() {
     const [findTags] = GQL.useFindTagsLazyQuery({ fetchPolicy: "cache-first" });
-    const equalsModifier =
-      GQL.CriterionModifier && GQL.CriterionModifier.Equals
-        ? GQL.CriterionModifier.Equals
-        : "EQUALS";
-    const includesModifier =
-      GQL.CriterionModifier && GQL.CriterionModifier.Includes
-        ? GQL.CriterionModifier.Includes
-        : "INCLUDES";
 
     return React.useCallback(
-      async function resolveTagNames(tagNames) {
-        const ids = [];
+      async function resolveTags(tagNames, withSubTags) {
+        const tags = [];
         const missing = [];
         for (let i = 0; i < tagNames.length; i++) {
           const tagName = tagNames[i];
           const key = tagName.toLowerCase();
-          if (tagIdCache.has(key)) {
-            ids.push(tagIdCache.get(key));
+          if (tagCache.has(key)) {
+            tags.push(tagCache.get(key));
             continue;
           }
 
@@ -684,31 +670,136 @@
             });
           }
 
-          let result = await queryTags(equalsModifier);
-          let tags =
+          let result = await queryTags(MOD.equals);
+          let found =
             result.data && result.data.findTags && result.data.findTags.tags;
-          if (!tags || !tags.length) {
-            result = await queryTags(includesModifier);
-            tags =
+          if (!found || !found.length) {
+            result = await queryTags(MOD.includes);
+            found =
               result.data && result.data.findTags && result.data.findTags.tags;
           }
           const exact =
-            (tags &&
-              tags.find(function (tag) {
+            (found &&
+              found.find(function (tag) {
                 return tag.name.toLowerCase() === key;
               })) ||
             null;
           if (exact) {
-            tagIdCache.set(key, exact.id);
-            ids.push(exact.id);
+            tagCache.set(key, exact);
+            tags.push(exact);
           } else {
             missing.push(tagName);
           }
         }
-        return { ids: ids, missing: missing };
+
+        let children = [];
+        if (withSubTags && tags.length) {
+          const ids = tags.map(function (tag) {
+            return tag.id;
+          });
+          const cacheKey = ids.slice().sort().join(",");
+          if (childCache.has(cacheKey)) {
+            children = childCache.get(cacheKey);
+          } else {
+            const result = await findTags({
+              variables: {
+                filter: { per_page: -1, sort: "name", direction: "ASC" },
+                tag_filter: {
+                  parents: { value: ids, modifier: MOD.includes, depth: -1 },
+                },
+              },
+            });
+            children =
+              (result.data &&
+                result.data.findTags &&
+                result.data.findTags.tags) ||
+              [];
+            childCache.set(cacheKey, children);
+          }
+        }
+        return { tags: tags, missing: missing, children: children };
       },
-      [findTags, equalsModifier, includesModifier]
+      [findTags]
     );
+  }
+
+  // Tag criterion for a whole category
+  function baseCriterion(category, ids) {
+    return {
+      value: ids,
+      modifier: MOD.includes,
+      depth: category.subTags ? -1 : 0,
+    };
+  }
+
+  // Tag criterion for the scene list: whole category, or narrowed by the chips (sel.on / sel.not)
+  function sceneCriterion(category, baseIds, sel) {
+    const crit = sel.on.length
+      ? {
+          value: sel.on,
+          modifier: sel.mode === "all" ? MOD.includesAll : MOD.includes,
+          depth: category.subTags ? -1 : 0,
+        }
+      : baseCriterion(category, baseIds);
+    if (sel.not.length) crit.excludes = sel.not;
+    return crit;
+  }
+
+  // Stash puts a criterion into the URL as JSON with { } replaced by ( ) outside of strings
+  // (ListFilterModel.translateJSON / getEncodedParams in the Stash UI)
+  function encodeCriterion(obj) {
+    const json = JSON.stringify(obj);
+    let inString = false;
+    let escaped = false;
+    let out = "";
+    for (let i = 0; i < json.length; i++) {
+      let c = json[i];
+      if (escaped) {
+        escaped = false;
+      } else if (c === "\\") {
+        if (inString) escaped = true;
+      } else if (c === '"') {
+        inString = !inString;
+      } else if (!inString && c === "{") {
+        c = "(";
+      } else if (!inString && c === "}") {
+        c = ")";
+      }
+      out += c;
+    }
+    out = encodeURI(out);
+    ["?", "#", "&", ";", "=", "+"].forEach(function (ch) {
+      out = out.split(ch).join(encodeURIComponent(ch));
+    });
+    return out;
+  }
+
+  // Link to the regular Stash scene list with the same tags, search and sort
+  function stashScenesUrl(crit, names, query, sortMode) {
+    function item(id) {
+      return { id: String(id), label: names[id] || String(id) };
+    }
+    const sort = SORT_QUERY[sortMode] || SORT_QUERY[SORT_MODES[0]];
+    const parts = [];
+    if (query) parts.push("q=" + encodeURIComponent(query));
+    parts.push(
+      "c=" +
+        encodeCriterion({
+          type: "tags",
+          modifier: crit.modifier,
+          value: {
+            items: crit.value.map(item),
+            excluded: (crit.excludes || []).map(item),
+            depth: crit.depth || 0,
+          },
+        })
+    );
+    parts.push("sortby=" + sort.sort);
+    // Stash defaults: date descending, everything else ascending
+    const isDefault =
+      sort.sort === "date" ? sort.direction === "DESC" : sort.direction === "ASC";
+    if (!isDefault) parts.push("sortdir=" + sort.direction.toLowerCase());
+    return "/scenes?" + parts.join("&");
   }
 
   function SceneListView(props) {
@@ -795,24 +886,124 @@
     );
   }
 
+  // Tag chips like in the PMV Generator: click = select, right-click = exclude
+  function TagChips(props) {
+    const chips = props.chips;
+    const sel = props.sel;
+    const lang = props.lang;
+    const marked = function (tag) {
+      return sel.on.indexOf(tag.id) >= 0 || sel.not.indexOf(tag.id) >= 0;
+    };
+    const visible =
+      props.showAll || chips.length <= CHIPS_COLLAPSED
+        ? chips
+        : chips.filter(function (tag, i) {
+            return i < CHIPS_COLLAPSED || marked(tag);
+          });
+    const hidden = chips.length - visible.length;
+    const active = sel.on.length > 0 || sel.not.length > 0;
+
+    return React.createElement(
+      "div",
+      { className: "tc-filter" },
+      React.createElement(
+        "div",
+        { className: "tc-filter-head" },
+        React.createElement(
+          "div",
+          { className: "tc-seg", role: "group", "aria-label": t(lang, "matchLabel") },
+          [
+            ["any", "matchAny"],
+            ["all", "matchAll"],
+          ].map(function (m) {
+            return React.createElement(
+              "button",
+              {
+                key: m[0],
+                type: "button",
+                className: sel.mode === m[0] ? "is-on" : "",
+                "aria-pressed": sel.mode === m[0],
+                onClick: function () {
+                  props.onMode(m[0]);
+                },
+              },
+              t(lang, m[1])
+            );
+          })
+        ),
+        React.createElement("span", { className: "tc-filter-hint" }, t(lang, "chipsHint")),
+        active
+          ? React.createElement(
+              "button",
+              { type: "button", className: "tc-filter-reset", onClick: props.onReset },
+              t(lang, "chipsReset")
+            )
+          : null
+      ),
+      React.createElement(
+        "div",
+        { className: "tc-chips" },
+        visible.map(function (tag) {
+          const on = sel.on.indexOf(tag.id) >= 0;
+          const not = sel.not.indexOf(tag.id) >= 0;
+          return React.createElement(
+            "button",
+            {
+              key: tag.id,
+              type: "button",
+              className: "tc-chip" + (on ? " is-on" : not ? " is-not" : ""),
+              "aria-pressed": on,
+              title: not ? t(lang, "excludedTitle") : t(lang, "chipsHint"),
+              onClick: function () {
+                props.onToggle(tag.id);
+              },
+              onContextMenu: function (e) {
+                e.preventDefault();
+                props.onExclude(tag.id);
+              },
+            },
+            tag.name,
+            React.createElement("small", null, formatCount(tagCount(tag, props.subTags)))
+          );
+        }),
+        hidden > 0 || (props.showAll && chips.length > CHIPS_COLLAPSED)
+          ? React.createElement(
+              "button",
+              { type: "button", className: "tc-chip tc-chip-more", onClick: props.onToggleAll },
+              props.showAll ? t(lang, "chipsLess") : t(lang, "chipsMore", { n: hidden })
+            )
+          : null
+      )
+    );
+  }
+
+  function without(list, id) {
+    return list.filter(function (x) {
+      return x !== id;
+    });
+  }
+
   function CategoryScenesPanel(props) {
     const { category, lang } = props;
     const { LoadingIndicator } = PluginApi.components;
-    const resolveTagNames = useResolveTagIds();
+    const resolveTags = useResolveTags();
     const [viewMode, setViewMode] = React.useState(readStoredViewMode);
     const [sortMode, setSortMode] = React.useState(readStoredSortMode);
     const [searchInput, setSearchInput] = React.useState("");
     const [searchQuery, setSearchQuery] = React.useState("");
     const [tagState, setTagState] = React.useState({
-      ids: null,
+      base: null,
+      chips: [],
+      names: {},
       missing: [],
       loading: true,
     });
-
-    const includesModifier =
-      GQL.CriterionModifier && GQL.CriterionModifier.Includes
-        ? GQL.CriterionModifier.Includes
-        : "INCLUDES";
+    const [sel, setSel] = React.useState(EMPTY_SEL);
+    const [showAllChips, setShowAllChips] = React.useState(false);
+    // page belongs to one filter; a new filter starts at page 1 again
+    const [paging, setPaging] = React.useState({ key: "", page: 1 });
+    const [pages, setPages] = React.useState({ key: "", list: {}, count: null, duration: null });
+    const sentinel = React.useRef(null);
 
     function setAndStoreViewMode(mode) {
       const next = normalizeViewMode(mode);
@@ -830,6 +1021,8 @@
       function () {
         setSearchInput("");
         setSearchQuery("");
+        setSel(EMPTY_SEL);
+        setShowAllChips(false);
       },
       [category.id]
     );
@@ -849,76 +1042,138 @@
     React.useEffect(
       function () {
         let cancelled = false;
-        setTagState({ ids: null, missing: [], loading: true });
-        resolveTagNames(category.tags || []).then(function (result) {
-          if (!cancelled) {
-            setTagState({
-              ids: result.ids,
-              missing: result.missing,
-              loading: false,
-            });
-          }
+        setTagState({ base: null, chips: [], names: {}, missing: [], loading: true });
+        resolveTags(category.tags || [], !!category.subTags).then(function (r) {
+          if (cancelled) return;
+          const list = category.subTags && r.children.length ? r.children : r.tags;
+          const chips = list.slice().sort(function (a, b) {
+            return (
+              tagCount(b, category.subTags) - tagCount(a, category.subTags) ||
+              a.name.localeCompare(b.name)
+            );
+          });
+          const names = {};
+          r.tags.concat(r.children).forEach(function (tag) {
+            names[tag.id] = tag.name;
+          });
+          setTagState({
+            base: r.tags.map(function (tag) {
+              return tag.id;
+            }),
+            chips: chips,
+            names: names,
+            missing: r.missing,
+            loading: false,
+          });
         });
         return function () {
           cancelled = true;
         };
       },
-      [category.id, category.tags, resolveTagNames]
+      [category.id, category.tags, category.subTags, resolveTags]
     );
 
-    const skip =
-      tagState.loading || !tagState.ids || tagState.ids.length === 0;
+    const baseIds = tagState.base || [];
+    const crit = baseIds.length ? sceneCriterion(category, baseIds, sel) : null;
+    const sort = SORT_QUERY[sortMode] || SORT_QUERY[SORT_MODES[0]];
+    const filterKey = JSON.stringify([crit, searchQuery, sortMode]);
+    const page = paging.key === filterKey ? paging.page : 1;
 
     const { data, loading, error, refetch } = GQL.useFindScenesQuery({
-      skip: skip,
+      skip: !crit,
       fetchPolicy: "cache-and-network",
       variables: {
         filter: {
-          per_page: -1,
-          sort: "title",
-          direction: "ASC",
+          page: page,
+          per_page: PAGE_SIZE,
+          sort: sort.sort,
+          direction: sort.direction,
+          q: searchQuery || undefined,
         },
-        scene_filter: {
-          tags: {
-            value: tagState.ids || [],
-            modifier: includesModifier,
-            depth: 0,
-          },
-        },
+        scene_filter: { tags: crit || undefined },
       },
     });
 
-    const scenes =
-      data && data.findScenes && data.findScenes.scenes
-        ? data.findScenes.scenes
-        : [];
-    const totalCount =
-      data && data.findScenes && data.findScenes.count != null
-        ? data.findScenes.count
-        : scenes.length;
-
-    const filteredScenes = React.useMemo(
+    React.useEffect(
       function () {
-        const q = searchQuery.toLowerCase();
-        let list = scenes;
-        if (q) {
-          const tokens = q.split(/\s+/).filter(Boolean);
-          if (tokens.length) {
-            list = scenes.filter(function (scene) {
-              return sceneMatchesSearch(sceneSearchHaystack(scene), tokens);
-            });
-          }
-        }
-        return sortScenes(list, sortMode);
+        const found = data && data.findScenes;
+        if (!found) return;
+        setPages(function (prev) {
+          const list = prev.key === filterKey ? Object.assign({}, prev.list) : {};
+          list[page] = found.scenes || [];
+          return { key: filterKey, list: list, count: found.count, duration: found.duration };
+        });
       },
-      [scenes, searchQuery, sortMode]
+      [data, filterKey, page]
     );
+
+    const current =
+      pages.key === filterKey ? pages : { list: {}, count: null, duration: null };
+    let scenes = [];
+    for (let p = 1; p <= page; p++) {
+      if (current.list[p]) scenes = scenes.concat(current.list[p]);
+    }
+    const total = current.count;
+    const hasMore = total != null && scenes.length < total;
+
+    function loadMore() {
+      if (loading || !hasMore || !current.list[page]) return;
+      setPaging({ key: filterKey, page: page + 1 });
+    }
+    const loadMoreRef = React.useRef(loadMore);
+    loadMoreRef.current = loadMore;
+
+    // load the next page shortly before the end of the list is reached
+    React.useEffect(
+      function () {
+        const el = sentinel.current;
+        if (!el || typeof IntersectionObserver === "undefined") return undefined;
+        const observer = new IntersectionObserver(
+          function (entries) {
+            if (entries.some(function (e) { return e.isIntersecting; })) loadMoreRef.current();
+          },
+          { rootMargin: "600px 0px" }
+        );
+        observer.observe(el);
+        return function () {
+          observer.disconnect();
+        };
+      },
+      [hasMore, scenes.length, filterKey]
+    );
+
+    function refresh() {
+      setPages({ key: "", list: {}, count: null, duration: null });
+      if (page === 1) refetch();
+      else setPaging({ key: filterKey, page: 1 });
+    }
+
+    function toggleChip(id) {
+      setSel(function (s) {
+        if (s.on.indexOf(id) >= 0) return Object.assign({}, s, { on: without(s.on, id) });
+        if (s.not.indexOf(id) >= 0) return Object.assign({}, s, { not: without(s.not, id) });
+        return Object.assign({}, s, { on: s.on.concat([id]) });
+      });
+    }
+
+    function excludeChip(id) {
+      setSel(function (s) {
+        if (s.not.indexOf(id) >= 0) return Object.assign({}, s, { not: without(s.not, id) });
+        return Object.assign({}, s, { on: without(s.on, id), not: s.not.concat([id]) });
+      });
+    }
 
     if (tagState.loading) {
       return React.createElement(LoadingIndicator);
     }
 
-    if (!tagState.ids || !tagState.ids.length) {
+    const tagsLine =
+      t(lang, "tagsLabelShort") +
+      " " +
+      (category.tags || []).join(", ") +
+      (category.subTags ? " " + t(lang, "subTagsShort") : "");
+
+    if (!baseIds.length) {
       return React.createElement(
         React.Fragment,
         null,
@@ -926,39 +1181,44 @@
           "div",
           { className: "tag-categories-header" },
           React.createElement("h1", null, category.name),
-          React.createElement(
-            "p",
-            { className: "tag-categories-header-meta text-muted" },
-            t(lang, "tagsLabelShort") + " " + (category.tags || []).join(", ")
-          )
+          React.createElement("p", { className: "tag-categories-header-meta text-muted" }, tagsLine)
         ),
-        React.createElement(
-          "p",
-          { className: "tag-categories-error" },
-          t(lang, "noResolvedTags")
-        )
+        React.createElement("p", { className: "tag-categories-error" }, t(lang, "noResolvedTags"))
       );
     }
 
-    const showFullLoading = loading && !data;
-    const isRefreshing = loading && !!data;
-    const isFiltering = !!searchQuery;
-    const countLabel = isFiltering
-      ? t(lang, "scenesFiltered", {
-          shown: filteredScenes.length,
-          total: totalCount,
-        })
-      : String(totalCount);
-
-    if (showFullLoading) {
-      return React.createElement(LoadingIndicator);
-    }
-
+    const selecting = sel.on.length > 0 || sel.not.length > 0;
+    let body;
     if (error && !scenes.length) {
-      return React.createElement(
+      body = React.createElement("p", { className: "tag-categories-error" }, error.message);
+    } else if (total == null) {
+      body = React.createElement(LoadingIndicator);
+    } else if (total === 0) {
+      body = React.createElement(
         "p",
-        { className: "tag-categories-error" },
-        error.message
+        { className: "tag-categories-empty" },
+        t(lang, searchQuery ? "noSearchMatches" : selecting ? "noSelectionMatches" : "noScenes")
+      );
+    } else {
+      body = React.createElement(
+        React.Fragment,
+        null,
+        viewMode === "preview"
+          ? React.createElement(ScenePreviewView, { scenes: scenes })
+          : React.createElement(SceneListView, { scenes: scenes }),
+        hasMore
+          ? React.createElement(
+              "div",
+              { className: "tag-categories-load-more", ref: sentinel },
+              loading
+                ? React.createElement(LoadingIndicator)
+                : React.createElement(
+                    Button,
+                    { variant: "secondary", size: "sm", onClick: loadMore },
+                    t(lang, "loadMore", { shown: formatCount(scenes.length), total: formatCount(total) })
+                  )
+            )
+          : null
       );
     }
 
@@ -969,17 +1229,35 @@
         "div",
         { className: "tag-categories-header" },
         React.createElement("h1", null, category.name),
-        React.createElement(
-          "p",
-          { className: "tag-categories-header-meta text-muted" },
-          t(lang, "tagsLabelShort") + " " + (category.tags || []).join(", ")
-        ),
+        React.createElement("p", { className: "tag-categories-header-meta text-muted" }, tagsLine),
         tagState.missing.length
           ? React.createElement(
               "p",
               { className: "tag-categories-warning" },
               t(lang, "missingTags") + " " + tagState.missing.join(", ")
             )
+          : null,
+        tagState.chips.length > 1
+          ? React.createElement(TagChips, {
+              chips: tagState.chips,
+              sel: sel,
+              lang: lang,
+              subTags: !!category.subTags,
+              showAll: showAllChips,
+              onToggle: toggleChip,
+              onExclude: excludeChip,
+              onMode: function (mode) {
+                setSel(function (s) {
+                  return Object.assign({}, s, { mode: mode });
+                });
+              },
+              onReset: function () {
+                setSel(EMPTY_SEL);
+              },
+              onToggleAll: function () {
+                setShowAllChips(!showAllChips);
+              },
+            })
           : null,
         React.createElement(
           "div",
@@ -1029,36 +1307,16 @@
                   setAndStoreSortMode(e.target.value);
                 },
               },
-              React.createElement(
-                "option",
-                { value: "title-asc" },
-                t(lang, "sortTitleAsc")
-              ),
-              React.createElement(
-                "option",
-                { value: "title-desc" },
-                t(lang, "sortTitleDesc")
-              ),
-              React.createElement(
-                "option",
-                { value: "duration-desc" },
-                t(lang, "sortDurationDesc")
-              ),
-              React.createElement(
-                "option",
-                { value: "duration-asc" },
-                t(lang, "sortDurationAsc")
-              ),
-              React.createElement(
-                "option",
-                { value: "date-desc" },
-                t(lang, "sortDateDesc")
-              ),
-              React.createElement(
-                "option",
-                { value: "date-asc" },
-                t(lang, "sortDateAsc")
-              )
+              [
+                ["title-asc", "sortTitleAsc"],
+                ["title-desc", "sortTitleDesc"],
+                ["duration-desc", "sortDurationDesc"],
+                ["duration-asc", "sortDurationAsc"],
+                ["date-desc", "sortDateDesc"],
+                ["date-asc", "sortDateAsc"],
+              ].map(function (o) {
+                return React.createElement("option", { key: o[0], value: o[0] }, t(lang, o[1]));
+              })
             )
           ),
           React.createElement(
@@ -1068,76 +1326,95 @@
               role: "group",
               "aria-label": t(lang, "viewModeLabel"),
             },
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                className:
-                  "btn btn-sm " +
-                  (viewMode === "list" ? "btn-primary" : "btn-secondary"),
-                "aria-pressed": viewMode === "list",
-                onClick: function () {
-                  setAndStoreViewMode("list");
+            ["list", "preview"].map(function (mode) {
+              return React.createElement(
+                "button",
+                {
+                  key: mode,
+                  type: "button",
+                  className: "btn btn-sm " + (viewMode === mode ? "btn-primary" : "btn-secondary"),
+                  "aria-pressed": viewMode === mode,
+                  onClick: function () {
+                    setAndStoreViewMode(mode);
+                  },
                 },
-              },
-              t(lang, "viewList")
-            ),
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                className:
-                  "btn btn-sm " +
-                  (viewMode === "preview" ? "btn-primary" : "btn-secondary"),
-                "aria-pressed": viewMode === "preview",
-                onClick: function () {
-                  setAndStoreViewMode("preview");
-                },
-              },
-              t(lang, "viewPreview")
-            )
+                t(lang, mode === "list" ? "viewList" : "viewPreview")
+              );
+            })
           ),
           React.createElement(
             Button,
-            {
-              variant: "secondary",
-              size: "sm",
-              onClick: function () {
-                refetch({ fetchPolicy: "network-only" });
-              },
-            },
+            { variant: "secondary", size: "sm", onClick: refresh },
             t(lang, "refresh")
           ),
-          isRefreshing
-            ? React.createElement(
-                "span",
-                { className: "tag-categories-refreshing text-muted" },
-                t(lang, "updating")
-              )
+          React.createElement(
+            Link,
+            {
+              to: stashScenesUrl(crit, tagState.names, searchQuery, sortMode),
+              className: "btn btn-secondary btn-sm tag-categories-open-stash",
+              title: t(lang, "openInStashTitle"),
+            },
+            t(lang, "openInStash")
+          ),
+          loading && total != null && page === 1
+            ? React.createElement("span", { className: "tag-categories-refreshing text-muted" }, t(lang, "updating"))
             : null
         )
       ),
       React.createElement(
         "h2",
         { className: "tag-categories-section-title" },
-        t(lang, "scenesTitle") + " (" + countLabel + ")"
-      ),
-      scenes.length === 0
-        ? React.createElement(
-            "p",
-            { className: "tag-categories-empty" },
-            t(lang, "noScenes")
-          )
-        : filteredScenes.length === 0
+        t(lang, "scenesTitle") +
+          (total != null ? " (" + formatCount(total) + ")" : ""),
+        total && current.duration
           ? React.createElement(
-              "p",
-              { className: "tag-categories-empty" },
-              t(lang, "noSearchMatches")
+              "span",
+              { className: "tag-categories-section-meta text-muted" },
+              t(lang, "totalDuration", { d: formatDuration(current.duration) })
             )
-          : viewMode === "preview"
-            ? React.createElement(ScenePreviewView, { scenes: filteredScenes })
-            : React.createElement(SceneListView, { scenes: filteredScenes })
+          : null
+      ),
+      body
     );
+  }
+
+  // Number of scenes of a category, shown in the sidebar (count only, per_page 0)
+  function CategoryNavCount(props) {
+    const category = props.category;
+    const resolveTags = useResolveTags();
+    const [ids, setIds] = React.useState(null);
+
+    React.useEffect(
+      function () {
+        let cancelled = false;
+        resolveTags(category.tags || [], false).then(function (r) {
+          if (!cancelled) {
+            setIds(
+              r.tags.map(function (tag) {
+                return tag.id;
+              })
+            );
+          }
+        });
+        return function () {
+          cancelled = true;
+        };
+      },
+      [category.id, category.tags, resolveTags]
+    );
+
+    const { data } = GQL.useFindScenesQuery({
+      skip: !ids || !ids.length,
+      fetchPolicy: "cache-and-network",
+      variables: {
+        filter: { per_page: 0 },
+        scene_filter: { tags: baseCriterion(category, ids || []) },
+      },
+    });
+    const count = data && data.findScenes ? data.findScenes.count : null;
+    if (ids && !ids.length) return React.createElement("span", { className: "tag-categories-nav-count" }, "–");
+    if (count == null) return null;
+    return React.createElement("span", { className: "tag-categories-nav-count" }, formatCount(count));
   }
 
   function TagCategoriesPage() {
@@ -1205,11 +1482,17 @@
               },
               title: (category.tags || []).join(", "),
             },
-            category.name,
+            React.createElement(
+              "span",
+              { className: "tag-categories-nav-name" },
+              React.createElement("span", null, category.name),
+              React.createElement(CategoryNavCount, { category: category })
+            ),
             React.createElement(
               "span",
               { className: "tag-categories-nav-tags" },
-              (category.tags || []).join(", ")
+              (category.tags || []).join(", ") +
+                (category.subTags ? " " + t(lang, "subTagsShort") : "")
             )
           );
         })
@@ -1396,7 +1679,7 @@
           React.createElement(
             "pre",
             { className: "tag-categories-help-code" },
-            '{\n  "categories": [\n    {\n      "id": "genre",\n      "name": "Genre",\n      "tags": ["Action", "Comedy"]\n    }\n  ]\n}'
+            '{\n  "categories": [\n    {\n      "id": "genre",\n      "name": "Genre",\n      "tags": ["Action", "Comedy"]\n    },\n    {\n      "name": "Bracket Tags",\n      "tags": ["Bracket Tags"],\n      "subTags": true\n    }\n  ]\n}'
           ),
           React.createElement("p", null, t(lang, "helpId")),
           React.createElement("p", null, t(lang, "helpSave")),
@@ -1465,11 +1748,13 @@
     const [editingId, setEditingId] = React.useState(null);
     const [newName, setNewName] = React.useState("");
     const [newTags, setNewTags] = React.useState("");
+    const [newSubTags, setNewSubTags] = React.useState(false);
 
     function resetForm() {
       setEditingId(null);
       setNewName("");
       setNewTags("");
+      setNewSubTags(false);
     }
 
     function fillForm(category) {
@@ -1478,6 +1763,7 @@
       setNewTags(
         category.tags && category.tags.length ? category.tags.join(", ") : ""
       );
+      setNewSubTags(!!category.subTags);
     }
 
     React.useEffect(
@@ -1536,7 +1822,7 @@
       setConfig(nextConfig);
       setUsingFile(false);
       setUsingDefaults(false);
-      tagIdCache.clear();
+      clearTagCaches();
     }
 
     function openJsonModal() {
@@ -1583,7 +1869,7 @@
         }
         const categories = config.categories.map(function (c, i) {
           if (i !== idx) return c;
-          return { id: c.id, name: name, tags: tags };
+          return { id: c.id, name: name, tags: tags, subTags: newSubTags };
         });
         persistConfig({ categories: categories });
         resetForm();
@@ -1605,7 +1891,7 @@
       }
       persistConfig({
         categories: config.categories.concat([
-          { id: uniqueId, name: name, tags: tags },
+          { id: uniqueId, name: name, tags: tags, subTags: newSubTags },
         ]),
       });
       resetForm();
@@ -1729,7 +2015,8 @@
                     React.createElement(
                       "span",
                       { className: "tag-categories-settings-tags text-muted" },
-                      (category.tags || []).join(", ") || "—"
+                      ((category.tags || []).join(", ") || "—") +
+                        (category.subTags ? " " + t(lang, "subTagsShort") : "")
                     ),
                     React.createElement(
                       "div",
@@ -1852,6 +2139,29 @@
                   "p",
                   { className: "text-muted small mb-0" },
                   t(lang, "tagsHelp")
+                )
+              ),
+              React.createElement(
+                "div",
+                { className: "form-group form-check tag-categories-settings-subtags" },
+                React.createElement("input", {
+                  id: "tc-new-subtags",
+                  type: "checkbox",
+                  className: "form-check-input",
+                  checked: newSubTags,
+                  onChange: function (e) {
+                    setNewSubTags(e.target.checked);
+                  },
+                }),
+                React.createElement(
+                  "label",
+                  { htmlFor: "tc-new-subtags", className: "form-check-label" },
+                  t(lang, "subTagsLabel")
+                ),
+                React.createElement(
+                  "p",
+                  { className: "text-muted small mb-0" },
+                  t(lang, "subTagsHelp")
                 )
               ),
               React.createElement(

@@ -447,3 +447,210 @@
     border-bottom: 1px solid var(--bs-border-color, #444);
   }
 }
+
+/* ---------- 1.5.0: tag chips in the style of the PMV Generator ---------- */
+
+.tag-categories-page {
+  --tc-pink: #ff3e8a;
+  --tc-violet: #b48cff;
+  --tc-ink: #1a0a16;
+}
+
+.tc-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0.75rem 0 0.25rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tc-filter-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.tc-filter-hint {
+  font-size: 0.78rem;
+  opacity: 0.6;
+}
+
+.tc-filter-reset {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tc-pink);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.tc-filter-reset:hover {
+  text-decoration: underline;
+}
+
+.tc-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.tc-seg button {
+  height: 26px;
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.8rem;
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.tc-seg button:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tc-seg button.is-on {
+  opacity: 1;
+  color: var(--tc-ink);
+  background: var(--tc-pink);
+  font-weight: 600;
+}
+
+.tc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* violet stripe = available, pink = selected, struck through = excluded */
+.tc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 10px 0 11px;
+  border: 0;
+  border-radius: 3px;
+  color: inherit;
+  font-size: 0.82rem;
+  line-height: 1;
+  background: rgba(180, 140, 255, 0.16);
+  box-shadow: inset 3px 0 0 var(--tc-violet);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tc-chip:hover {
+  background: rgba(180, 140, 255, 0.28);
+}
+
+.tc-chip small {
+  font-size: 0.72rem;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.tc-chip.is-on {
+  color: var(--tc-ink);
+  background: var(--tc-pink);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.tc-chip.is-on small {
+  opacity: 0.75;
+}
+
+.tc-chip.is-not {
+  background: rgba(255, 62, 138, 0.14);
+  box-shadow: inset 3px 0 0 var(--tc-pink);
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 62, 138, 0.8);
+}
+
+.tc-chip-more {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(180, 140, 255, 0.35);
+  opacity: 0.85;
+}
+
+.tc-chip:focus-visible,
+.tc-seg button:focus-visible {
+  outline: 2px solid var(--tc-violet);
+  outline-offset: 2px;
+}
+
+/* sidebar: name + number of scenes, pink stripe on the active category */
+.tag-categories-nav-name {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.tag-categories-nav-count {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-categories-nav-btn.active {
+  box-shadow: inset 3px 0 0 var(--tc-pink);
+}
+
+.tag-categories-section-meta {
+  margin-left: 0.6rem;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.tag-categories-load-more {
+  display: flex;
+  justify-content: center;
+  margin: 1rem 0 0.5rem;
+}
+
+.tag-categories-open-stash {
+  white-space: nowrap;
+}
+
+.tag-categories-settings-subtags {
+  margin-bottom: 1rem;
+}
+
+/* search and sort: dark like the rest of Stash instead of white Bootstrap fields */
+.tag-categories-search-input,
+.tag-categories-sort select {
+  border-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(0, 0, 0, 0.25);
+  color: inherit;
+}
+
+.tag-categories-search-input:focus,
+.tag-categories-sort select:focus {
+  border-color: var(--tc-violet);
+  background-color: rgba(0, 0, 0, 0.35);
+  color: inherit;
+  box-shadow: 0 0 0 2px rgba(180, 140, 255, 0.25);
+}
+
+.tag-categories-search-input::placeholder {
+  color: inherit;
+  opacity: 0.5;
+}
+
+.tag-categories-sort select option {
+  color: #000;
+}

@@ -352,16 +352,22 @@ Named **categories**, each with a list of Stash **tags**. Open **Categories** in
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.4.1-informational)
+![Version](https://img.shields.io/badge/version-1.5.0-informational)
 
 ## Features
 
-- **Categories** item in the main navigation
+- **Categories** item in the main navigation, with the **number of scenes** next to each category
 - Click a category → scenes matching **any** of its tags
-- **Search within a category** — filters the already loaded list (title, file, performers, studio, tags); no extra server request while typing
-- **Sort** — title, duration (long/short), date (newest/oldest); client-side, preference kept in the browser
+- **Sub-tags** — optionally a category includes all child tags of its tags (Stash tag hierarchy, any depth). A parent
+  tag such as **Bracket Tags** becomes a category on its own, and new child tags show up automatically
+- **Tag chips** — narrow a category down: click = select, right-click = exclude, **Any of them / All** for several
+  selected tags. Each chip shows its number of scenes
+- **Loads page by page** — 60 scenes at a time, more while scrolling (or **Load more**), so large categories open fast
+- **Search** and **Sort** (title, duration, date) run on the Stash server, over the whole category
+- **Open in Stash** — the same selection (tags, excluded tags, search, sort) as a regular Stash scene list, with
+  paging, bulk edit and queue
 - **List / Preview** view toggle (thumbnails in Preview; preference kept in the browser)
-- Settings UI: name + comma-separated tags, edit/delete, collapsible sections
+- Settings UI: name + comma-separated tags + **Include sub-tags**, edit/delete, collapsible sections
 - **Edit JSON (advanced)** modal with short help
 - UI language follows Stash (**English** / **German**; otherwise English)
 
@@ -402,6 +408,11 @@ Then **Settings → Plugins → Reload plugins**.
       "id": "genre",
       "name": "Genre",
       "tags": ["Action", "Comedy", "Drama"]
+    },
+    {
+      "name": "Bracket Tags",
+      "tags": ["Bracket Tags"],
+      "subTags": true
     }
   ]
 }
@@ -411,6 +422,7 @@ Then **Settings → Plugins → Reload plugins**.
 |-------|------|
 | `name` | Label in the UI |
 | `tags` | Tag names to filter by (any match) |
+| `subTags` | `true` = child tags of these tags count too, any depth (optional) |
 | `id` | Fixed browser URL (optional; otherwise from `name`) |
 
 Saved in plugin settings (`categoriesJson`) after you save in the UI. An optional `categories.json` in the plugin folder is used only until settings are saved once.
@@ -420,9 +432,11 @@ Saved in plugin settings (`categoriesJson`) after you save in the UI. An optiona
 1. Add categories under **Settings → Plugins → Tag Categories**
 2. Open **Categories** in the main menu
 3. Select a category in the left sidebar — matching scenes appear on the right
-4. Switch **List** / **Preview** above the results
-5. Use the search box to narrow the current category (words are AND; no extra load)
-6. Use **Sort** for title, duration, or date
+4. Narrow it down with the **tag chips**: click to select, right-click to exclude; with several selected tags choose
+   **Any of them** or **All**. **Reset** clears the selection
+5. Switch **List** / **Preview** above the results; more scenes load while you scroll
+6. Use the search box and **Sort** for title, duration, or date
+7. **Open in Stash** shows the same selection in the regular scene list
 
 ## Manual install
 
@@ -431,7 +445,7 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.1`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.5.0`.
 
 ---
 
@@ -443,6 +457,16 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.4.1`.
 - **Modern scene panel** — In / Out / + Instant buttons, pill-shaped preset chips with `⇧1–9` badges, recording badge with in time (visible when collapsed), discard in point
 - **Touch bar under the video** — no longer floats over the player (it used to jump into the picture or cover the seek bar / player settings depending on the player); it sits in the page right under the video, keeps its height when you press IN, one row in landscape
 - **Theme colours** — panel, touch bar and settings use Stash's real colour variables (Bootstrap 4) and the Stash UI theme when present, instead of fixed fallbacks
+
+### Tag Categories 1.5.0
+
+- **Sub-tags** per category (`subTags`): child tags of the category tags count too, any depth
+- **Tag chips** in the style of the PMV Generator: click = select, right-click = exclude, *Any of them* / *All*
+- **Number of scenes** per category in the sidebar, total duration above the list
+- **Page by page**: 60 scenes per request, more while scrolling, instead of loading the whole category at once
+- **Search and sort on the server** over the whole category (before: only over the loaded list)
+- **Open in Stash**: same selection as a regular scene list
+- Search and sort fields styled dark like the rest of Stash
 
 ### Tag Categories 1.4.1
 
