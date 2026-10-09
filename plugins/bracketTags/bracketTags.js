@@ -1,6 +1,7 @@
 (function () {
   var PLUGIN_ID = "bracketTags";
-  var BRACKET_RE = /\[([^\]]+)\]/g;
+  // Innermost brackets only: in "Clip [1 [Solo].mp4" (unclosed "[" in the name) the tag is "Solo", not "1 [Solo"
+  var BRACKET_RE = /\[([^\[\]]+)\]/g;
   // Parent tag that marks every tag this plugin sets. Only the sync task removes tags, and only these.
   var PARENT_TAG = "Bracket Tags";
 
@@ -279,6 +280,48 @@
 
   // Every tag the plugin sets goes under the parent tag, also when only adding. Otherwise a tag whose
   // [bracket] was renamed away before the next sync would never count as managed and could not be removed.
+  // Tags with "[" or "]" in the name come from the old parser (before 1.2.1) and are never valid bracket tags
+  var BROKEN_QUERY =
+    "query FindBrokenTags($tag_filter: TagFilterType) {\
+      findTags(filter: { per_page: -1 }, tag_filter: $tag_filter) {\
+        tags { id name scene_count scene_marker_count image_count gallery_count performer_count }\
+      }\
+    }";
+
+  function findBrokenTags() {
+    var found = {};
+    var chars = ["[", "]"];
+    for (var i = 0; i < chars.length; i++) {
+      var result = gql.Do(BROKEN_QUERY, { tag_filter: { name: { value: chars[i], modifier: "INCLUDES" } } });
+      var tags = result.findTags && result.findTags.tags ? result.findTags.tags : [];
+      for (var j = 0; j < tags.length; j++) found[tags[j].id] = tags[j];
+    }
+    var list = [];
+    for (var id in found) list.push(found[id]);
+    return list;
+  }
+
+  // After sync: delete broken tags that are no longer used anywhere
+  function destroyUnusedBrokenTags() {
+    var deleted = [];
+    var kept = [];
+    var tags = findBrokenTags();
+    for (var i = 0; i < tags.length; i++) {
+      var t = tags[i];
+      var used = (t.scene_count || 0) + (t.scene_marker_count || 0) + (t.image_count || 0) +
+        (t.gallery_count || 0) + (t.performer_count || 0);
+      if (used) {
+        kept.push(t.name);
+        continue;
+      }
+      gql.Do("mutation TagDestroy($input: TagDestroyInput!) { tagDestroy(input: $input) }", { input: { id: String(t.id) } });
+      deleted.push(t.name);
+    }
+    if (deleted.length) log.Info("Deleted " + deleted.length + ' broken tag(s): "' + deleted.join('", "') + '"');
+    if (kept.length) log.Warn('Broken tag(s) still in use (organized scenes, images, ...), not deleted: "' + kept.join('", "') + '"');
+    return deleted.length;
+  }
+
   function makeContext() {
     return { parentId: ensureParentTag(), managed: null };
   }
@@ -315,6 +358,9 @@
           for (var b = 0; b < names.length; b++) resolveTagId(names[b], settings, ctx.parentId);
         }
         ctx.managed = getManagedTagIds(ctx.parentId);
+        var broken = findBrokenTags();
+        for (var c = 0; c < broken.length; c++) ctx.managed.push(String(broken[c].id));
+        if (broken.length) log.Info("Removing " + broken.length + ' broken tag(s) from scenes, e.g. "' + broken[0].name + '"');
       }
       var updated = 0;
       var removedTotal = 0;
@@ -326,6 +372,7 @@
           log.Progress((i + 1) / scenes.length);
         }
       }
+      if (sync) destroyUnusedBrokenTags();
       log.Info("Done. Updated " + updated + " scene(s)" + (sync ? ", removed " + removedTotal + " stale tag(s)." : "."));
       return ok("updated " + updated);
     }

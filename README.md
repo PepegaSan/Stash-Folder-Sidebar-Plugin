@@ -244,12 +244,13 @@ If the version line is missing or an old version number appears, the old `quickM
 Adds **scene tags** from text in **square brackets** in the filename — e.g. `[Joi]` and `[Talk]` in `My Clip [Joi] [Talk].mp4`. Simpler than generic filename parsers: no regex config, just run a task or enable auto-tagging on scan.
 
 ![Stash](https://img.shields.io/badge/Stash-task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.2.0-informational)
+![Version](https://img.shields.io/badge/version-1.2.1-informational)
 
 ## Features
 
 - Reads every `[...]` block from the scene filename (first file on the scene)
 - **Multiple brackets** — `[Tag A] [Tag B]` or comma-separated inside one bracket: `[Tag A, Tag B]`
+- **Innermost brackets only** — an unclosed `[` in the name is ignored: `Clip [1 [Solo].mp4` gives `Solo`
 - **Create missing tags** — optional; on by default (no manual tag setup required)
 - **Two tasks** — **Add** (only adds tags, never removes) and **Sync** (adds and removes stale bracket tags)
 - **Auto on new scenes** — optional hook after library scan (new scenes only)
@@ -296,7 +297,7 @@ stored value of that setting is ignored.
 | Task | What it does |
 |------|--------------|
 | **Add bracket tags to all scenes** | Adds tags from `[brackets]` to every scene. Existing tags are never removed, also not old bracket tags after a rename |
-| **Sync bracket tags (add + remove stale)** | Adds, and removes bracket tags whose `[bracket]` is no longer in the filename |
+| **Sync bracket tags (add + remove stale)** | Adds, and removes bracket tags whose `[bracket]` is no longer in the filename. Also cleans up broken tags such as `1 [Solo` from versions before 1.2.1 (removed from scenes, deleted when no longer used) |
 
 Typical after renaming files: run **Add** first (new tags appear, old ones stay), check in Stash, then **Sync** to
 remove the old ones. Progress and every changed scene are shown in the task log.
