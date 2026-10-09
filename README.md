@@ -352,7 +352,7 @@ Named **categories**, each with a list of Stash **tags**. Open **Categories** in
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.5.0-informational)
+![Version](https://img.shields.io/badge/version-1.6.0-informational)
 
 ## Features
 
@@ -384,7 +384,7 @@ Install **Tag Categories** from the [plugin source URL](#installation-from-stash
 | Windows | `%USERPROFILE%\.stash\plugins\tagCategories\` |
 | Linux / macOS | `~/.stash/plugins/tagCategories/` |
 
-Required files: `tagCategories.yml`, `tagCategories.js`, `tagCategories.css`  
+Required files: `tagCategories.yml`, `tagCategories.js`, `tagCategories.css` (Stash UI: also `stashui.js`, `stashui.css`)  
 Optional: `categories.json` (copy from `categories.json.example`)
 
 Then **Settings → Plugins → Reload plugins**.
@@ -438,6 +438,17 @@ Saved in plugin settings (`categoriesJson`) after you save in the UI. An optiona
 6. Use the search box and **Sort** for title, duration, or date
 7. **Open in Stash** shows the same selection in the regular scene list
 
+## Stash UI
+
+With the [Stash UI](https://github.com/AffordObedienceUntamed/stash-pmv-plugins) plugin (alternative interface, extension API v2), Tag Categories loads `stashui.js` from this plugin automatically — nothing to configure. Before, its menu entry opened the page in embedded classic Stash; now it is a page of Stash UI itself:
+
+- **Library → Categories** in the left menu, right after Tags (movable and hideable in Customize → Sidebar)
+- The same page as in classic Stash: categories with their number of scenes, tag chips (click / right-click, *Any of them* / *All*), search, sort, **List / Preview** (the preview plays on hover), more scenes while scrolling
+- A click on a scene opens the **Stash UI player**; **Open in classic Stash** shows the same selection as a regular scene list (paging, bulk edit)
+- Each category has its own address (`#/p/tagCategories/<id>`), so Back and bookmarks work
+- Same categories (`categoriesJson`) as in classic Stash; edit them under **Settings → Plugins → Tag Categories**
+- Follows Stash UI's colour presets, liquid glass and interface language (English / German)
+
 ## Manual install
 
 ```bash
@@ -445,11 +456,16 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.5.0`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.6.0`.
 
 ---
 
 ## Changelog
+
+### Tag Categories 1.6.0
+
+- **Stash UI support** — Categories is a page of Stash UI itself (Library → Categories) instead of opening in embedded classic Stash: tag chips, search, sort, List / Preview, paging, scenes open in the Stash UI player
+- Same categories and settings as in classic Stash; the classic page is unchanged
 
 ### Quick Markers 1.4.0
 

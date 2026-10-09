@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.5.0";
+  const PLUGIN_VERSION = "1.6.0";
   const SEARCH_DEBOUNCE_MS = 250;
   const PAGE_SIZE = 60; // scenes per request; more are loaded while scrolling
   const CHIPS_COLLAPSED = 24; // tag chips shown before "+N more"

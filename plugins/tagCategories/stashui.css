@@ -1,0 +1,51 @@
+/* Tag Categories inside Stash UI – uses Stash UI's theme variables (--bg, --pink …), so it follows the colors and liquid glass. */
+
+.tcx-page { display: grid; grid-template-columns: minmax(200px, 260px) 1fr; gap: 24px; align-items: start; }
+.tcx-nav { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 4px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.tcx-cat { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--r, 6px); color: var(--text-2); text-decoration: none; }
+.tcx-cat:hover { color: var(--text); background: var(--bg-2); }
+.tcx-cat.is-on { color: var(--text); background: var(--bg-2); box-shadow: inset 3px 0 0 var(--pink); }
+.tcx-cat-name { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.tcx-cat-name small { color: var(--faint); font-weight: 500; }
+.tcx-cat-tags { overflow: hidden; color: var(--faint); font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+
+.tcx-main { min-width: 0; }
+.tcx-head { margin-bottom: 12px; }
+.tcx-head .kb-h2 { margin: 0 0 4px; }
+.tcx-warn { margin: 6px 0 0; color: var(--danger); font-size: 13px; }
+
+.tcx-filter { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.tcx-filter-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.tcx-chip small { margin-left: 6px; opacity: .7; font-size: 11px; }
+
+.tcx-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+.tcx-search { flex: 1 1 220px; min-width: 160px; }
+.tcx-sort { flex: 0 0 auto; width: auto; }
+.tcx-tools a.kb-btn { text-decoration: none; }
+
+.tcx-count { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; font-size: 15px; }
+.tcx-count span { color: var(--pink); }
+
+.tcx-rows { display: flex; flex-direction: column; }
+.tcx-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.tcx-row:hover { background: var(--bg-2); }
+.tcx-row small { overflow: hidden; color: var(--faint); white-space: nowrap; text-overflow: ellipsis; }
+
+.tcx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.tcx-card { display: flex; flex-direction: column; gap: 6px; color: var(--text); text-decoration: none; }
+.tcx-thumb { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: var(--r, 6px); background: var(--bg-3); }
+.tcx-thumb img, .tcx-thumb video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tcx-thumb video { opacity: 0; transition: opacity .15s; }
+.tcx-card:hover .tcx-thumb video { opacity: 1; }
+.tcx-thumb em { position: absolute; right: 6px; bottom: 6px; padding: 1px 6px; border-radius: 3px; color: #fff; font: 600 12px/18px var(--f-label, inherit); font-style: normal; background: rgba(0, 0, 0, .65); }
+.tcx-card-title { overflow: hidden; font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }
+.tcx-card:hover .tcx-card-title { color: var(--pink); }
+
+.tcx-more { display: flex; justify-content: center; padding: 18px 0; }
+
+@media (max-width: 760px) {
+  .tcx-page { grid-template-columns: 1fr; }
+  .tcx-nav { position: static; flex-direction: row; max-height: none; overflow-x: auto; }
+  .tcx-cat { flex: 0 0 auto; }
+  .tcx-cat-tags { display: none; }
+}
