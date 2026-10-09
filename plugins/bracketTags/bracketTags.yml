@@ -1,6 +1,6 @@
 name: Bracket Tags
 description: Add scene tags from [bracketed] parts of the filename
-version: 1.1.0
+version: 1.2.0
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 exec:
   - bracketTags.js
@@ -12,11 +12,7 @@ settings:
     type: BOOLEAN
   autoOnScan:
     displayName: Auto on new scenes
-    description: Apply bracket tags when a scene is created (e.g. after library scan).
-    type: BOOLEAN
-  removeStaleTags:
-    displayName: Remove stale bracket tags
-    description: Remove tags from a scene when their [bracket] is no longer in the filename. Bracket tags are grouped under the parent tag "Bracket Tags"; a manually added tag with the same name is removed too. Scenes without any brackets are never changed.
+    description: Add bracket tags when a scene is created (e.g. after library scan). Only adds, never removes.
     type: BOOLEAN
 hooks:
   - name: Apply bracket tags on scene create
@@ -26,7 +22,11 @@ hooks:
     defaultArgs:
       mode: hook
 tasks:
-  - name: Apply bracket tags to all scenes
-    description: Scan all scenes and add tags from [brackets] in filenames (and remove stale ones if enabled).
+  - name: Add bracket tags to all scenes
+    description: Add tags from [brackets] in filenames to all scenes. Existing tags are never removed, so old tags stay until you sync.
     defaultArgs:
       mode: allScenes
+  - name: Sync bracket tags (add + remove stale)
+    description: Add tags from [brackets] and remove bracket tags whose [bracket] is no longer in the filename. Only tags under the parent tag "Bracket Tags" are removed (a manually added tag with the same name too). Scenes without brackets and organized scenes are never changed.
+    defaultArgs:
+      mode: syncScenes

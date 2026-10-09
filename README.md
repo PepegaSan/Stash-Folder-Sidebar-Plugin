@@ -244,17 +244,17 @@ If the version line is missing or an old version number appears, the old `quickM
 Adds **scene tags** from text in **square brackets** in the filename — e.g. `[Joi]` and `[Talk]` in `My Clip [Joi] [Talk].mp4`. Simpler than generic filename parsers: no regex config, just run a task or enable auto-tagging on scan.
 
 ![Stash](https://img.shields.io/badge/Stash-task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.1.0-informational)
+![Version](https://img.shields.io/badge/version-1.2.0-informational)
 
 ## Features
 
 - Reads every `[...]` block from the scene filename (first file on the scene)
 - **Multiple brackets** — `[Tag A] [Tag B]` or comma-separated inside one bracket: `[Tag A, Tag B]`
 - **Create missing tags** — optional; on by default (no manual tag setup required)
-- **Manual task** — process the whole library once from **Tasks**
+- **Two tasks** — **Add** (only adds tags, never removes) and **Sync** (adds and removes stale bracket tags)
 - **Auto on new scenes** — optional hook after library scan (new scenes only)
 - Skips **organized** scenes and scenes without any `[...]` in the filename
-- **Remove stale bracket tags** — optional; when a `[bracket]` disappears from the filename (e.g. after a rename), its tag is removed from the scene. Off by default: then tags are only added, never removed
+- **Stale bracket tags** — when a `[bracket]` disappears from the filename (e.g. after a rename), the **Sync** task removes its tag from the scene. **Add** keeps it, so you can update first and clean up later
 
 ## Requirements
 
@@ -281,15 +281,25 @@ Then **Settings → Plugins → Reload plugins**.
 | Setting | Default | Description |
 |---------|---------|-------------|
 | **Create missing tags** | on | Create tags in Stash when the bracket name does not exist yet |
-| **Auto on new scenes** | off | Apply bracket tags automatically when a scene is created (e.g. after scan) |
-| **Remove stale bracket tags** | off | Remove tags whose `[bracket]` is no longer in the filename. All bracket tags are grouped under the parent tag **Bracket Tags** so the plugin knows which tags it manages; a manually added tag with the same name is removed too |
+| **Auto on new scenes** | off | Add bracket tags automatically when a scene is created (e.g. after scan). Only adds, never removes |
+
+Every tag the plugin sets is grouped under the parent tag **Bracket Tags**, so the Sync task knows which tags it manages.
+Sync also removes a manually added tag that has the same name as a bracket tag.
+
+Up to 1.1.0 there was a setting **Remove stale bracket tags**. Since 1.2.0 removing is a separate task instead; an old
+stored value of that setting is ignored.
 
 ## Usage
 
-### Existing library (one-time)
+### Existing library
 
-1. **Tasks → Apply bracket tags to all scenes**
-2. Watch progress in the task log; updated scenes are logged with filename and tags added
+| Task | What it does |
+|------|--------------|
+| **Add bracket tags to all scenes** | Adds tags from `[brackets]` to every scene. Existing tags are never removed, also not old bracket tags after a rename |
+| **Sync bracket tags (add + remove stale)** | Adds, and removes bracket tags whose `[bracket]` is no longer in the filename |
+
+Typical after renaming files: run **Add** first (new tags appear, old ones stay), check in Stash, then **Sync** to
+remove the old ones. Progress and every changed scene are shown in the task log.
 
 ### New files after scan
 
@@ -307,7 +317,8 @@ Enable **Auto on new scenes** in plugin settings, then run a normal library scan
 
 - Matching is **case-insensitive** when checking if a tag already exists on the scene
 - Tag **names** in brackets are used as-is (trimmed); create-missing uses the exact bracket text
-- Re-running the task is safe — already-applied tags are not duplicated
+- Re-running either task is safe — already-applied tags are not duplicated
+- Organized scenes and scenes without any `[...]` are never changed, by neither task
 - For complex filename layouts (studio/date/performer patterns), use Stash’s built-in **Scene Filename Parser** instead
 
 ## Manual install

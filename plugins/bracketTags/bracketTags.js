@@ -1,7 +1,7 @@
 (function () {
   var PLUGIN_ID = "bracketTags";
   var BRACKET_RE = /\[([^\]]+)\]/g;
-  // Parent tag that marks every tag this plugin manages (only used with removeStaleTags)
+  // Parent tag that marks every tag this plugin sets. Only the sync task removes tags, and only these.
   var PARENT_TAG = "Bracket Tags";
 
   // Per-run caches: one Stash lookup per tag name instead of one per scene
@@ -24,7 +24,6 @@
     return {
       createMissingTags: cfg.createMissingTags !== false,
       autoOnScan: !!cfg.autoOnScan,
-      removeStaleTags: !!cfg.removeStaleTags,
     };
   }
 
@@ -237,7 +236,7 @@
     return { filename: filename, names: names };
   }
 
-  // ctx.parentId / ctx.managed are set only when removeStaleTags is on
+  // ctx.managed (tags allowed to be removed) is set only by the sync task
   function processScene(scene, settings, ctx) {
     var info = bracketNames(scene);
     if (info.skipped) return { added: 0, removed: 0, skipped: info.skipped };
@@ -278,8 +277,9 @@
     return { added: added.length, removed: removed.length };
   }
 
-  function makeContext(settings) {
-    if (!settings.removeStaleTags) return { parentId: null, managed: null };
+  // Every tag the plugin sets goes under the parent tag, also when only adding. Otherwise a tag whose
+  // [bracket] was renamed away before the next sync would never count as managed and could not be removed.
+  function makeContext() {
     return { parentId: ensureParentTag(), managed: null };
   }
 
@@ -297,23 +297,18 @@
       if (!hookContext || !hookContext.id) {
         return ok("no scene id");
       }
-      var scene = getScene(hookContext.id);
-      ctx = makeContext(settings);
-      if (ctx.parentId) {
-        // resolve this scene's brackets first, so their tags are managed before stale ones are computed
-        var info = bracketNames(scene);
-        for (var h = 0; info.names && h < info.names.length; h++) resolveTagId(info.names[h], settings, ctx.parentId);
-        ctx.managed = getManagedTagIds(ctx.parentId);
-      }
-      processScene(scene, settings, ctx);
+      // new scenes: only add, never remove
+      processScene(getScene(hookContext.id), settings, makeContext());
       return ok("hook done");
     }
 
-    if (mode === "allScenes") {
+    // allScenes = add only, existing tags stay. syncScenes = add and remove stale bracket tags.
+    if (mode === "allScenes" || mode === "syncScenes") {
       var scenes = getAllScenes();
-      ctx = makeContext(settings);
-      log.Info("Processing " + scenes.length + " scenes" + (ctx.parentId ? " (removing stale bracket tags)" : ""));
-      if (ctx.parentId) {
+      var sync = mode === "syncScenes";
+      ctx = makeContext();
+      log.Info("Processing " + scenes.length + " scenes" + (sync ? " (removing stale bracket tags)" : " (add only, nothing is removed)"));
+      if (sync) {
         // Pass 1: resolve every bracket name once, so all current bracket tags carry the parent tag
         for (var a = 0; a < scenes.length; a++) {
           var names = bracketNames(scenes[a]).names || [];
@@ -331,7 +326,7 @@
           log.Progress((i + 1) / scenes.length);
         }
       }
-      log.Info("Done. Updated " + updated + " scene(s)" + (ctx.parentId ? ", removed " + removedTotal + " stale tag(s)." : "."));
+      log.Info("Done. Updated " + updated + " scene(s)" + (sync ? ", removed " + removedTotal + " stale tag(s)." : "."));
       return ok("updated " + updated);
     }
 
