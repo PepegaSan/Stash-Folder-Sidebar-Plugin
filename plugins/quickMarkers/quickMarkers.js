@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.5.0";
+  const PLUGIN_VERSION = "1.6.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -574,15 +574,18 @@
     return markerCopyPromise;
   }
 
-  /** Copied markers; follows copies made in other tabs and in Stash UI (same localStorage). */
-  function useMarkerClipboard() {
-    const [clip, setClip] = React.useState(null);
+  /**
+   * Copied markers and the last transfer (for Undo); follows changes made in other tabs and
+   * in Stash UI (same localStorage). → { clip, undo }
+   */
+  function useMarkerTransferState() {
+    const [state, setState] = React.useState({ clip: null, undo: null });
     React.useEffect(function () {
       let cancelled = false;
       function read() {
         loadMarkerCopy()
           .then(function (mc) {
-            if (!cancelled) setClip(mc.readClipboard());
+            if (!cancelled) setState({ clip: mc.readClipboard(), undo: mc.readUndo() });
           })
           .catch(function (e) {
             console.error("[Quick Markers] markerCopy.js not loaded", e);
@@ -597,7 +600,17 @@
         window.removeEventListener(MARKER_CLIPBOARD_EVENT, read);
       };
     }, []);
-    return clip;
+    return state;
+  }
+
+  /** Asks classic Stash to load the visible page again (markers list, timeline). */
+  function refreshClassicViews() {
+    try {
+      const client = StashService && typeof StashService.getClient === "function" ? StashService.getClient() : null;
+      if (client && typeof client.refetchQueries === "function") client.refetchQueries({ include: "active" });
+    } catch (e) {
+      console.error("[Quick Markers] refresh failed", e);
+    }
   }
 
   const PLAN_STATUS_NOTE = { exists: "already there", outside: "outside the video" };
@@ -723,15 +736,18 @@
     }
 
     async function runPaste(plan) {
+      const created = [];
       setBusy("…");
       try {
-        const n = await data.mc.applyPlan(props.createInScene, sceneId, plan, function (i, total) {
+        await data.mc.applyPlan(props.createInScene, sceneId, plan, function (i, total) {
           setBusy(i + " / " + total);
-        });
-        Toast.success(n + " markers pasted");
+        }, created);
+        Toast.success(created.length + " markers pasted — Undo in the Quick Markers panel");
         props.onClose();
       } catch (e) {
         fail(e);
+      } finally {
+        data.mc.rememberTransfer(created, [sceneId]);
       }
     }
 
@@ -740,16 +756,22 @@
       const targets = data.list.filter(function (x) {
         return picked[x.scene.id];
       });
-      let total = 0;
+      const created = [];
       try {
         for (let i = 0; i < targets.length; i++) {
           setBusy(i + 1 + " / " + targets.length);
-          total += await mc.applyPlan(mc.createWithGql(mc.gqlFetch), targets[i].scene.id, targets[i].plan);
+          await mc.applyPlan(mc.createWithGql(mc.gqlFetch), targets[i].scene.id, targets[i].plan, null, created);
         }
-        Toast.success(total + " markers copied to " + targets.length + " scenes");
+        Toast.success(
+          created.length + " markers copied to " + targets.length + " scenes — Undo in the Quick Markers panel"
+        );
         props.onClose();
       } catch (e) {
         fail(e);
+      } finally {
+        mc.rememberTransfer(created, targets.map(function (x) {
+          return x.scene.id;
+        }));
       }
     }
 
@@ -858,14 +880,46 @@
       const count = data.list.filter(function (x) {
         return picked[x.scene.id];
       }).length;
+      // Thumbnail with length; opens the scene in a new tab, to compare before copying.
+      const thumb = function (sc) {
+        return React.createElement(
+          "a",
+          {
+            className: "quick-markers-thumb",
+            href: "/scenes/" + sc.id,
+            target: "_blank",
+            rel: "noreferrer",
+            title: "Open in a new tab",
+          },
+          sc.screenshot ? React.createElement("img", { alt: "", loading: "lazy", src: sc.screenshot }) : null,
+          React.createElement("span", null, mc.formatTime(sc.duration))
+        );
+      };
       body = React.createElement(
         React.Fragment,
         null,
         React.createElement(
+          "div",
+          { className: "quick-markers-same-row is-self" },
+          thumb(scene),
+          React.createElement(
+            "div",
+            { className: "quick-markers-same-info" },
+            React.createElement("strong", null, scene.title),
+            React.createElement("small", null, scene.path),
+            React.createElement(
+              "small",
+              null,
+              "This scene · " + scene.markers.length + (scene.markers.length === 1 ? " marker" : " markers")
+            )
+          )
+        ),
+        React.createElement(
           "p",
           { className: "text-muted" },
           scene.markers.length
-            ? "This scene has " + scene.markers.length + " markers. Pick the scenes that should get them:"
+            ? "This scene has " + scene.markers.length + (scene.markers.length === 1 ? " marker" : " markers") +
+              ". Pick the scenes that should get them:"
             : "This scene has no markers yet — take them from one of the videos below."
         ),
         React.createElement(
@@ -892,13 +946,17 @@
                   setPicked(next);
                 },
               }),
+              thumb(x.scene),
               React.createElement(
                 "div",
                 { className: "quick-markers-same-info" },
                 React.createElement(
                   "a",
                   { href: "/scenes/" + x.scene.id, target: "_blank", rel: "noreferrer" },
-                  x.scene.title
+                  x.scene.title,
+                  x.short
+                    ? React.createElement("em", { className: "quick-markers-flag" }, "short clip — check")
+                    : null
                 ),
                 React.createElement("small", null, x.scene.path),
                 React.createElement(
@@ -934,7 +992,7 @@
           ? React.createElement(
               "p",
               { className: "text-muted small mb-0" },
-              "Scenes whose length differs by more than a second are not ticked — check them before copying."
+              "Not ticked: a length that differs by more than a second, or clips under 30 s — compare the pictures before copying."
             )
           : null
       );
@@ -1032,7 +1090,9 @@
     const [panelDragging, setPanelDragging] = React.useState(false);
     const [touchHost, setTouchHost] = React.useState(null);
     const [transferMode, setTransferMode] = React.useState(null); // "paste" | "same"
-    const clip = useMarkerClipboard();
+    const transferState = useMarkerTransferState();
+    const clip = transferState.clip;
+    const undo = transferState.undo;
     const panelInitRef = React.useRef(false);
     const panelRef = React.useRef(null);
     const dragRef = React.useRef(null);
@@ -1299,6 +1359,27 @@
         }
       },
       [scene.id, Toast]
+    );
+
+    const onUndoTransfer = React.useCallback(
+      async function () {
+        try {
+          const mc = await loadMarkerCopy();
+          const rec = mc.readUndo();
+          if (!rec) return;
+          const ok = window.confirm(
+            "Delete the " + rec.ids.length + " markers that were copied last (into " +
+              rec.sceneIds.length + (rec.sceneIds.length === 1 ? " scene" : " scenes") + ")?"
+          );
+          if (!ok) return;
+          await mc.undoLastTransfer(mc.gqlFetch);
+          refreshClassicViews();
+          Toast.success(rec.ids.length + " markers removed");
+        } catch (e) {
+          Toast.error(formatError(e));
+        }
+      },
+      [Toast]
     );
 
     // Markers for this scene: plain GraphQL, except the last one, which goes through
@@ -1646,7 +1727,24 @@
                         },
                       },
                       "Same videos…"
-                    )
+                    ),
+                    undo
+                      ? React.createElement(
+                          "button",
+                          {
+                            type: "button",
+                            className: "quick-markers-tool",
+                            title: "Remove the markers of the last transfer",
+                            onClick: onUndoTransfer,
+                          },
+                          "↶ Undo",
+                          React.createElement(
+                            "span",
+                            { className: "quick-markers-tool-count" },
+                            undo.ids.length
+                          )
+                        )
+                      : null
                   ),
                   status
                     ? React.createElement(

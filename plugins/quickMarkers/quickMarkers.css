@@ -680,8 +680,63 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
+.quick-markers-same-row:not(.is-self) {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+}
+
+.quick-markers-same-row.is-self {
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-bottom: 0.75rem;
+  border-color: var(--qm-accent);
+}
+
 .quick-markers-same-row.is-unsure {
   border-style: dashed;
+}
+
+/* Thumbnails: compare the pictures before copying */
+.quick-markers-thumb {
+  position: relative;
+  display: block;
+  width: 112px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #000;
+}
+
+.quick-markers-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.quick-markers-thumb span {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 0 4px;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 0.7rem;
+  line-height: 1.1rem;
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.quick-markers-thumb:hover {
+  box-shadow: 0 0 0 2px var(--qm-accent);
+}
+
+.quick-markers-flag {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.3rem;
+  color: #10161a;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 600;
+  background: var(--qm-warn);
+  white-space: nowrap;
 }
 
 .quick-markers-same-row input[type="checkbox"] {

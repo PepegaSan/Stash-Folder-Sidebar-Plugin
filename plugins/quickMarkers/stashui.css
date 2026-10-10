@@ -173,8 +173,60 @@
   background: var(--bg-2);
 }
 
+.qm-x-same-row:not(.is-self) {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+}
+
+.qm-x-same-row.is-self {
+  grid-template-columns: auto minmax(0, 1fr);
+  border-color: var(--pink);
+}
+
 .qm-x-same-row.is-unsure {
   border-style: dashed;
+}
+
+/* Thumbnails: compare the pictures before copying */
+.qm-x-thumb {
+  position: relative;
+  display: block;
+  width: 112px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--r);
+  background: var(--base);
+}
+
+.qm-x-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.qm-x-thumb span {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 0 4px;
+  border-radius: 2px;
+  color: #fff;
+  font: 600 11px/16px var(--f-label);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.qm-x-thumb:hover {
+  box-shadow: 0 0 0 2px var(--pink);
+}
+
+.qm-x-flag {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--ink);
+  font: 600 11px/1.4 var(--f-label);
+  font-style: normal;
+  background: var(--shine, #8fe3ff);
+  white-space: nowrap;
 }
 
 .qm-x-same-info {

@@ -95,8 +95,16 @@ const STRINGS_DE = {
   "has all markers": "hat alle Marker",
   "Copy its markers into this scene": "Seine Marker in diese Szene übernehmen",
   "Take {n}": "{n} übernehmen",
-  "Scenes whose length differs by more than a second are not ticked — check them before copying.":
-    "Szenen, deren Länge um mehr als eine Sekunde abweicht, sind nicht angehakt – vor dem Kopieren prüfen.",
+  "Not ticked: a length that differs by more than a second, or clips under 30 s — compare the pictures before copying.":
+    "Nicht angehakt: mehr als eine Sekunde Längenunterschied oder Clips unter 30 s – vor dem Kopieren die Bilder vergleichen.",
+  "short clip — check": "kurzer Clip – prüfen",
+  "This scene": "Diese Szene",
+  "Open in a new tab": "In neuem Tab öffnen",
+  Undo: "Rückgängig",
+  "Undo last transfer": "Letzte Übertragung rückgängig machen",
+  "Delete the {n} markers that were copied last (into {k} scenes)?": "Die {n} zuletzt übertragenen Marker (in {k} Szenen) löschen?",
+  "{n} markers removed": "{n} Marker entfernt",
+  "Remove the markers of the last transfer": "Marker der letzten Übertragung wieder entfernen",
   "Copy markers to {n} scenes": "Marker auf {n} Szenen übertragen",
   "{n} markers copied to {k} scenes": "{n} Marker auf {k} Szenen übertragen",
   'Edit preset "{label}"': "Preset „{label}“ bearbeiten",
@@ -437,6 +445,53 @@ export default function setup(stashui) {
     }
   }
 
+  // reload belongs to a player that may be closed by now (the undo button sits in a toast).
+  const safeReload = (reload) => {
+    try {
+      if (reload) reload();
+    } catch (e) {
+      /* player gone */
+    }
+  };
+
+  // One transfer: jobs = [{ sceneId, plan }]. Whatever was created — also before an error — is
+  // remembered, so "Undo" can remove it again. → number of markers created.
+  async function transfer(mc, jobs, onProgress) {
+    const created = [];
+    try {
+      for (let i = 0; i < jobs.length; i++) {
+        await mc.applyPlan(mc.createWithGql(stashui.gql), jobs[i].sceneId, jobs[i].plan, (done, total) => onProgress && onProgress(i, done, total), created);
+      }
+    } finally {
+      mc.rememberTransfer(created, jobs.map((j) => j.sceneId));
+    }
+    return created.length;
+  }
+
+  const doneToast = (message, reload) => ui.toast(message, "ok", { label: t("Undo"), run: () => undoTransfer(reload, false) });
+
+  async function undoTransfer(reload, ask) {
+    try {
+      const mc = await markerCopy();
+      const rec = mc.readUndo();
+      if (!rec) return;
+      if (ask) {
+        const answer = await ui.confirmDialog({
+          title: t("Undo last transfer"),
+          text: t("Delete the {n} markers that were copied last (into {k} scenes)?", { n: rec.ids.length, k: rec.sceneIds.length }),
+          ok: t("Delete"),
+          danger: true,
+        });
+        if (!answer || !answer.ok) return;
+      }
+      await mc.undoLastTransfer(stashui.gql);
+      ui.toast(t("{n} markers removed", { n: rec.ids.length }), "ok");
+      safeReload(reload);
+    } catch (e) {
+      ui.errorToast(e, "Quick Markers");
+    }
+  }
+
   async function openPasteDrawer(sceneId, reload) {
     let mc, clip, target;
     try {
@@ -480,16 +535,14 @@ export default function setup(stashui) {
     go.onclick = async () => {
       go.disabled = true;
       try {
-        const n = await mc.applyPlan(mc.createWithGql(stashui.gql), sceneId, plan, (i, total) => (go.textContent = i + " / " + total));
-        ui.toast(t("{n} markers pasted", { n }), "ok");
-        d.close();
-        if (reload) reload();
+        const n = await transfer(mc, [{ sceneId, plan }], (job, i, total) => (go.textContent = i + " / " + total));
+        doneToast(t("{n} markers pasted", { n }), reload);
       } catch (e) {
         // Some may already exist now: close, so opening again plans from the real state.
         ui.errorToast(e, "Quick Markers");
-        d.close();
-        if (reload) reload();
       }
+      d.close();
+      safeReload(reload);
     };
     update();
   }
@@ -552,7 +605,9 @@ export default function setup(stashui) {
 
     const picked = new Set(list.filter((x) => x.sure && x.add > 0).map((x) => x.scene.id));
     function paintList() {
+      const thumb = (x) => `<a class="qm-x-thumb" href="#/scene/${esc(x.id)}" target="_blank" rel="noreferrer" title="${esc(t("Open in a new tab"))}">${x.screenshot ? `<img alt="" loading="lazy" src="${esc(x.screenshot)}">` : ""}<span>${esc(mc.formatTime(x.duration))}</span></a>`;
       body.innerHTML = `
+        <div class="qm-x-same-row is-self">${thumb(scene)}<div class="qm-x-same-info"><b>${esc(scene.title)}</b><small>${esc(scene.path)}</small><small>${esc(t("This scene"))} · ${esc(t("{n} markers", { n: scene.markers.length }))}</small></div></div>
         <p class="kb-hint">${scene.markers.length
           ? esc(t("This scene has {n} markers. Pick the scenes that should get them:", { n: scene.markers.length }))
           : esc(t("This scene has no markers yet — take them from one of the videos below."))}</p>
@@ -562,8 +617,9 @@ export default function setup(stashui) {
               const pull = mc.countNew(mc.planCopy(x.scene.markers, scene, 0));
               return `<div class="qm-x-same-row${x.sure ? "" : " is-unsure"}">
                 <label class="kb-check"><input type="checkbox" data-pick="${esc(x.scene.id)}"${picked.has(x.scene.id) ? " checked" : ""}${x.add ? "" : " disabled"}></label>
+                ${thumb(x.scene)}
                 <div class="qm-x-same-info">
-                  <b>${esc(x.scene.title)}</b>
+                  <b>${esc(x.scene.title)}${x.short ? ` <em class="qm-x-flag">${esc(t("short clip — check"))}</em>` : ""}</b>
                   <small>${esc(x.scene.path)}</small>
                   <small>${esc(mc.formatTime(x.scene.duration))} (${x.durationDiff < 0.05 ? esc(t("same length")) : "± " + x.durationDiff.toFixed(1) + " s"}) · ${esc(t("{n} markers", { n: x.scene.markers.length }))}${x.add ? " · " + esc(t("+{n} new", { n: x.add })) : " · " + esc(t("has all markers"))}</small>
                 </div>
@@ -572,7 +628,7 @@ export default function setup(stashui) {
             })
             .join("")}
         </div>
-        ${list.some((x) => !x.sure) ? `<p class="kb-hint">${esc(t("Scenes whose length differs by more than a second are not ticked — check them before copying."))}</p>` : ""}`;
+        ${list.some((x) => !x.sure) ? `<p class="kb-hint">${esc(t("Not ticked: a length that differs by more than a second, or clips under 30 s — compare the pictures before copying."))}</p>` : ""}`;
       const n = list.filter((x) => picked.has(x.scene.id)).length;
       go.hidden = !scene.markers.length;
       go.disabled = !n;
@@ -592,31 +648,25 @@ export default function setup(stashui) {
       const x = list.find((y) => y.scene.id === b.dataset.pull);
       b.disabled = true;
       try {
-        const n = await mc.applyPlan(mc.createWithGql(stashui.gql), sceneId, mc.planCopy(x.scene.markers, scene, 0));
-        ui.toast(t("{n} markers pasted", { n }), "ok");
-        d.close();
-        if (reload) reload();
+        const n = await transfer(mc, [{ sceneId, plan: mc.planCopy(x.scene.markers, scene, 0) }]);
+        doneToast(t("{n} markers pasted", { n }), reload);
       } catch (err) {
         ui.errorToast(err, "Quick Markers");
-        d.close();
-        if (reload) reload();
       }
+      d.close();
+      safeReload(reload);
     });
     go.onclick = async () => {
       const targets = list.filter((x) => picked.has(x.scene.id));
       go.disabled = true;
-      let total = 0;
       try {
-        for (let i = 0; i < targets.length; i++) {
-          go.textContent = i + 1 + " / " + targets.length;
-          total += await mc.applyPlan(mc.createWithGql(stashui.gql), targets[i].scene.id, targets[i].plan);
-        }
-        ui.toast(t("{n} markers copied to {k} scenes", { n: total, k: targets.length }), "ok");
-        d.close();
+        const jobs = targets.map((x) => ({ sceneId: x.scene.id, plan: x.plan }));
+        const total = await transfer(mc, jobs, (job) => (go.textContent = job + 1 + " / " + targets.length));
+        doneToast(t("{n} markers copied to {k} scenes", { n: total, k: targets.length }), reload);
       } catch (e) {
         ui.errorToast(e, "Quick Markers");
-        d.close();
       }
+      d.close();
     };
     paintList();
   }
@@ -791,6 +841,7 @@ export default function setup(stashui) {
               <button type="button" class="kb-btn is-ghost" data-qm="copy" title="${esc(t("Copy all markers of this scene (times, titles, tags)"))}">${ui.icon("copies")}${esc(t("Copy"))}</button>
               <button type="button" class="kb-btn is-ghost" data-qm="paste"${clip ? "" : " disabled"} title="${esc(clip ? t("Paste {n} markers from {title}", { n: clip.markers.length, title: clip.sceneTitle }) : t("Copy the markers of another scene first"))}">${ui.icon("download")}${esc(t("Paste"))}${clip ? `<small>${clip.markers.length}</small>` : ""}</button>
               <button type="button" class="kb-btn is-ghost" data-qm="same" title="${esc(t("Copy markers to scenes with the same video"))}">${ui.icon("layers")}${esc(t("Same videos"))}</button>
+              ${undo ? `<button type="button" class="kb-btn is-ghost" data-qm="undo" title="${esc(t("Remove the markers of the last transfer"))}">${ui.icon("undo")}${esc(t("Undo"))}<small>${undo.ids.length}</small></button>` : ""}
             </div>
           </div>`;
       }
@@ -807,14 +858,17 @@ export default function setup(stashui) {
         else if (action === "copy") copyMarkers(sceneId);
         else if (action === "paste") openPasteDrawer(sceneId, ctx.reload);
         else if (action === "same") openSameDrawer(sceneId, ctx.reload);
+        else if (action === "undo") undoTransfer(ctx.reload, true);
       }, { signal });
 
       // The clipboard can change in another tab (storage) or another section (CLIPBOARD_EVENT).
       let clip = null;
+      let undo = null;
       const readClip = () => {
         markerCopy()
           .then((mc) => {
             clip = mc.readClipboard();
+            undo = mc.readUndo();
             paint();
           })
           .catch(() => {});
