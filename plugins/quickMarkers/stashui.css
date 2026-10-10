@@ -84,6 +84,122 @@
   color: var(--ok);
 }
 
+/* ── Copy / paste / same videos ── */
+
+.qm-x-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0 -8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.qm-x-tools .kb-btn {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.qm-x-tools .kb-btn small {
+  padding: 0 5px;
+  border-radius: 8px;
+  color: var(--ink);
+  font: 700 11px/16px var(--f-label);
+  background: var(--pink);
+}
+
+.qm-x-offset {
+  max-width: 220px;
+}
+
+.qm-x-plan {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-x-plan li {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--r);
+  background: var(--bg-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.qm-x-plan li > span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.qm-x-plan .kb-chip {
+  height: 22px;
+  padding: 0 7px;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.qm-x-plan li.is-exists,
+.qm-x-plan li.is-outside {
+  opacity: 0.45;
+}
+
+.qm-x-plan li small {
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.qm-x-same {
+  display: grid;
+  gap: 6px;
+}
+
+.qm-x-same-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg-2);
+}
+
+.qm-x-same-row.is-unsure {
+  border-style: dashed;
+}
+
+.qm-x-same-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.qm-x-same-info small {
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qm-x-same-empty {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.qm-x-same-empty p {
+  margin: 0;
+}
+
 /* ── Settings → Plugins → Quick Markers ── */
 
 .qm-set {

@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.4.0";
+  const PLUGIN_VERSION = "1.5.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -18,6 +18,9 @@
   ];
   const VALID_TOUCH_CONTROLS = ["auto", "on", "off"];
   const ASSETS_PRESETS = "/plugin/" + PLUGIN_ID + "/assets/presets.json";
+  const MARKER_COPY_URL =
+    "/plugin/" + PLUGIN_ID + "/assets/markerCopy.js?v=" + PLUGIN_VERSION;
+  const MARKER_CLIPBOARD_EVENT = "quickMarkers:clipboard";
 
   const PluginApi = window.PluginApi;
   if (!PluginApi || !PluginApi.React || !PluginApi.GQL) {
@@ -556,6 +559,463 @@
     };
   }
 
+  // ---------- Copying markers between scenes ----------
+  // markerCopy.js is shared with Stash UI (stashui.js); loaded with import() on first use.
+
+  let markerCopyPromise = null;
+
+  function loadMarkerCopy() {
+    if (!markerCopyPromise) {
+      markerCopyPromise = import(MARKER_COPY_URL);
+      markerCopyPromise.catch(function () {
+        markerCopyPromise = null;
+      });
+    }
+    return markerCopyPromise;
+  }
+
+  /** Copied markers; follows copies made in other tabs and in Stash UI (same localStorage). */
+  function useMarkerClipboard() {
+    const [clip, setClip] = React.useState(null);
+    React.useEffect(function () {
+      let cancelled = false;
+      function read() {
+        loadMarkerCopy()
+          .then(function (mc) {
+            if (!cancelled) setClip(mc.readClipboard());
+          })
+          .catch(function (e) {
+            console.error("[Quick Markers] markerCopy.js not loaded", e);
+          });
+      }
+      read();
+      window.addEventListener("storage", read);
+      window.addEventListener(MARKER_CLIPBOARD_EVENT, read);
+      return function () {
+        cancelled = true;
+        window.removeEventListener("storage", read);
+        window.removeEventListener(MARKER_CLIPBOARD_EVENT, read);
+      };
+    }, []);
+    return clip;
+  }
+
+  const PLAN_STATUS_NOTE = { exists: "already there", outside: "outside the video" };
+
+  function PlanList(props) {
+    const mc = props.mc;
+    return React.createElement(
+      "ul",
+      { className: "quick-markers-plan" },
+      props.plan.map(function (p, index) {
+        const m = p.marker;
+        const time =
+          mc.formatTime(p.seconds) +
+          (p.end_seconds != null ? " – " + mc.formatTime(p.end_seconds) : "");
+        const chips = (m.primaryTag && m.title ? [m.primaryTag] : []).concat(
+          m.tags.filter(function (tag) {
+            return !m.primaryTag || tag.id !== m.primaryTag.id;
+          })
+        );
+        return React.createElement(
+          "li",
+          { key: index, className: "is-" + p.status },
+          React.createElement("b", null, time),
+          React.createElement(
+            "span",
+            null,
+            mc.markerLabel(m),
+            chips.map(function (tag) {
+              return React.createElement(
+                "i",
+                { key: tag.id, className: "quick-markers-chip" },
+                tag.name
+              );
+            })
+          ),
+          p.status !== "new"
+            ? React.createElement("small", null, PLAN_STATUS_NOTE[p.status])
+            : null
+        );
+      })
+    );
+  }
+
+  /**
+   * mode "paste": paste the copied markers into this scene (with an optional shift).
+   * mode "same":  copy this scene's markers to scenes with the same video (phash),
+   *               or take the markers of one of them.
+   * createInScene(input, isLast) creates a marker in *this* scene (refreshes Stash's views).
+   */
+  function MarkerTransferModal(props) {
+    const sceneId = String(props.sceneId);
+    const Toast = props.Toast;
+    const [data, setData] = React.useState(null); // { mc, clip?, scene, list? }
+    const [error, setError] = React.useState(null);
+    const [offset, setOffset] = React.useState("0");
+    const [picked, setPicked] = React.useState({});
+    const [busy, setBusy] = React.useState("");
+    const [coverage, setCoverage] = React.useState("");
+
+    React.useEffect(
+      function () {
+        let cancelled = false;
+        (async function () {
+          try {
+            const mc = await loadMarkerCopy();
+            const scene = await mc.loadScene(mc.gqlFetch, sceneId);
+            if (props.mode === "paste") {
+              const clip = mc.readClipboard();
+              if (!clip) throw new Error("Nothing copied yet.");
+              if (clip.sceneId === sceneId) {
+                throw new Error("These markers were copied from this scene.");
+              }
+              if (!cancelled) setData({ mc: mc, clip: clip, scene: scene });
+              return;
+            }
+            const list = scene.phashes.length
+              ? await mc.findSameVideos(mc.gqlFetch, scene)
+              : [];
+            const pre = {};
+            list.forEach(function (x) {
+              if (x.sure && x.add > 0) pre[x.scene.id] = true;
+            });
+            if (!cancelled) {
+              setPicked(pre);
+              setData({ mc: mc, scene: scene, list: list });
+            }
+            if (!list.length) {
+              const c = await mc.phashCoverage(mc.gqlFetch);
+              if (!cancelled) {
+                setCoverage(
+                  c.withPhash + " of " + c.total + " scenes have a fingerprint so far."
+                );
+              }
+            }
+          } catch (e) {
+            if (!cancelled) setError(formatError(e));
+          }
+        })();
+        return function () {
+          cancelled = true;
+        };
+      },
+      [props.mode, sceneId]
+    );
+
+    React.useEffect(
+      function () {
+        function onKey(e) {
+          if (e.key === "Escape" && !busy) props.onClose();
+        }
+        window.addEventListener("keydown", onKey);
+        return function () {
+          window.removeEventListener("keydown", onKey);
+        };
+      },
+      [busy, props.onClose]
+    );
+
+    // A failure part-way leaves some markers created: close, so opening again plans from the real state.
+    function fail(e) {
+      Toast.error(formatError(e));
+      props.onClose();
+    }
+
+    async function runPaste(plan) {
+      setBusy("…");
+      try {
+        const n = await data.mc.applyPlan(props.createInScene, sceneId, plan, function (i, total) {
+          setBusy(i + " / " + total);
+        });
+        Toast.success(n + " markers pasted");
+        props.onClose();
+      } catch (e) {
+        fail(e);
+      }
+    }
+
+    async function runCopyToScenes() {
+      const mc = data.mc;
+      const targets = data.list.filter(function (x) {
+        return picked[x.scene.id];
+      });
+      let total = 0;
+      try {
+        for (let i = 0; i < targets.length; i++) {
+          setBusy(i + 1 + " / " + targets.length);
+          total += await mc.applyPlan(mc.createWithGql(mc.gqlFetch), targets[i].scene.id, targets[i].plan);
+        }
+        Toast.success(total + " markers copied to " + targets.length + " scenes");
+        props.onClose();
+      } catch (e) {
+        fail(e);
+      }
+    }
+
+    async function generatePhashes() {
+      const ok = window.confirm(
+        "Start a Stash task that creates the video fingerprint (phash) for all scenes without one? It runs in the background (see Tasks) and can take a while."
+      );
+      if (!ok) return;
+      try {
+        await data.mc.generatePhashes(data.mc.gqlFetch);
+        Toast.success("Phash task started — see Tasks");
+      } catch (e) {
+        Toast.error(formatError(e));
+      }
+    }
+
+    const title = props.mode === "paste" ? "Paste markers" : "Same videos";
+    let body = null;
+    let action = null;
+
+    if (error) {
+      body = React.createElement("p", { className: "quick-markers-transfer-error" }, error);
+    } else if (!data) {
+      body = React.createElement("p", { className: "text-muted" }, "Loading…");
+    } else if (props.mode === "paste") {
+      const mc = data.mc;
+      const plan = mc.planCopy(data.clip.markers, data.scene, Number(offset) || 0);
+      const n = mc.countNew(plan);
+      body = React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(
+          "p",
+          { className: "quick-markers-transfer-from" },
+          "From ",
+          React.createElement("strong", null, data.clip.sceneTitle),
+          " (" + mc.formatTime(data.clip.duration) + ") → ",
+          React.createElement("strong", null, data.scene.title),
+          " (" + mc.formatTime(data.scene.duration) + ")"
+        ),
+        React.createElement(
+          "div",
+          { className: "form-group quick-markers-transfer-offset" },
+          React.createElement("label", { htmlFor: "qm-copy-offset" }, "Shift (seconds)"),
+          React.createElement("input", {
+            id: "qm-copy-offset",
+            type: "number",
+            step: "0.5",
+            className: "form-control",
+            value: offset,
+            onChange: function (e) {
+              setOffset(e.target.value);
+            },
+          }),
+          React.createElement(
+            "p",
+            { className: "text-muted small mb-0" },
+            "Only needed when this video starts earlier or later than the copied one (e.g. -12.5)."
+          )
+        ),
+        React.createElement(PlanList, { mc: mc, plan: plan })
+      );
+      action = React.createElement(
+        "button",
+        {
+          type: "button",
+          className: "btn btn-primary",
+          disabled: !n || !!busy,
+          onClick: function () {
+            runPaste(plan);
+          },
+        },
+        busy || (n ? "Paste " + n + " markers" : "Nothing new to paste")
+      );
+    } else if (!data.list.length) {
+      body = React.createElement(
+        "div",
+        { className: "quick-markers-transfer-empty" },
+        React.createElement(
+          "p",
+          null,
+          data.scene.phashes.length
+            ? "No other scene with the same video was found."
+            : "This scene has no video fingerprint (phash) yet, so same videos can't be found."
+        ),
+        React.createElement(
+          "p",
+          { className: "text-muted small" },
+          "Only scenes with a fingerprint are found. Stash creates them with Tasks → Generate → Phashes. ",
+          coverage
+        ),
+        React.createElement(
+          "button",
+          { type: "button", className: "btn btn-secondary btn-sm", onClick: generatePhashes },
+          "Generate missing phashes now"
+        ),
+        React.createElement(
+          "p",
+          { className: "text-muted small mb-0" },
+          "Copy & paste works without fingerprints."
+        )
+      );
+    } else {
+      const mc = data.mc;
+      const scene = data.scene;
+      const count = data.list.filter(function (x) {
+        return picked[x.scene.id];
+      }).length;
+      body = React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(
+          "p",
+          { className: "text-muted" },
+          scene.markers.length
+            ? "This scene has " + scene.markers.length + " markers. Pick the scenes that should get them:"
+            : "This scene has no markers yet — take them from one of the videos below."
+        ),
+        React.createElement(
+          "div",
+          { className: "quick-markers-same" },
+          data.list.map(function (x) {
+            const pull = mc.countNew(mc.planCopy(x.scene.markers, scene, 0));
+            const diff = x.durationDiff < 0.05 ? "same length" : "± " + x.durationDiff.toFixed(1) + " s";
+            return React.createElement(
+              "div",
+              {
+                key: x.scene.id,
+                className: "quick-markers-same-row" + (x.sure ? "" : " is-unsure"),
+              },
+              React.createElement("input", {
+                type: "checkbox",
+                checked: !!picked[x.scene.id],
+                disabled: !x.add || !!busy,
+                "aria-label": "Copy markers to " + x.scene.title,
+                onChange: function (e) {
+                  const next = Object.assign({}, picked);
+                  if (e.target.checked) next[x.scene.id] = true;
+                  else delete next[x.scene.id];
+                  setPicked(next);
+                },
+              }),
+              React.createElement(
+                "div",
+                { className: "quick-markers-same-info" },
+                React.createElement(
+                  "a",
+                  { href: "/scenes/" + x.scene.id, target: "_blank", rel: "noreferrer" },
+                  x.scene.title
+                ),
+                React.createElement("small", null, x.scene.path),
+                React.createElement(
+                  "small",
+                  null,
+                  mc.formatTime(x.scene.duration) +
+                    " (" + diff + ") · " +
+                    x.scene.markers.length + (x.scene.markers.length === 1 ? " marker · " : " markers · ") +
+                    (x.add ? "+" + x.add + " new" : "has all markers")
+                )
+              ),
+              pull
+                ? React.createElement(
+                    "button",
+                    {
+                      type: "button",
+                      className: "btn btn-secondary btn-sm",
+                      disabled: !!busy,
+                      title: "Copy its markers into this scene",
+                      onClick: function () {
+                        runPaste(mc.planCopy(x.scene.markers, scene, 0));
+                      },
+                    },
+                    "Take " + pull
+                  )
+                : null
+            );
+          })
+        ),
+        data.list.some(function (x) {
+          return !x.sure;
+        })
+          ? React.createElement(
+              "p",
+              { className: "text-muted small mb-0" },
+              "Scenes whose length differs by more than a second are not ticked — check them before copying."
+            )
+          : null
+      );
+      action = scene.markers.length
+        ? React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-primary",
+              disabled: !count || !!busy,
+              onClick: runCopyToScenes,
+            },
+            busy || "Copy markers to " + count + " scenes"
+          )
+        : null;
+    }
+
+    return React.createElement(
+      "div",
+      {
+        className: "quick-markers-modal-backdrop",
+        role: "presentation",
+        onClick: function () {
+          if (!busy) props.onClose();
+        },
+      },
+      React.createElement(
+        "div",
+        {
+          className: "quick-markers-modal quick-markers-transfer-modal",
+          role: "dialog",
+          "aria-modal": true,
+          "aria-labelledby": "qm-transfer-title",
+          onClick: function (e) {
+            e.stopPropagation();
+          },
+        },
+        React.createElement(
+          "div",
+          { className: "quick-markers-modal-header" },
+          React.createElement(
+            "h3",
+            { id: "qm-transfer-title", className: "quick-markers-modal-title" },
+            title
+          ),
+          React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "quick-markers-modal-close",
+              "aria-label": "Close",
+              disabled: !!busy,
+              onClick: function () {
+                props.onClose();
+              },
+            },
+            "×"
+          )
+        ),
+        React.createElement("div", { className: "quick-markers-modal-body" }, body),
+        React.createElement(
+          "div",
+          { className: "quick-markers-modal-footer" },
+          React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-secondary",
+              disabled: !!busy,
+              onClick: function () {
+                props.onClose();
+              },
+            },
+            action ? "Cancel" : "Close"
+          ),
+          action
+        )
+      )
+    );
+  }
+
   function QuickMarkersSceneHook(props) {
     const scene = props.scene;
     const Toast = useSafeToast();
@@ -571,6 +1031,8 @@
     const [panelPos, setPanelPos] = React.useState(readStoredPanelPos);
     const [panelDragging, setPanelDragging] = React.useState(false);
     const [touchHost, setTouchHost] = React.useState(null);
+    const [transferMode, setTransferMode] = React.useState(null); // "paste" | "same"
+    const clip = useMarkerClipboard();
     const panelInitRef = React.useRef(false);
     const panelRef = React.useRef(null);
     const dragRef = React.useRef(null);
@@ -823,6 +1285,40 @@
       },
       [scene.id]
     );
+
+    const onCopyMarkers = React.useCallback(
+      async function () {
+        try {
+          const mc = await loadMarkerCopy();
+          const data = await mc.copySceneMarkers(mc.gqlFetch, scene.id);
+          Toast.success(
+            data.markers.length + " markers copied — open the other scene and paste them"
+          );
+        } catch (e) {
+          Toast.error(formatError(e));
+        }
+      },
+      [scene.id, Toast]
+    );
+
+    // Markers for this scene: plain GraphQL, except the last one, which goes through
+    // Stash's own mutation so the Markers tab and the timeline refresh once.
+    const createInScene = React.useCallback(
+      async function (input, isLast) {
+        if (isLast) {
+          return createMarker({
+            variables: useFlatMarkerCreateVars ? input : { input: input },
+          });
+        }
+        const mc = await loadMarkerCopy();
+        return mc.createWithGql(mc.gqlFetch)(input);
+      },
+      [createMarker]
+    );
+
+    const closeTransfer = React.useCallback(function () {
+      setTransferMode(null);
+    }, []);
 
     React.useEffect(
       function () {
@@ -1104,6 +1600,54 @@
                       );
                     })
                   ),
+                  React.createElement(
+                    "div",
+                    { className: "quick-markers-tools" },
+                    React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className: "quick-markers-tool",
+                        title: "Copy all markers of this scene (times, titles, tags)",
+                        onClick: onCopyMarkers,
+                      },
+                      "⧉ Copy"
+                    ),
+                    React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className: "quick-markers-tool",
+                        disabled: !clip,
+                        title: clip
+                          ? "Paste " + clip.markers.length + " markers from " + clip.sceneTitle
+                          : "Copy the markers of another scene first",
+                        onClick: function () {
+                          setTransferMode("paste");
+                        },
+                      },
+                      "Paste",
+                      clip
+                        ? React.createElement(
+                            "span",
+                            { className: "quick-markers-tool-count" },
+                            clip.markers.length
+                          )
+                        : null
+                    ),
+                    React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        className: "quick-markers-tool",
+                        title: "Copy markers to scenes with the same video (phash)",
+                        onClick: function () {
+                          setTransferMode("same");
+                        },
+                      },
+                      "Same videos…"
+                    )
+                  ),
                   status
                     ? React.createElement(
                         "p",
@@ -1258,7 +1802,23 @@
           ), touchHost)
         : null;
 
-    return React.createElement(React.Fragment, null, floatingPanel, touchBar);
+    var transferModal = transferMode
+      ? React.createElement(MarkerTransferModal, {
+          mode: transferMode,
+          sceneId: scene.id,
+          Toast: Toast,
+          createInScene: createInScene,
+          onClose: closeTransfer,
+        })
+      : null;
+
+    return React.createElement(
+      React.Fragment,
+      null,
+      floatingPanel,
+      touchBar,
+      transferModal
+    );
   }
 
   PluginApi.patch.after("ScenePage", function () {

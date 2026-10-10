@@ -1,6 +1,6 @@
 name: Quick Markers
-description: Create scene markers with hotkeys and presets (Shift+1–9 select, Shift+I/O range, Shift+M instant) — classic Stash and Stash UI
-version: 1.4.0
+description: Create scene markers with hotkeys and presets (Shift+1–9 select, Shift+I/O range, Shift+M instant), copy markers between scenes and same videos — classic Stash and Stash UI
+version: 1.5.0
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:

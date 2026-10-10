@@ -319,6 +319,54 @@
   color: var(--qm-muted);
 }
 
+/* Copy / paste / same videos */
+.quick-markers-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--qm-line);
+}
+
+.quick-markers-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.75rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: var(--qm-radius-sm);
+  background: transparent;
+  color: var(--qm-muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quick-markers-tool:hover:not(:disabled) {
+  color: var(--qm-text);
+  border-color: var(--qm-line);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.quick-markers-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.quick-markers-tool-count {
+  min-width: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  color: var(--qm-on-accent);
+  background: var(--qm-accent);
+  font-size: 0.7rem;
+  line-height: 1.1rem;
+  text-align: center;
+}
+
 /* ── Plugin settings (classic Stash) ── */
 
 .quick-markers-settings {
@@ -539,6 +587,125 @@
   gap: 0.5rem;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--qm-line);
+}
+
+/* Paste / same videos dialog */
+.quick-markers-transfer-modal {
+  width: min(640px, 100%);
+}
+
+.quick-markers-transfer-from {
+  margin-bottom: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.quick-markers-transfer-offset {
+  max-width: 16rem;
+}
+
+.quick-markers-transfer-error {
+  color: var(--qm-rec);
+}
+
+.quick-markers-transfer-empty {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+
+.quick-markers-transfer-empty p {
+  margin: 0;
+}
+
+.quick-markers-plan {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quick-markers-plan li {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--qm-radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.quick-markers-plan li > span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.quick-markers-plan li.is-exists,
+.quick-markers-plan li.is-outside {
+  opacity: 0.45;
+}
+
+.quick-markers-plan li small {
+  color: var(--qm-muted);
+  white-space: nowrap;
+}
+
+.quick-markers-chip {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-style: normal;
+  background: color-mix(in srgb, var(--qm-accent) 22%, transparent);
+}
+
+.quick-markers-same {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.quick-markers-same-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--qm-line);
+  border-radius: var(--qm-radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.quick-markers-same-row.is-unsure {
+  border-style: dashed;
+}
+
+.quick-markers-same-row input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--qm-accent);
+}
+
+.quick-markers-same-info {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.quick-markers-same-info a {
+  color: var(--qm-text);
+  font-weight: 600;
+}
+
+.quick-markers-same-info small {
+  overflow: hidden;
+  color: var(--qm-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Touch bar (Android / tablet) ──

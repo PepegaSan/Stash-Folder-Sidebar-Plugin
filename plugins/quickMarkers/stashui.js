@@ -54,6 +54,51 @@ const STRINGS_DE = {
   None: "Keiner",
   Add: "Hinzufügen",
   Edit: "Bearbeiten",
+  Copy: "Kopieren",
+  Paste: "Einfügen",
+  "Same videos": "Gleiche Videos",
+  Close: "Schließen",
+  Start: "Starten",
+  "Copied from": "Kopiert aus",
+  "Copy all markers of this scene (times, titles, tags)": "Alle Marker dieser Szene kopieren (Zeiten, Titel, Tags)",
+  "Paste {n} markers from {title}": "{n} Marker aus {title} einfügen",
+  "Copy the markers of another scene first": "Zuerst die Marker einer anderen Szene kopieren",
+  "Copy markers to scenes with the same video": "Marker auf Szenen mit demselben Video übertragen",
+  "{n} markers copied — open the other scene and paste them": "{n} Marker kopiert – jetzt die andere Szene öffnen und einfügen",
+  "These markers were copied from this scene.": "Diese Marker wurden aus dieser Szene kopiert.",
+  "Paste markers": "Marker einfügen",
+  "Shift (seconds)": "Versatz (Sekunden)",
+  "Only needed when this video starts earlier or later than the copied one (e.g. -12.5).":
+    "Nur nötig, wenn dieses Video früher oder später beginnt als das kopierte (z. B. -12.5).",
+  "Paste {n} markers": "{n} Marker einfügen",
+  "Nothing new to paste": "Nichts Neues zum Einfügen",
+  "{n} markers pasted": "{n} Marker eingefügt",
+  "already there": "schon vorhanden",
+  "outside the video": "außerhalb des Videos",
+  "{n} of {total} scenes have a fingerprint so far.": "Bisher haben {n} von {total} Szenen einen Fingerabdruck.",
+  "No other scene with the same video was found.": "Keine andere Szene mit demselben Video gefunden.",
+  "This scene has no video fingerprint (phash) yet, so same videos can't be found.":
+    "Diese Szene hat noch keinen Video-Fingerabdruck (phash), daher können gleiche Videos nicht gefunden werden.",
+  "Only scenes with a fingerprint are found. Stash creates them with Tasks → Generate → Phashes.":
+    "Gefunden werden nur Szenen mit Fingerabdruck. Stash erzeugt sie über Tasks → Generate → Phashes.",
+  "Generate missing phashes now": "Fehlende Phashes jetzt erzeugen",
+  "Copy & paste works without fingerprints.": "Kopieren & Einfügen funktioniert auch ohne Fingerabdruck.",
+  "Starts a Stash task for all scenes without a fingerprint. It runs in the background (see Tasks) and can take a while.":
+    "Startet eine Stash-Aufgabe für alle Szenen ohne Fingerabdruck. Sie läuft im Hintergrund (siehe Tasks) und kann eine Weile dauern.",
+  "Phash task started — see Tasks": "Phash-Aufgabe gestartet – siehe Tasks",
+  "This scene has {n} markers. Pick the scenes that should get them:": "Diese Szene hat {n} Marker. Wähle die Szenen, die sie bekommen sollen:",
+  "This scene has no markers yet — take them from one of the videos below.":
+    "Diese Szene hat noch keine Marker – übernimm sie von einem der Videos unten.",
+  "same length": "gleiche Länge",
+  "{n} markers": "{n} Marker",
+  "+{n} new": "+{n} neu",
+  "has all markers": "hat alle Marker",
+  "Copy its markers into this scene": "Seine Marker in diese Szene übernehmen",
+  "Take {n}": "{n} übernehmen",
+  "Scenes whose length differs by more than a second are not ticked — check them before copying.":
+    "Szenen, deren Länge um mehr als eine Sekunde abweicht, sind nicht angehakt – vor dem Kopieren prüfen.",
+  "Copy markers to {n} scenes": "Marker auf {n} Szenen übertragen",
+  "{n} markers copied to {k} scenes": "{n} Marker auf {k} Szenen übertragen",
   'Edit preset "{label}"': "Preset „{label}“ bearbeiten",
   "Save changes": "Änderungen speichern",
   Cancel: "Abbrechen",
@@ -277,6 +322,16 @@ export default function setup(stashui) {
     document.head.appendChild(link);
   }
 
+  // markerCopy.js is shared with classic Stash; loaded once, with this module's ?v=.
+  let copyModule = null;
+  function markerCopy() {
+    if (!copyModule) {
+      copyModule = import(new URL("markerCopy.js" + new URL(import.meta.url).search, import.meta.url).href);
+      copyModule.catch(() => (copyModule = null));
+    }
+    return copyModule;
+  }
+
   async function readPluginSettings() {
     const d = await stashui.gql("query { configuration { plugins } }");
     const plugins = (d && d.configuration && d.configuration.plugins) || {};
@@ -352,6 +407,218 @@ export default function setup(stashui) {
       },
     });
     return null;
+  }
+
+  // ---------- Copying markers between scenes (markerCopy.js) ----------
+
+  const STATUS_NOTE = { exists: "already there", outside: "outside the video" };
+
+  function planHtml(mc, plan) {
+    return `<ul class="qm-x-plan">${plan
+      .map((p) => {
+        const time = mc.formatTime(p.seconds) + (p.end_seconds != null ? " – " + mc.formatTime(p.end_seconds) : "");
+        const tags = p.marker.tags.filter((tag) => !p.marker.primaryTag || tag.id !== p.marker.primaryTag.id);
+        return `<li class="is-${p.status}">
+          <b>${esc(time)}</b>
+          <span>${esc(mc.markerLabel(p.marker))}${p.marker.primaryTag && p.marker.title ? ` <i class="kb-chip is-on">${esc(p.marker.primaryTag.name)}</i>` : ""}${tags.map((tag) => ` <i class="kb-chip">${esc(tag.name)}</i>`).join("")}</span>
+          ${p.status !== "new" ? `<small>${esc(t(STATUS_NOTE[p.status]))}</small>` : ""}
+        </li>`;
+      })
+      .join("")}</ul>`;
+  }
+
+  async function copyMarkers(sceneId) {
+    try {
+      const mc = await markerCopy();
+      const data = await mc.copySceneMarkers(stashui.gql, sceneId);
+      ui.toast(t("{n} markers copied — open the other scene and paste them", { n: data.markers.length }), "ok");
+    } catch (e) {
+      ui.errorToast(e, "Quick Markers");
+    }
+  }
+
+  async function openPasteDrawer(sceneId, reload) {
+    let mc, clip, target;
+    try {
+      mc = await markerCopy();
+      clip = mc.readClipboard();
+      if (!clip) return;
+      if (clip.sceneId === String(sceneId)) {
+        ui.toast(t("These markers were copied from this scene."), "error");
+        return;
+      }
+      target = await mc.loadScene(stashui.gql, sceneId);
+    } catch (e) {
+      ui.errorToast(e, "Quick Markers");
+      return;
+    }
+    let offset = 0;
+    let plan = mc.planCopy(clip.markers, target, offset);
+    const d = ui.openDrawer({
+      title: t("Paste markers"),
+      body: `
+        <p class="kb-hint">${esc(t("Copied from"))} <b>${esc(clip.sceneTitle)}</b> (${esc(mc.formatTime(clip.duration))}) → <b>${esc(target.title)}</b> (${esc(mc.formatTime(target.duration))})</p>
+        <label class="qm-set-field qm-x-offset"><span>${esc(t("Shift (seconds)"))}</span><input class="kb-field" type="number" step="0.5" value="0" data-offset></label>
+        <p class="kb-hint">${esc(t("Only needed when this video starts earlier or later than the copied one (e.g. -12.5)."))}</p>
+        <div data-plan></div>`,
+      foot: `<button type="button" class="kb-btn" data-cancel>${esc(t("Cancel"))}</button><span class="kb-spacer"></span><button type="button" class="kb-btn is-primary" data-go></button>`,
+    });
+    const body = d.el.querySelector(".kb-drawer-body");
+    const go = d.el.querySelector("[data-go]");
+    function update() {
+      plan = mc.planCopy(clip.markers, target, offset);
+      const n = mc.countNew(plan);
+      body.querySelector("[data-plan]").innerHTML = planHtml(mc, plan);
+      go.textContent = n ? t("Paste {n} markers", { n }) : t("Nothing new to paste");
+      go.disabled = !n;
+    }
+    body.querySelector("[data-offset]").addEventListener("input", (e) => {
+      offset = Number(e.target.value) || 0;
+      update();
+    });
+    d.el.querySelector("[data-cancel]").onclick = d.close;
+    go.onclick = async () => {
+      go.disabled = true;
+      try {
+        const n = await mc.applyPlan(mc.createWithGql(stashui.gql), sceneId, plan, (i, total) => (go.textContent = i + " / " + total));
+        ui.toast(t("{n} markers pasted", { n }), "ok");
+        d.close();
+        if (reload) reload();
+      } catch (e) {
+        // Some may already exist now: close, so opening again plans from the real state.
+        ui.errorToast(e, "Quick Markers");
+        d.close();
+        if (reload) reload();
+      }
+    };
+    update();
+  }
+
+  async function openSameDrawer(sceneId, reload) {
+    const d = ui.openDrawer({
+      title: t("Same videos"),
+      body: `<div class="kb-loading">…</div>`,
+      foot: `<button type="button" class="kb-btn" data-cancel>${esc(t("Close"))}</button><span class="kb-spacer"></span><button type="button" class="kb-btn is-primary" data-go hidden></button>`,
+    });
+    const body = d.el.querySelector(".kb-drawer-body");
+    const go = d.el.querySelector("[data-go]");
+    d.el.querySelector("[data-cancel]").onclick = d.close;
+    let mc, scene, list;
+    try {
+      mc = await markerCopy();
+      scene = await mc.loadScene(stashui.gql, sceneId);
+      list = scene.phashes.length ? await mc.findSameVideos(stashui.gql, scene) : [];
+    } catch (e) {
+      body.innerHTML = `<div class="kb-empty"><p>${esc(e.message || String(e))}</p></div>`;
+      return;
+    }
+
+    async function coverageHint() {
+      try {
+        const c = await mc.phashCoverage(stashui.gql);
+        return t("{n} of {total} scenes have a fingerprint so far.", { n: c.withPhash, total: c.total });
+      } catch (e) {
+        return "";
+      }
+    }
+
+    if (!list.length) {
+      const reason = scene.phashes.length
+        ? t("No other scene with the same video was found.")
+        : t("This scene has no video fingerprint (phash) yet, so same videos can't be found.");
+      body.innerHTML = `
+        <div class="qm-x-same-empty">
+          <p>${esc(reason)}</p>
+          <p class="kb-hint">${esc(t("Only scenes with a fingerprint are found. Stash creates them with Tasks → Generate → Phashes."))} <span data-coverage></span></p>
+          <button type="button" class="kb-btn" data-gen>${ui.icon("bolt")}${esc(t("Generate missing phashes now"))}</button>
+          <p class="kb-hint">${esc(t("Copy & paste works without fingerprints."))}</p>
+        </div>`;
+      coverageHint().then((h) => {
+        const s = body.querySelector("[data-coverage]");
+        if (s) s.textContent = h;
+      });
+      body.querySelector("[data-gen]").onclick = async () => {
+        const answer = await ui.confirmDialog({ title: t("Generate missing phashes now"), text: t("Starts a Stash task for all scenes without a fingerprint. It runs in the background (see Tasks) and can take a while."), ok: t("Start") });
+        if (!answer || !answer.ok) return;
+        try {
+          await mc.generatePhashes(stashui.gql);
+          ui.toast(t("Phash task started — see Tasks"), "ok");
+        } catch (e) {
+          ui.errorToast(e, "Quick Markers");
+        }
+      };
+      return;
+    }
+
+    const picked = new Set(list.filter((x) => x.sure && x.add > 0).map((x) => x.scene.id));
+    function paintList() {
+      body.innerHTML = `
+        <p class="kb-hint">${scene.markers.length
+          ? esc(t("This scene has {n} markers. Pick the scenes that should get them:", { n: scene.markers.length }))
+          : esc(t("This scene has no markers yet — take them from one of the videos below."))}</p>
+        <div class="qm-x-same">
+          ${list
+            .map((x) => {
+              const pull = mc.countNew(mc.planCopy(x.scene.markers, scene, 0));
+              return `<div class="qm-x-same-row${x.sure ? "" : " is-unsure"}">
+                <label class="kb-check"><input type="checkbox" data-pick="${esc(x.scene.id)}"${picked.has(x.scene.id) ? " checked" : ""}${x.add ? "" : " disabled"}></label>
+                <div class="qm-x-same-info">
+                  <b>${esc(x.scene.title)}</b>
+                  <small>${esc(x.scene.path)}</small>
+                  <small>${esc(mc.formatTime(x.scene.duration))} (${x.durationDiff < 0.05 ? esc(t("same length")) : "± " + x.durationDiff.toFixed(1) + " s"}) · ${esc(t("{n} markers", { n: x.scene.markers.length }))}${x.add ? " · " + esc(t("+{n} new", { n: x.add })) : " · " + esc(t("has all markers"))}</small>
+                </div>
+                ${pull ? `<button type="button" class="kb-btn is-ghost" data-pull="${esc(x.scene.id)}" title="${esc(t("Copy its markers into this scene"))}">${ui.icon("download")}${esc(t("Take {n}", { n: pull }))}</button>` : ""}
+              </div>`;
+            })
+            .join("")}
+        </div>
+        ${list.some((x) => !x.sure) ? `<p class="kb-hint">${esc(t("Scenes whose length differs by more than a second are not ticked — check them before copying."))}</p>` : ""}`;
+      const n = list.filter((x) => picked.has(x.scene.id)).length;
+      go.hidden = !scene.markers.length;
+      go.disabled = !n;
+      go.textContent = t("Copy markers to {n} scenes", { n });
+    }
+
+    body.addEventListener("change", (e) => {
+      const id = e.target.dataset && e.target.dataset.pick;
+      if (id == null) return;
+      if (e.target.checked) picked.add(id);
+      else picked.delete(id);
+      paintList();
+    });
+    body.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-pull]");
+      if (!b) return;
+      const x = list.find((y) => y.scene.id === b.dataset.pull);
+      b.disabled = true;
+      try {
+        const n = await mc.applyPlan(mc.createWithGql(stashui.gql), sceneId, mc.planCopy(x.scene.markers, scene, 0));
+        ui.toast(t("{n} markers pasted", { n }), "ok");
+        d.close();
+        if (reload) reload();
+      } catch (err) {
+        ui.errorToast(err, "Quick Markers");
+        d.close();
+        if (reload) reload();
+      }
+    });
+    go.onclick = async () => {
+      const targets = list.filter((x) => picked.has(x.scene.id));
+      go.disabled = true;
+      let total = 0;
+      try {
+        for (let i = 0; i < targets.length; i++) {
+          go.textContent = i + 1 + " / " + targets.length;
+          total += await mc.applyPlan(mc.createWithGql(stashui.gql), targets[i].scene.id, targets[i].plan);
+        }
+        ui.toast(t("{n} markers copied to {k} scenes", { n: total, k: targets.length }), "ok");
+        d.close();
+      } catch (e) {
+        ui.errorToast(e, "Quick Markers");
+        d.close();
+      }
+    };
+    paintList();
   }
 
   // ---------- Player: a section in the info bar ----------
@@ -520,6 +787,11 @@ export default function setup(stashui) {
                 .join("")}
             </div>
             ${status ? `<p class="kb-hint qm-x-status">${ui.icon("check")}${esc(t("Last: {text}", { text: status }))}</p>` : ""}
+            <div class="qm-x-tools">
+              <button type="button" class="kb-btn is-ghost" data-qm="copy" title="${esc(t("Copy all markers of this scene (times, titles, tags)"))}">${ui.icon("copies")}${esc(t("Copy"))}</button>
+              <button type="button" class="kb-btn is-ghost" data-qm="paste"${clip ? "" : " disabled"} title="${esc(clip ? t("Paste {n} markers from {title}", { n: clip.markers.length, title: clip.sceneTitle }) : t("Copy the markers of another scene first"))}">${ui.icon("download")}${esc(t("Paste"))}${clip ? `<small>${clip.markers.length}</small>` : ""}</button>
+              <button type="button" class="kb-btn is-ghost" data-qm="same" title="${esc(t("Copy markers to scenes with the same video"))}">${ui.icon("layers")}${esc(t("Same videos"))}</button>
+            </div>
           </div>`;
       }
 
@@ -532,7 +804,24 @@ export default function setup(stashui) {
         else if (action === "out") onOut();
         else if (action === "instant") onInstant(active());
         else if (action === "discard") discardIn();
+        else if (action === "copy") copyMarkers(sceneId);
+        else if (action === "paste") openPasteDrawer(sceneId, ctx.reload);
+        else if (action === "same") openSameDrawer(sceneId, ctx.reload);
       }, { signal });
+
+      // The clipboard can change in another tab (storage) or another section (CLIPBOARD_EVENT).
+      let clip = null;
+      const readClip = () => {
+        markerCopy()
+          .then((mc) => {
+            clip = mc.readClipboard();
+            paint();
+          })
+          .catch(() => {});
+      };
+      window.addEventListener("storage", readClip, { signal });
+      window.addEventListener("quickMarkers:clipboard", readClip, { signal });
+      readClip();
 
       paint();
       loadConfig()
