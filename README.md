@@ -144,7 +144,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.7.0-informational)
+![Version](https://img.shields.io/badge/version-1.7.1-informational)
 
 ## Requirements
 
@@ -257,8 +257,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.7.0`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.7.0**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.7.1`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.7.1**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -479,6 +479,13 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.6.0`.
 
 - **Stash UI support** — Categories is a page of Stash UI itself (Library → Categories) instead of opening in embedded classic Stash: tag chips, search, sort, List / Preview, paging, scenes open in the Stash UI player
 - Same categories and settings as in classic Stash; the classic page is unchanged
+
+### Quick Markers 1.7.1
+
+- **Fix: wrong tag on markers** — a preset tag that doesn't exist (e.g. `Swap`) was matched to any tag *containing* the name (`Cum Swapping`). Now only the exact name (case-insensitive) or an exact alias is used; otherwise Quick Markers says the tag is missing (Stash UI offers *Create tag*)
+- Stash UI settings mark preset tags that don't exist in Stash in red, with a warning
+- **Marker Sync:** *Copy all ticked* only copies into the groups shown on the page, never into groups further down that nobody has looked at
+- Stash UI: *Undo* in an older message no longer silently removes a newer transfer — it asks first
 
 ### Quick Markers 1.7.0
 

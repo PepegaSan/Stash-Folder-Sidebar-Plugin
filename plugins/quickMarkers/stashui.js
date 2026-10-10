@@ -102,6 +102,9 @@ const STRINGS_DE = {
   "Open in a new tab": "In neuem Tab öffnen",
   Undo: "Rückgängig",
   "Marker sync": "Marker-Abgleich",
+  "These tags don't exist in Stash, so their presets can't create markers: {names}. Create the tags or fix the presets.":
+    "Diese Tags gibt es in Stash nicht, die zugehörigen Presets können keine Marker anlegen: {names}. Tags anlegen oder Presets korrigieren.",
+  "Tag doesn't exist in Stash": "Tag existiert in Stash nicht",
   "{n} videos": "{n} Videos",
   "+{n} markers missing": "+{n} fehlende Marker",
   "all have the same markers": "alle haben dieselben Marker",
@@ -122,15 +125,17 @@ const STRINGS_DE = {
     "Keine Gruppe mit fehlenden Markern – jedes Video hat die Marker seiner Kopien.",
   "No scenes with the same video found.": "Keine Szenen mit demselben Video gefunden.",
   "Show more ({n} left)": "Mehr anzeigen (noch {n})",
-  "Copy {n} markers into {k} scenes? Undo stays possible afterwards.":
-    "{n} Marker in {k} Szenen übertragen? Rückgängig bleibt danach möglich.",
+  "Copy {n} markers into {scenes} (only the groups shown on this page)? Undo stays possible afterwards.":
+    "{n} Marker in {scenes} übertragen (nur die hier angezeigten Gruppen)? Rückgängig bleibt danach möglich.",
   "All same videos of the library": "Alle gleichen Videos der Bibliothek",
   "Undo last transfer": "Letzte Übertragung rückgängig machen",
-  "Delete the {n} markers that were copied last (into {k} scenes)?": "Die {n} zuletzt übertragenen Marker (in {k} Szenen) löschen?",
+  "Delete the {n} markers that were copied last (into {scenes})?": "Die {n} zuletzt übertragenen Marker (in {scenes}) löschen?",
+  "1 scene": "1 Szene",
+  "{k} scenes": "{k} Szenen",
   "{n} markers removed": "{n} Marker entfernt",
   "Remove the markers of the last transfer": "Marker der letzten Übertragung wieder entfernen",
-  "Copy markers to {n} scenes": "Marker auf {n} Szenen übertragen",
-  "{n} markers copied to {k} scenes": "{n} Marker auf {k} Szenen übertragen",
+  "Copy markers to {scenes}": "Marker auf {scenes} übertragen",
+  "{n} markers copied to {scenes}": "{n} Marker auf {scenes} übertragen",
   'Edit preset "{label}"': "Preset „{label}“ bearbeiten",
   "Save changes": "Änderungen speichern",
   Cancel: "Abbrechen",
@@ -329,6 +334,7 @@ export default function setup(stashui) {
   if (!stashui || !stashui.has || !stashui.has("slot:scene.info")) return;
   const ui = stashui.ui;
   const t = (text, vars) => stashui.t(text, vars);
+  const scenesText = (k) => (k === 1 ? t("1 scene") : t("{k} scenes", { k }));
   const esc = (s) => ui.esc(s == null ? "" : String(s));
   stashui.addStrings("de", STRINGS_DE);
   loadStyles();
@@ -405,13 +411,15 @@ export default function setup(stashui) {
     tagIdCache.clear();
   }
 
+  // Exact name (Stash compares case-insensitively), else an exact alias — never a partial match,
+  // which would silently put a different tag on the marker ("Swap" → "Cum Swapping").
   async function findTagId(name) {
     const key = name.toLowerCase();
     if (tagIdCache.has(key)) return tagIdCache.get(key);
     const q = `query($f: FindFilterType, $tf: TagFilterType) { findTags(filter: $f, tag_filter: $tf) { tags { id name } } }`;
     let tags = [];
-    for (const modifier of ["EQUALS", "INCLUDES"]) {
-      const d = await stashui.gql(q, { f: { per_page: 25, q: name }, tf: { name: { value: name, modifier } } });
+    for (const field of ["name", "aliases"]) {
+      const d = await stashui.gql(q, { f: { per_page: 25 }, tf: { [field]: { value: name, modifier: "EQUALS" } } });
       tags = (d && d.findTags && d.findTags.tags) || [];
       if (tags.length) break;
     }
@@ -492,17 +500,22 @@ export default function setup(stashui) {
     return created.length;
   }
 
-  const doneToast = (message, reload) => ui.toast(message, "ok", { label: t("Undo"), run: () => undoTransfer(reload, false) });
+  // The Undo in this message belongs to the transfer just made; if a newer one replaced it, it asks first.
+  const doneToast = (mc, message, reload) => {
+    const rec = mc.readUndo();
+    const at = rec && rec.at;
+    ui.toast(message, "ok", { label: t("Undo"), run: () => undoTransfer(reload, false, at) });
+  };
 
-  async function undoTransfer(reload, ask) {
+  async function undoTransfer(reload, ask, expectedAt) {
     try {
       const mc = await markerCopy();
       const rec = mc.readUndo();
       if (!rec) return;
-      if (ask) {
+      if (ask || (expectedAt && rec.at !== expectedAt)) {
         const answer = await ui.confirmDialog({
           title: t("Undo last transfer"),
-          text: t("Delete the {n} markers that were copied last (into {k} scenes)?", { n: rec.ids.length, k: rec.sceneIds.length }),
+          text: t("Delete the {n} markers that were copied last (into {scenes})?", { n: rec.ids.length, scenes: scenesText(rec.sceneIds.length) }),
           ok: t("Delete"),
           danger: true,
         });
@@ -560,7 +573,7 @@ export default function setup(stashui) {
       go.disabled = true;
       try {
         const n = await transfer(mc, [{ sceneId, plan }], (job, i, total) => (go.textContent = i + " / " + total));
-        doneToast(t("{n} markers pasted", { n }), reload);
+        doneToast(mc, t("{n} markers pasted", { n }), reload);
       } catch (e) {
         // Some may already exist now: close, so opening again plans from the real state.
         ui.errorToast(e, "Quick Markers");
@@ -657,7 +670,7 @@ export default function setup(stashui) {
       const n = list.filter((x) => picked.has(x.scene.id)).length;
       go.hidden = !scene.markers.length;
       go.disabled = !n;
-      go.textContent = t("Copy markers to {n} scenes", { n });
+      go.textContent = t("Copy markers to {scenes}", { scenes: scenesText(n) });
     }
 
     body.addEventListener("change", (e) => {
@@ -674,7 +687,7 @@ export default function setup(stashui) {
       b.disabled = true;
       try {
         const n = await transfer(mc, [{ sceneId, plan: mc.planCopy(x.scene.markers, scene, 0) }]);
-        doneToast(t("{n} markers pasted", { n }), reload);
+        doneToast(mc, t("{n} markers pasted", { n }), reload);
       } catch (err) {
         ui.errorToast(err, "Quick Markers");
       }
@@ -687,7 +700,7 @@ export default function setup(stashui) {
       try {
         const jobs = targets.map((x) => ({ sceneId: x.scene.id, plan: x.plan }));
         const total = await transfer(mc, jobs, (job) => (go.textContent = job + 1 + " / " + targets.length));
-        doneToast(t("{n} markers copied to {k} scenes", { n: total, k: targets.length }), reload);
+        doneToast(mc, t("{n} markers copied to {scenes}", { n: total, scenes: scenesText(targets.length) }), reload);
       } catch (e) {
         ui.errorToast(e, "Quick Markers");
       }
@@ -791,7 +804,8 @@ export default function setup(stashui) {
       }
       const list = visible();
       const missingGroups = groups.filter((g) => g.missing > 0).length;
-      const bulkJobs = list.flatMap(jobsOf);
+      // Only groups on screen: "all ticked" must never reach groups nobody has looked at.
+      const bulkJobs = list.slice(0, shown).flatMap(jobsOf);
       el.innerHTML = `
         <div class="qm-sync">
           <p class="kb-hint">${esc(t("Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Ticked are only videos within 1 s that are not short clips — compare the pictures."))}</p>
@@ -824,7 +838,7 @@ export default function setup(stashui) {
       paint();
       try {
         const n = await transfer(mc, jobs, (job, done, total) => setBusy(job + 1 + " / " + jobs.length + " · " + done + " / " + total));
-        doneToast(t(message, { n, k: jobs.length }), load);
+        doneToast(mc, t(message, { n, scenes: scenesText(jobs.length) }), load);
         return true;
       } catch (e) {
         ui.errorToast(e, "Quick Markers");
@@ -856,7 +870,7 @@ export default function setup(stashui) {
         paint();
       } else if (b.hasAttribute("data-go") && gi >= 0) {
         const g = groups[gi];
-        if (await run(jobsOf(g), "{n} markers copied to {k} scenes")) {
+        if (await run(jobsOf(g), "{n} markers copied to {scenes}")) {
           try {
             groups[gi] = await mc.reloadGroup(stashui.gql, g);
             picked.delete(g.key);
@@ -866,14 +880,14 @@ export default function setup(stashui) {
         }
         paint();
       } else if (b.hasAttribute("data-bulk")) {
-        const jobs = visible().flatMap(jobsOf);
+        const jobs = visible().slice(0, shown).flatMap(jobsOf);
         const answer = await ui.confirmDialog({
           title: t("Marker sync"),
-          text: t("Copy {n} markers into {k} scenes? Undo stays possible afterwards.", { n: sumAdd(jobs), k: jobs.length }),
+          text: t("Copy {n} markers into {scenes} (only the groups shown on this page)? Undo stays possible afterwards.", { n: sumAdd(jobs), scenes: scenesText(jobs.length) }),
           ok: t("Copy"),
         });
         if (!answer || !answer.ok) return;
-        await run(jobs, "{n} markers copied to {k} scenes");
+        await run(jobs, "{n} markers copied to {scenes}");
         load();
       } else if (b.hasAttribute("data-undo")) {
         undoTransfer(load, true);
@@ -1208,11 +1222,30 @@ export default function setup(stashui) {
         return id;
       }
 
+      // Tag names of the presets that don't exist in Stash (lower case): shown in red, so a preset
+      // that can't create markers is noticed here and not only when it's used.
+      let missingTags = new Set();
+      async function checkTags() {
+        const names = new Set();
+        config.presets.forEach((p) => [p.primaryTag].concat(p.tags || []).forEach((n) => names.add(n)));
+        const missing = new Set();
+        for (const name of names) {
+          try {
+            if (!(await findTagId(name))) missing.add(name.toLowerCase());
+          } catch (e) {
+            /* unknown — not marked */
+          }
+        }
+        missingTags = missing;
+        paint();
+      }
+
       async function persist(next, message) {
         try {
           await saveConfig(next);
           config = next;
           ui.toast(message || t("Saved"), "ok");
+          checkTags();
           return true;
         } catch (e) {
           ui.errorToast(e, "Quick Markers");
@@ -1248,6 +1281,7 @@ export default function setup(stashui) {
         el.innerHTML = `
           <div class="qm-set">
             ${note ? `<p class="kb-hint qm-set-note">${esc(note)}</p>` : ""}
+            ${missingTags.size ? `<p class="qm-set-note qm-set-warn">${esc(t("These tags don't exist in Stash, so their presets can't create markers: {names}. Create the tags or fix the presets.", { names: config.presets.flatMap((p) => [p.primaryTag].concat(p.tags || [])).filter((n, i, all) => missingTags.has(n.toLowerCase()) && all.indexOf(n) === i).join(", ") }))}</p>` : ""}
             <section class="qm-set-keys">
               <h2 class="kb-h2">${esc(t("Hotkeys in the player"))}</h2>
               <dl>
@@ -1267,7 +1301,7 @@ export default function setup(stashui) {
                   .map((p, i) => `
                   <div class="qm-set-row${p === editing ? " is-editing" : ""}">
                     <span class="qm-set-label">${esc(p.label)}${p.selectSlot ? ` <kbd>⇧${p.selectSlot}</kbd>` : ""}</span>
-                    <span class="qm-set-tags"><span class="kb-chip is-on">${esc(p.primaryTag)}</span>${(p.tags || []).map((tag) => `<span class="kb-chip">${esc(tag)}</span>`).join("")}</span>
+                    <span class="qm-set-tags">${[p.primaryTag].concat(p.tags || []).map((tag, j) => missingTags.has(tag.toLowerCase()) ? `<span class="kb-chip is-not" title="${esc(t("Tag doesn't exist in Stash"))}">${esc(tag)}</span>` : `<span class="kb-chip${j ? "" : " is-on"}">${esc(tag)}</span>`).join("")}</span>
                     <span class="qm-set-actions">
                       <button type="button" class="kb-btn is-icon is-ghost" data-qm-edit="${esc(p.id)}" title="${esc(t("Edit"))}" aria-label="${esc(t("Edit"))} ${esc(p.label)}">${ui.icon("edit")}</button>
                       <button type="button" class="kb-btn is-icon is-ghost" data-qm-del="${i}" title="${esc(t("Delete"))}" aria-label="${esc(t("Delete"))} ${esc(p.label)}"${config.presets.length < 2 ? " disabled" : ""}>${ui.icon("trash")}</button>
@@ -1403,6 +1437,7 @@ export default function setup(stashui) {
         .then((c) => {
           config = c;
           paint();
+          checkTags();
         })
         .catch((e) => ui.errorToast(e, "Quick Markers"));
     },

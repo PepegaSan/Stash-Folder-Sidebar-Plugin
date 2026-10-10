@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.7.0";
+  const PLUGIN_VERSION = "1.7.1";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -488,39 +488,39 @@
     return { config, error };
   }
 
+  /**
+   * Exact tag name (Stash compares case-insensitively), else an exact alias. Never a partial
+   * match: that silently put a different tag on the marker ("Swap" → "Cum Swapping").
+   */
   function useResolveTagId() {
     const [findTags] = GQL.useFindTagsLazyQuery({ fetchPolicy: "cache-first" });
     const equalsModifier =
       GQL.CriterionModifier && GQL.CriterionModifier.Equals
         ? GQL.CriterionModifier.Equals
         : "EQUALS";
-    const includesModifier =
-      GQL.CriterionModifier && GQL.CriterionModifier.Includes
-        ? GQL.CriterionModifier.Includes
-        : "INCLUDES";
 
     return React.useCallback(
       async function resolveTagId(tagName) {
         const key = tagName.toLowerCase();
         if (tagIdCache.has(key)) return tagIdCache.get(key);
 
-        async function queryTags(modifier) {
+        async function queryTags(field) {
+          const tagFilter = {};
+          tagFilter[field] = { value: tagName, modifier: equalsModifier };
           return findTags({
             variables: {
-              filter: { per_page: 25, q: tagName },
-              tag_filter: {
-                name: { value: tagName, modifier: modifier },
-              },
+              filter: { per_page: 25 },
+              tag_filter: tagFilter,
             },
           });
         }
 
-        let result = await queryTags(equalsModifier);
+        let result = await queryTags("name");
         let tags =
           result.data && result.data.findTags && result.data.findTags.tags;
 
         if (!tags || !tags.length) {
-          result = await queryTags(includesModifier);
+          result = await queryTags("aliases");
           tags =
             result.data && result.data.findTags && result.data.findTags.tags;
         }
@@ -529,7 +529,7 @@
           throw new Error(
             'Tag "' +
               tagName +
-              '" not found. Create it under Tags (exact name as primaryTag).'
+              '" not found. Create it under Tags or fix the preset (exact tag name or alias).'
           );
         }
 
@@ -541,7 +541,7 @@
         tagIdCache.set(key, exact.id);
         return exact.id;
       },
-      [findTags, equalsModifier, includesModifier]
+      [findTags, equalsModifier]
     );
   }
 
@@ -2069,7 +2069,8 @@
     async function onCopyAll(list) {
       const jobs = [].concat.apply([], list.map(jobsOf));
       const ok = window.confirm(
-        "Copy " + markersText(sumAdd(jobs)) + " into " + jobs.length + (jobs.length === 1 ? " scene" : " scenes") + "? Undo stays possible afterwards."
+        "Copy " + markersText(sumAdd(jobs)) + " into " + jobs.length + (jobs.length === 1 ? " scene" : " scenes") +
+          " (only the groups shown on this page)? Undo stays possible afterwards."
       );
       if (!ok) return;
       await run(jobs);
@@ -2123,7 +2124,9 @@
       const missingGroups = groups.filter(function (g) {
         return g.missing > 0;
       }).length;
-      const bulk = sumAdd([].concat.apply([], list.map(jobsOf)));
+      // Only groups on screen: "all ticked" must never reach groups nobody has looked at.
+      const onScreen = list.slice(0, shown);
+      const bulk = sumAdd([].concat.apply([], onScreen.map(jobsOf)));
       content = h(
         React.Fragment,
         null,
@@ -2183,7 +2186,7 @@
               className: "btn btn-primary btn-sm",
               disabled: !bulk || !!busy,
               onClick: function () {
-                onCopyAll(list);
+                onCopyAll(onScreen);
               },
             },
             "Copy all ticked (" + markersText(bulk) + ")"

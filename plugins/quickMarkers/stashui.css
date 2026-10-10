@@ -561,3 +561,10 @@
     animation: none;
   }
 }
+
+.qm-set-warn {
+  margin: 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, var(--bg-2));
+}
