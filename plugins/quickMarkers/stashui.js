@@ -101,6 +101,30 @@ const STRINGS_DE = {
   "This scene": "Diese Szene",
   "Open in a new tab": "In neuem Tab öffnen",
   Undo: "Rückgängig",
+  "Marker sync": "Marker-Abgleich",
+  "{n} videos": "{n} Videos",
+  "+{n} markers missing": "+{n} fehlende Marker",
+  "all have the same markers": "alle haben dieselben Marker",
+  "Copy {n} markers": "{n} Marker übertragen",
+  Source: "Quelle",
+  "copy here": "hierher kopieren",
+  "Copy from this video instead": "Stattdessen von diesem Video kopieren",
+  "Use as source": "Als Quelle",
+  Reload: "Neu laden",
+  "Comparing the fingerprints of the library …": "Fingerabdrücke der Bibliothek werden verglichen …",
+  "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Ticked are only videos within 1 s that are not short clips — compare the pictures.":
+    "Gruppen von Szenen mit demselben Video (Fingerabdruck höchstens 4 von 64 Bits verschieden, Länge innerhalb von 3 s). Angehakt sind nur Videos mit höchstens 1 s Unterschied, die keine kurzen Clips sind – die Bilder vergleichen.",
+  "Only those are compared.": "Nur diese werden verglichen.",
+  "Markers missing": "Marker fehlen",
+  "All groups": "Alle Gruppen",
+  "Copy all ticked ({n} markers)": "Alle angehakten übertragen ({n} Marker)",
+  "No group with missing markers — every video has the markers of its copies.":
+    "Keine Gruppe mit fehlenden Markern – jedes Video hat die Marker seiner Kopien.",
+  "No scenes with the same video found.": "Keine Szenen mit demselben Video gefunden.",
+  "Show more ({n} left)": "Mehr anzeigen (noch {n})",
+  "Copy {n} markers into {k} scenes? Undo stays possible afterwards.":
+    "{n} Marker in {k} Szenen übertragen? Rückgängig bleibt danach möglich.",
+  "All same videos of the library": "Alle gleichen Videos der Bibliothek",
   "Undo last transfer": "Letzte Übertragung rückgängig machen",
   "Delete the {n} markers that were copied last (into {k} scenes)?": "Die {n} zuletzt übertragenen Marker (in {k} Szenen) löschen?",
   "{n} markers removed": "{n} Marker entfernt",
@@ -551,11 +575,12 @@ export default function setup(stashui) {
     const d = ui.openDrawer({
       title: t("Same videos"),
       body: `<div class="kb-loading">…</div>`,
-      foot: `<button type="button" class="kb-btn" data-cancel>${esc(t("Close"))}</button><span class="kb-spacer"></span><button type="button" class="kb-btn is-primary" data-go hidden></button>`,
+      foot: `<button type="button" class="kb-btn" data-cancel>${esc(t("Close"))}</button><a class="kb-btn is-ghost" href="#/${SYNC_ROUTE}" data-sync>${ui.icon("layers")}${esc(t("All same videos of the library"))}</a><span class="kb-spacer"></span><button type="button" class="kb-btn is-primary" data-go hidden></button>`,
     });
     const body = d.el.querySelector(".kb-drawer-body");
     const go = d.el.querySelector("[data-go]");
     d.el.querySelector("[data-cancel]").onclick = d.close;
+    d.el.querySelector("[data-sync]").addEventListener("click", d.close);
     let mc, scene, list;
     try {
       mc = await markerCopy();
@@ -669,6 +694,230 @@ export default function setup(stashui) {
       d.close();
     };
     paintList();
+  }
+
+  // ---------- Library page: Marker sync (#/p/quickMarkers/sync) ----------
+
+  const SYNC_PAGE_SIZE = 30;
+  const SYNC_ROUTE = "p/" + PLUGIN_ID + "/sync";
+
+  function renderSyncPage(el, ctx) {
+    const signal = ctx.signal;
+    let mc = null;
+    let groups = null;
+    let error = "";
+    let showAll = false;
+    let shown = SYNC_PAGE_SIZE;
+    let busy = false;
+    let coverage = null;
+    let undo = null;
+    const picked = new Map(); // group key → ids of the ticked targets
+
+    const visible = () => (groups || []).filter((g) => showAll || g.missing > 0);
+    const pickedOf = (g) => {
+      if (!picked.has(g.key)) picked.set(g.key, new Set(g.targets.filter((x) => x.sure && x.add > 0).map((x) => x.scene.id)));
+      return picked.get(g.key);
+    };
+    const jobsOf = (g) => g.targets.filter((x) => x.add > 0 && pickedOf(g).has(x.scene.id)).map((x) => ({ sceneId: x.scene.id, plan: x.plan, add: x.add }));
+    const groupOf = (key) => (groups || []).findIndex((g) => g.key === key);
+    const sumAdd = (jobs) => jobs.reduce((n, j) => n + j.add, 0);
+    const lengthNote = (x) => (x.durationDiff < 0.05 ? t("same length") : "± " + x.durationDiff.toFixed(1) + " s");
+
+    async function load() {
+      groups = null;
+      error = "";
+      paint();
+      try {
+        mc = await markerCopy();
+        const found = await mc.findSameVideoGroups(stashui.gql);
+        coverage = await mc.phashCoverage(stashui.gql);
+        groups = found;
+        undo = mc.readUndo();
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+        error = e.message || String(e);
+      }
+      paint();
+    }
+
+    function thumb(s) {
+      return `<a class="qm-x-thumb" href="#/scene/${esc(s.id)}" target="_blank" rel="noreferrer" title="${esc(t("Open in a new tab"))}">${s.screenshot ? `<img alt="" loading="lazy" src="${esc(s.screenshot)}">` : ""}<span>${esc(mc.formatTime(s.duration))}</span></a>`;
+    }
+
+    function groupHtml(g) {
+      const jobs = jobsOf(g);
+      const picks = pickedOf(g);
+      return `<section class="qm-sync-group${g.missing ? "" : " is-complete"}" data-group="${esc(g.key)}">
+        <header>
+          <b>${esc(t("{n} videos", { n: g.scenes.length }))}</b>
+          <span class="${g.missing ? "qm-sync-missing" : "qm-sync-ok"}">${esc(g.missing ? t("+{n} markers missing", { n: g.missing }) : t("all have the same markers"))}</span>
+          <span class="kb-spacer"></span>
+          ${g.missing ? `<button type="button" class="kb-btn" data-go${jobs.length && !busy ? "" : " disabled"}>${ui.icon("copies")}${esc(t("Copy {n} markers", { n: sumAdd(jobs) }))}</button>` : ""}
+        </header>
+        <div class="qm-sync-cards">
+          <div class="qm-sync-card is-source">
+            ${thumb(g.source)}
+            <b>${esc(g.source.title)}</b>
+            <small>${esc(g.source.path)}</small>
+            <small><em class="qm-sync-badge">${esc(t("Source"))}</em> ${esc(t("{n} markers", { n: g.source.markers.length }))}</small>
+          </div>
+          ${g.targets
+            .map(
+              (x) => `<div class="qm-sync-card${x.sure ? "" : " is-unsure"}">
+            ${thumb(x.scene)}
+            <b>${esc(x.scene.title)}${x.short ? ` <em class="qm-x-flag">${esc(t("short clip — check"))}</em>` : ""}</b>
+            <small>${esc(x.scene.path)}</small>
+            <small>${esc(lengthNote(x))} · ${esc(t("{n} markers", { n: x.scene.markers.length }))}${x.add ? " · " + esc(t("+{n} new", { n: x.add })) : ""}</small>
+            <div class="qm-sync-card-actions">
+              ${x.add ? `<label class="kb-check"><input type="checkbox" data-pick="${esc(x.scene.id)}"${picks.has(x.scene.id) ? " checked" : ""}${busy ? " disabled" : ""}>${esc(t("copy here"))}</label>` : `<span class="qm-sync-ok">${esc(t("has all markers"))}</span>`}
+              ${x.scene.markers.length ? `<button type="button" class="kb-btn is-ghost" data-source="${esc(x.scene.id)}"${busy ? " disabled" : ""} title="${esc(t("Copy from this video instead"))}">${esc(t("Use as source"))}</button>` : ""}
+            </div>
+          </div>`
+            )
+            .join("")}
+        </div>
+      </section>`;
+    }
+
+    function paint() {
+      if (signal.aborted) return;
+      if (error) {
+        el.innerHTML = `<div class="kb-empty"><b>${esc(t("Marker sync"))}</b><p>${esc(error)}</p><button type="button" class="kb-btn" data-reload>${esc(t("Reload"))}</button></div>`;
+        return;
+      }
+      if (!groups) {
+        el.innerHTML = `<div class="kb-loading">${esc(t("Comparing the fingerprints of the library …"))}</div>`;
+        return;
+      }
+      const list = visible();
+      const missingGroups = groups.filter((g) => g.missing > 0).length;
+      const bulkJobs = list.flatMap(jobsOf);
+      el.innerHTML = `
+        <div class="qm-sync">
+          <p class="kb-hint">${esc(t("Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Ticked are only videos within 1 s that are not short clips — compare the pictures."))}</p>
+          ${coverage && coverage.withPhash < coverage.total ? `<p class="kb-hint qm-sync-coverage">${esc(t("{n} of {total} scenes have a fingerprint so far.", { n: coverage.withPhash, total: coverage.total }))} ${esc(t("Only those are compared."))} <button type="button" class="kb-btn is-ghost" data-gen>${ui.icon("bolt")}${esc(t("Generate missing phashes now"))}</button></p>` : ""}
+          <div class="qm-sync-bar">
+            <div class="kb-seg">
+              <button type="button" data-filter="missing" class="${showAll ? "" : "is-on"}">${esc(t("Markers missing"))} (${missingGroups})</button>
+              <button type="button" data-filter="all" class="${showAll ? "is-on" : ""}">${esc(t("All groups"))} (${groups.length})</button>
+            </div>
+            <span class="kb-spacer"></span>
+            <span class="kb-hint" data-busy></span>
+            ${undo ? `<button type="button" class="kb-btn is-ghost" data-undo${busy ? " disabled" : ""}>${ui.icon("undo")}${esc(t("Undo"))} (${undo.ids.length})</button>` : ""}
+            <button type="button" class="kb-btn is-ghost" data-reload${busy ? " disabled" : ""}>${esc(t("Reload"))}</button>
+            <button type="button" class="kb-btn is-primary" data-bulk${bulkJobs.length && !busy ? "" : " disabled"}>${esc(t("Copy all ticked ({n} markers)", { n: sumAdd(bulkJobs) }))}</button>
+          </div>
+          ${list.length
+            ? list.slice(0, shown).map(groupHtml).join("")
+            : `<div class="kb-empty"><p>${esc(groups.length ? t("No group with missing markers — every video has the markers of its copies.") : t("No scenes with the same video found."))}</p></div>`}
+          ${list.length > shown ? `<button type="button" class="kb-btn qm-sync-more" data-more>${esc(t("Show more ({n} left)", { n: list.length - shown }))}</button>` : ""}
+        </div>`;
+    }
+
+    const setBusy = (text) => {
+      const s = el.querySelector("[data-busy]");
+      if (s) s.textContent = text;
+    };
+
+    async function run(jobs, message) {
+      busy = true;
+      paint();
+      try {
+        const n = await transfer(mc, jobs, (job, done, total) => setBusy(job + 1 + " / " + jobs.length + " · " + done + " / " + total));
+        doneToast(t(message, { n, k: jobs.length }), load);
+        return true;
+      } catch (e) {
+        ui.errorToast(e, "Quick Markers");
+        return false;
+      } finally {
+        busy = false;
+        undo = mc.readUndo();
+      }
+    }
+
+    el.addEventListener("click", async (e) => {
+      const b = e.target.closest("button");
+      if (!b || !el.contains(b) || b.disabled) return;
+      const section = b.closest("[data-group]");
+      const gi = section ? groupOf(section.dataset.group) : -1;
+      if (b.dataset.filter) {
+        showAll = b.dataset.filter === "all";
+        shown = SYNC_PAGE_SIZE;
+        paint();
+      } else if (b.hasAttribute("data-reload")) {
+        load();
+      } else if (b.hasAttribute("data-more")) {
+        shown += SYNC_PAGE_SIZE;
+        paint();
+      } else if (b.dataset.source && gi >= 0) {
+        const g = groups[gi];
+        groups[gi] = mc.analyzeGroup(g.scenes, b.dataset.source);
+        picked.delete(g.key);
+        paint();
+      } else if (b.hasAttribute("data-go") && gi >= 0) {
+        const g = groups[gi];
+        if (await run(jobsOf(g), "{n} markers copied to {k} scenes")) {
+          try {
+            groups[gi] = await mc.reloadGroup(stashui.gql, g);
+            picked.delete(g.key);
+          } catch (err) {
+            /* shown again after Reload */
+          }
+        }
+        paint();
+      } else if (b.hasAttribute("data-bulk")) {
+        const jobs = visible().flatMap(jobsOf);
+        const answer = await ui.confirmDialog({
+          title: t("Marker sync"),
+          text: t("Copy {n} markers into {k} scenes? Undo stays possible afterwards.", { n: sumAdd(jobs), k: jobs.length }),
+          ok: t("Copy"),
+        });
+        if (!answer || !answer.ok) return;
+        await run(jobs, "{n} markers copied to {k} scenes");
+        load();
+      } else if (b.hasAttribute("data-undo")) {
+        undoTransfer(load, true);
+      } else if (b.hasAttribute("data-gen")) {
+        const answer = await ui.confirmDialog({ title: t("Generate missing phashes now"), text: t("Starts a Stash task for all scenes without a fingerprint. It runs in the background (see Tasks) and can take a while."), ok: t("Start") });
+        if (!answer || !answer.ok) return;
+        try {
+          await mc.generatePhashes(stashui.gql);
+          ui.toast(t("Phash task started — see Tasks"), "ok");
+        } catch (err) {
+          ui.errorToast(err, "Quick Markers");
+        }
+      }
+    }, { signal });
+
+    el.addEventListener("change", (e) => {
+      const id = e.target.dataset && e.target.dataset.pick;
+      const section = e.target.closest("[data-group]");
+      if (id == null || !section) return;
+      const g = groups[groupOf(section.dataset.group)];
+      if (!g) return;
+      if (e.target.checked) pickedOf(g).add(id);
+      else pickedOf(g).delete(id);
+      paint();
+    }, { signal });
+
+    // An undo or a transfer in another tab or in the player changes the undo button here too.
+    const onState = () => {
+      if (!mc || busy) return;
+      undo = mc.readUndo();
+      paint();
+    };
+    window.addEventListener("storage", onState, { signal });
+    window.addEventListener("quickMarkers:clipboard", onState, { signal });
+
+    load();
+    return () => {};
+  }
+
+  if (stashui.has("route") && typeof stashui.addRoute === "function") {
+    stashui.addRoute({ path: "sync", title: t("Marker sync"), render: renderSyncPage });
+    if (stashui.has("navItem") && typeof stashui.addNavItem === "function") {
+      stashui.addNavItem({ id: "sync", label: t("Marker sync"), icon: "layers", route: "sync", group: "Manage" });
+    }
   }
 
   // ---------- Player: a section in the info bar ----------

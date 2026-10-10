@@ -284,6 +284,54 @@ export async function findSameVideos(gql, scene) {
     .sort((a, b) => a.durationDiff - b.durationDiff);
 }
 
+// ---------- Library overview (groups of same videos) ----------
+
+// findDuplicateScenes counts the distance inclusively: 4 = up to 4 differing bits, like PHASH_DISTANCE above.
+const GROUP_DISTANCE = PHASH_DISTANCE - 1;
+
+/**
+ * One group of same videos, seen from `sourceId` (default: the scene with the most markers).
+ * → { key, scenes, source, targets: [{ scene, plan, add, durationDiff, short, sure }], missing }
+ *   missing = markers of the source that the others don't have yet.
+ */
+export function analyzeGroup(scenes, sourceId) {
+  const source =
+    scenes.find((s) => s.id === String(sourceId)) ||
+    scenes.slice().sort((a, b) => b.markers.length - a.markers.length || Number(a.id) - Number(b.id))[0];
+  const targets = scenes
+    .filter((s) => s !== source)
+    .map((s) => {
+      const plan = planCopy(source.markers, s, 0);
+      const diff = durationDiff(source, s);
+      const short = Math.min(source.duration, s.duration) < SHORT_CLIP;
+      return { scene: s, plan, add: countNew(plan), durationDiff: diff, short, sure: diff <= SURE_DURATION_DIFF && !short };
+    });
+  const key = scenes.map((s) => s.id).sort((a, b) => Number(a) - Number(b)).join(",");
+  return { key, scenes, source, targets, missing: targets.reduce((n, x) => n + x.add, 0) };
+}
+
+/**
+ * All groups of same videos in the library (Stash's duplicate search over the phashes).
+ * Groups where a video has markers the others lack come first. → [analyzeGroup(...)]
+ */
+export async function findSameVideoGroups(gql) {
+  const d = await gql(
+    `query($d: Int, $dd: Float) { findDuplicateScenes(distance: $d, duration_diff: $dd) { ${SCENE_FIELDS} } }`,
+    { d: GROUP_DISTANCE, dd: MAX_DURATION_DIFF },
+    { heavy: true }
+  );
+  return ((d && d.findDuplicateScenes) || [])
+    .map((group) => analyzeGroup(group.map(toScene)))
+    .sort((a, b) => b.missing - a.missing || b.source.markers.length - a.source.markers.length);
+}
+
+// Loads one group again (after copying), keeping its source. → analyzeGroup(...)
+export async function reloadGroup(gql, group) {
+  const scenes = [];
+  for (const s of group.scenes) scenes.push(await loadScene(gql, s.id));
+  return analyzeGroup(scenes, group.source.id);
+}
+
 // How many scenes have a phash: only those can be found as same videos. → { total, withPhash }
 export async function phashCoverage(gql) {
   const d = await gql(

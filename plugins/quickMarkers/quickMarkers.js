@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.6.0";
+  const PLUGIN_VERSION = "1.7.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -1056,6 +1056,19 @@
         React.createElement(
           "div",
           { className: "quick-markers-modal-footer" },
+          props.mode === "same" && RR.Link
+            ? React.createElement(
+                RR.Link,
+                {
+                  to: SYNC_ROUTE_PATH,
+                  className: "quick-markers-sync-link",
+                  onClick: function () {
+                    props.onClose();
+                  },
+                },
+                "All same videos of the library →"
+              )
+            : null,
           React.createElement(
             "button",
             {
@@ -1917,6 +1930,487 @@
       touchBar,
       transferModal
     );
+  }
+
+  // ---------- Library page: Marker Sync (/plugins/quick-markers-sync) ----------
+
+  const SYNC_ROUTE_PATH = "/plugins/quick-markers-sync";
+  const SYNC_PAGE_SIZE = 30;
+  const RR = libraries.ReactRouterDOM || {};
+  const BS = libraries.Bootstrap || {};
+  const faSolid = libraries.FontAwesomeSolid || {};
+
+  const markersText = function (n) {
+    return n + (n === 1 ? " marker" : " markers");
+  };
+
+  function SyncThumb(props) {
+    const s = props.scene;
+    return React.createElement(
+      "a",
+      {
+        className: "quick-markers-thumb",
+        href: "/scenes/" + s.id,
+        target: "_blank",
+        rel: "noreferrer",
+        title: "Open in a new tab",
+      },
+      s.screenshot ? React.createElement("img", { alt: "", loading: "lazy", src: s.screenshot }) : null,
+      React.createElement("span", null, props.mc.formatTime(s.duration))
+    );
+  }
+
+  function MarkerSyncPage() {
+    const Toast = useSafeToast();
+    const transferState = useMarkerTransferState();
+    const undo = transferState.undo;
+    const [mc, setMc] = React.useState(null);
+    const [groups, setGroups] = React.useState(null);
+    const [error, setError] = React.useState(null);
+    const [coverage, setCoverage] = React.useState(null);
+    const [showAll, setShowAll] = React.useState(false);
+    const [shown, setShown] = React.useState(SYNC_PAGE_SIZE);
+    const [busy, setBusy] = React.useState("");
+    const [picked, setPicked] = React.useState({}); // group key → { scene id: true }
+
+    const load = React.useCallback(async function () {
+      setGroups(null);
+      setError(null);
+      try {
+        const m = await loadMarkerCopy();
+        const found = await m.findSameVideoGroups(m.gqlFetch);
+        setCoverage(await m.phashCoverage(m.gqlFetch));
+        setMc(m);
+        setPicked({});
+        setGroups(found);
+      } catch (e) {
+        setError(formatError(e));
+      }
+    }, []);
+
+    React.useEffect(
+      function () {
+        load();
+      },
+      [load]
+    );
+
+    function pickedOf(g) {
+      if (picked[g.key]) return picked[g.key];
+      const pre = {};
+      g.targets.forEach(function (x) {
+        if (x.sure && x.add > 0) pre[x.scene.id] = true;
+      });
+      return pre;
+    }
+
+    function jobsOf(g) {
+      const p = pickedOf(g);
+      return g.targets
+        .filter(function (x) {
+          return x.add > 0 && p[x.scene.id];
+        })
+        .map(function (x) {
+          return { sceneId: x.scene.id, plan: x.plan, add: x.add };
+        });
+    }
+
+    const sumAdd = function (jobs) {
+      return jobs.reduce(function (n, j) {
+        return n + j.add;
+      }, 0);
+    };
+
+    function replaceGroup(next) {
+      setGroups(function (list) {
+        return list.map(function (g) {
+          return g.key === next.key ? next : g;
+        });
+      });
+    }
+
+    async function run(jobs) {
+      const created = [];
+      try {
+        for (let i = 0; i < jobs.length; i++) {
+          setBusy(i + 1 + " / " + jobs.length);
+          await mc.applyPlan(mc.createWithGql(mc.gqlFetch), jobs[i].sceneId, jobs[i].plan, null, created);
+        }
+        Toast.success(
+          created.length + " markers copied to " + jobs.length + (jobs.length === 1 ? " scene" : " scenes") +
+            " — Undo at the top of this page"
+        );
+        return true;
+      } catch (e) {
+        Toast.error(formatError(e));
+        return false;
+      } finally {
+        mc.rememberTransfer(created, jobs.map(function (j) {
+          return j.sceneId;
+        }));
+        setBusy("");
+      }
+    }
+
+    async function onCopyGroup(g) {
+      await run(jobsOf(g));
+      try {
+        replaceGroup(await mc.reloadGroup(mc.gqlFetch, g));
+        setPicked(function (p) {
+          const next = Object.assign({}, p);
+          delete next[g.key];
+          return next;
+        });
+      } catch (e) {
+        load();
+      }
+    }
+
+    async function onCopyAll(list) {
+      const jobs = [].concat.apply([], list.map(jobsOf));
+      const ok = window.confirm(
+        "Copy " + markersText(sumAdd(jobs)) + " into " + jobs.length + (jobs.length === 1 ? " scene" : " scenes") + "? Undo stays possible afterwards."
+      );
+      if (!ok) return;
+      await run(jobs);
+      load();
+    }
+
+    async function onUndo() {
+      const rec = mc && mc.readUndo();
+      if (!rec) return;
+      const ok = window.confirm(
+        "Delete the " + rec.ids.length + " markers that were copied last (into " + rec.sceneIds.length +
+          (rec.sceneIds.length === 1 ? " scene" : " scenes") + ")?"
+      );
+      if (!ok) return;
+      try {
+        setBusy("…");
+        await mc.undoLastTransfer(mc.gqlFetch);
+        Toast.success(rec.ids.length + " markers removed");
+        refreshClassicViews();
+      } catch (e) {
+        Toast.error(formatError(e));
+      } finally {
+        setBusy("");
+      }
+      load();
+    }
+
+    async function onGenerate() {
+      const ok = window.confirm(
+        "Start a Stash task that creates the video fingerprint (phash) for all scenes without one? It runs in the background (see Tasks) and can take a while."
+      );
+      if (!ok) return;
+      try {
+        await mc.generatePhashes(mc.gqlFetch);
+        Toast.success("Phash task started — see Tasks");
+      } catch (e) {
+        Toast.error(formatError(e));
+      }
+    }
+
+    const h = React.createElement;
+    let content;
+    if (error) {
+      content = h("p", { className: "quick-markers-transfer-error" }, error);
+    } else if (!groups || !mc) {
+      content = h("p", { className: "text-muted" }, "Comparing the fingerprints of the library …");
+    } else {
+      const list = groups.filter(function (g) {
+        return showAll || g.missing > 0;
+      });
+      const missingGroups = groups.filter(function (g) {
+        return g.missing > 0;
+      }).length;
+      const bulk = sumAdd([].concat.apply([], list.map(jobsOf)));
+      content = h(
+        React.Fragment,
+        null,
+        coverage && coverage.withPhash < coverage.total
+          ? h(
+              "p",
+              { className: "text-muted quick-markers-sync-coverage" },
+              coverage.withPhash + " of " + coverage.total + " scenes have a fingerprint so far. Only those are compared. ",
+              h("button", { type: "button", className: "btn btn-secondary btn-sm", onClick: onGenerate }, "Generate missing phashes now")
+            )
+          : null,
+        h(
+          "div",
+          { className: "quick-markers-sync-bar" },
+          h(
+            "div",
+            { className: "btn-group" },
+            h(
+              "button",
+              {
+                type: "button",
+                className: "btn btn-sm " + (showAll ? "btn-secondary" : "btn-primary"),
+                onClick: function () {
+                  setShowAll(false);
+                  setShown(SYNC_PAGE_SIZE);
+                },
+              },
+              "Markers missing (" + missingGroups + ")"
+            ),
+            h(
+              "button",
+              {
+                type: "button",
+                className: "btn btn-sm " + (showAll ? "btn-primary" : "btn-secondary"),
+                onClick: function () {
+                  setShowAll(true);
+                  setShown(SYNC_PAGE_SIZE);
+                },
+              },
+              "All groups (" + groups.length + ")"
+            )
+          ),
+          h("span", { className: "quick-markers-sync-spacer" }),
+          busy ? h("span", { className: "text-muted" }, busy) : null,
+          undo
+            ? h(
+                "button",
+                { type: "button", className: "btn btn-secondary btn-sm", disabled: !!busy, onClick: onUndo },
+                "↶ Undo (" + undo.ids.length + ")"
+              )
+            : null,
+          h("button", { type: "button", className: "btn btn-secondary btn-sm", disabled: !!busy, onClick: load }, "Reload"),
+          h(
+            "button",
+            {
+              type: "button",
+              className: "btn btn-primary btn-sm",
+              disabled: !bulk || !!busy,
+              onClick: function () {
+                onCopyAll(list);
+              },
+            },
+            "Copy all ticked (" + markersText(bulk) + ")"
+          )
+        ),
+        list.length
+          ? list.slice(0, shown).map(function (g) {
+              const jobs = jobsOf(g);
+              const p = pickedOf(g);
+              return h(
+                "section",
+                { key: g.key, className: "quick-markers-sync-group" + (g.missing ? "" : " is-complete") },
+                h(
+                  "header",
+                  null,
+                  h("strong", null, g.scenes.length + " videos"),
+                  h(
+                    "span",
+                    { className: g.missing ? "quick-markers-sync-missing" : "quick-markers-sync-ok" },
+                    g.missing ? "+" + markersText(g.missing) + " missing" : "all have the same markers"
+                  ),
+                  h("span", { className: "quick-markers-sync-spacer" }),
+                  g.missing
+                    ? h(
+                        "button",
+                        {
+                          type: "button",
+                          className: "btn btn-primary btn-sm",
+                          disabled: !jobs.length || !!busy,
+                          onClick: function () {
+                            onCopyGroup(g);
+                          },
+                        },
+                        "Copy " + markersText(sumAdd(jobs))
+                      )
+                    : null
+                ),
+                h(
+                  "div",
+                  { className: "quick-markers-sync-cards" },
+                  h(
+                    "div",
+                    { className: "quick-markers-sync-card is-source" },
+                    h(SyncThumb, { scene: g.source, mc: mc }),
+                    h("strong", null, g.source.title),
+                    h("small", null, g.source.path),
+                    h(
+                      "small",
+                      null,
+                      h("em", { className: "quick-markers-sync-badge" }, "Source"),
+                      " " + g.source.markers.length + (g.source.markers.length === 1 ? " marker" : " markers")
+                    )
+                  ),
+                  g.targets.map(function (x) {
+                    const diff = x.durationDiff < 0.05 ? "same length" : "± " + x.durationDiff.toFixed(1) + " s";
+                    return h(
+                      "div",
+                      { key: x.scene.id, className: "quick-markers-sync-card" + (x.sure ? "" : " is-unsure") },
+                      h(SyncThumb, { scene: x.scene, mc: mc }),
+                      h(
+                        "strong",
+                        null,
+                        x.scene.title,
+                        x.short ? h("em", { className: "quick-markers-flag" }, "short clip — check") : null
+                      ),
+                      h("small", null, x.scene.path),
+                      h(
+                        "small",
+                        null,
+                        diff + " · " + x.scene.markers.length + (x.scene.markers.length === 1 ? " marker" : " markers") +
+                          (x.add ? " · +" + x.add + " new" : "")
+                      ),
+                      h(
+                        "div",
+                        { className: "quick-markers-sync-card-actions" },
+                        x.add
+                          ? h(
+                              "label",
+                              null,
+                              h("input", {
+                                type: "checkbox",
+                                checked: !!p[x.scene.id],
+                                disabled: !!busy,
+                                onChange: function (e) {
+                                  const next = Object.assign({}, p);
+                                  if (e.target.checked) next[x.scene.id] = true;
+                                  else delete next[x.scene.id];
+                                  setPicked(function (all) {
+                                    const out = Object.assign({}, all);
+                                    out[g.key] = next;
+                                    return out;
+                                  });
+                                },
+                              }),
+                              " copy here"
+                            )
+                          : h("span", { className: "quick-markers-sync-ok" }, "has all markers"),
+                        x.scene.markers.length
+                          ? h(
+                              "button",
+                              {
+                                type: "button",
+                                className: "btn btn-link btn-sm",
+                                disabled: !!busy,
+                                title: "Copy from this video instead",
+                                onClick: function () {
+                                  replaceGroup(mc.analyzeGroup(g.scenes, x.scene.id));
+                                  setPicked(function (all) {
+                                    const out = Object.assign({}, all);
+                                    delete out[g.key];
+                                    return out;
+                                  });
+                                },
+                              },
+                              "Use as source"
+                            )
+                          : null
+                      )
+                    );
+                  })
+                )
+              );
+            })
+          : h(
+              "p",
+              { className: "text-muted" },
+              groups.length
+                ? "No group with missing markers — every video has the markers of its copies."
+                : "No scenes with the same video found."
+            ),
+        list.length > shown
+          ? h(
+              "button",
+              {
+                type: "button",
+                className: "btn btn-secondary quick-markers-sync-more",
+                onClick: function () {
+                  setShown(shown + SYNC_PAGE_SIZE);
+                },
+              },
+              "Show more (" + (list.length - shown) + " left)"
+            )
+          : null
+      );
+    }
+
+    return h(
+      "div",
+      { className: "quick-markers-sync" },
+      h("h2", null, "Marker Sync"),
+      h(
+        "p",
+        { className: "text-muted" },
+        "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Ticked are only videos within 1 s that are not short clips — compare the pictures before copying."
+      ),
+      content
+    );
+  }
+
+  // Guarded: a Stash without these APIs only misses the overview, not the scene panel below.
+  if (PluginApi.register && typeof PluginApi.register.route === "function") {
+    PluginApi.register.route(SYNC_ROUTE_PATH, MarkerSyncPage);
+  }
+
+  function SyncNavMenuItem() {
+    const Link = RR.Link;
+    const Nav = BS.Nav;
+    const Button = BS.Button;
+    const location = typeof RR.useLocation === "function" ? RR.useLocation() : null;
+    if (!Link || !Nav || !Nav.Link || !Button) return null;
+    const pathname = (location && location.pathname) || window.location.pathname || "";
+    const isActive = pathname === SYNC_ROUTE_PATH || pathname.indexOf(SYNC_ROUTE_PATH + "/") === 0;
+    const Icon = (PluginApi.components || {}).Icon;
+    const faIcon = faSolid.faClone || faSolid.faCopy || faSolid.faLayerGroup;
+    const iconEl =
+      Icon && faIcon && typeof faIcon === "object"
+        ? React.createElement(Icon, {
+            icon: faIcon,
+            className: "nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0",
+          })
+        : null;
+    return React.createElement(
+      Nav.Link,
+      {
+        as: "div",
+        eventKey: SYNC_ROUTE_PATH,
+        className: "col-4 col-sm-3 col-md-2 col-lg-auto",
+      },
+      React.createElement(
+        Link,
+        { to: SYNC_ROUTE_PATH, className: "quick-markers-nav-link-wrap" },
+        React.createElement(
+          Button,
+          {
+            className:
+              "minimal p-4 p-xl-2 d-flex d-xl-inline-block flex-column justify-content-between align-items-center" +
+              (isActive ? " active" : ""),
+          },
+          iconEl,
+          React.createElement("span", null, "Marker Sync")
+        )
+      )
+    );
+  }
+
+  if (PluginApi.patch && typeof PluginApi.patch.before === "function") {
+    PluginApi.patch.before("MainNavBar.MenuItems", function (props) {
+      try {
+        return [
+          {
+            children: React.createElement(
+              React.Fragment,
+              null,
+              props && props.children,
+              React.createElement(
+                ScenePatchErrorBoundary,
+                null,
+                React.createElement(SyncNavMenuItem, null)
+              )
+            ),
+          },
+        ];
+      } catch (e) {
+        console.error("[Quick Markers] MainNavBar.MenuItems patch failed", e);
+        return [props || {}];
+      }
+    });
   }
 
   PluginApi.patch.after("ScenePage", function () {

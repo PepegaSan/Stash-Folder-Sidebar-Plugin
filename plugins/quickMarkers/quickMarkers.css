@@ -763,6 +763,164 @@
   white-space: nowrap;
 }
 
+.quick-markers-sync-link {
+  margin-right: auto;
+  align-self: center;
+  font-size: 0.875rem;
+}
+
+/* ── Library page: Marker Sync ── */
+
+.quick-markers-sync {
+  --qm-accent: var(--st-flush, var(--primary, #137cbd));
+  --qm-line: rgba(255, 255, 255, 0.12);
+  --qm-muted: var(--st-faint, #a7b6c2);
+  --qm-ok: var(--success, #0f9960);
+  --qm-warn: var(--warning, #d9822b);
+  --qm-radius-sm: 8px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 3rem;
+}
+
+.quick-markers-sync h2 {
+  margin-bottom: 0.25rem;
+}
+
+.quick-markers-sync-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+}
+
+.quick-markers-sync-bar {
+  position: sticky;
+  top: 4rem;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.6rem 0;
+  background: var(--st-ink, #202b33);
+}
+
+.quick-markers-sync-spacer {
+  flex: 1;
+}
+
+.quick-markers-sync-group {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem 1rem;
+  border: 1px solid var(--qm-line);
+  border-radius: var(--qm-radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.quick-markers-sync-group.is-complete {
+  opacity: 0.75;
+}
+
+.quick-markers-sync-group > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+}
+
+.quick-markers-sync-missing {
+  color: var(--qm-accent);
+  font-weight: 600;
+}
+
+.quick-markers-sync-ok {
+  color: var(--qm-ok);
+}
+
+.quick-markers-sync-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.6rem;
+}
+
+.quick-markers-sync-card {
+  display: grid;
+  align-content: start;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--qm-line);
+  border-radius: var(--qm-radius-sm);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.quick-markers-sync-card.is-source {
+  border-color: var(--qm-accent);
+  box-shadow: inset 0 0 0 1px var(--qm-accent);
+}
+
+.quick-markers-sync-card.is-unsure {
+  border-style: dashed;
+}
+
+.quick-markers-sync-card .quick-markers-thumb {
+  width: 100%;
+  margin-bottom: 0.25rem;
+}
+
+.quick-markers-sync-card strong {
+  overflow-wrap: anywhere;
+}
+
+.quick-markers-sync-card small {
+  overflow: hidden;
+  color: var(--qm-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-markers-sync-badge {
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.3rem;
+  color: var(--st-ink, #fff);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 700;
+  background: var(--qm-accent);
+}
+
+.quick-markers-sync-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.quick-markers-sync-card-actions label {
+  margin: 0;
+  cursor: pointer;
+}
+
+.quick-markers-sync-more {
+  display: block;
+  margin: 0 auto;
+}
+
+/* Top nav: match stock menu item link wrapper */
+.top-nav .quick-markers-nav-link-wrap,
+.top-nav .quick-markers-nav-link-wrap:hover {
+  color: inherit;
+  display: block;
+  text-decoration: none;
+}
+
 /* ── Touch bar (Android / tablet) ──
    Lives in the page flow under the video (inside Stash's .VideoPlayer flex column),
    never on top of it: the video shrinks a little instead of the controls being covered. */

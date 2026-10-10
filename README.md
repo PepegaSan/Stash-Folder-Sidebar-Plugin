@@ -144,7 +144,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.6.0-informational)
+![Version](https://img.shields.io/badge/version-1.7.0-informational)
 
 ## Requirements
 
@@ -184,7 +184,9 @@ For videos that exist more than once (re-encodes, renamed copies) — in the exp
 - **Same videos** — finds scenes with the same video fingerprint (phash, at most 4 of 64 bits different) and almost the same length (within 3 s). It shows them with a thumbnail (click opens the scene in a new tab), path, length and markers next to the current scene, ticks only those within 1 s that are not short clips (under 30 s — those are flagged *short clip — check*), and copies the markers there with one click. **Take** copies the markers of one of them into the current scene instead
 - **Undo** — removes the markers of the last paste / transfer again (button in the panel, in Stash UI also in the message); kept for a day, also across classic Stash and Stash UI
 
-*Same videos* needs phashes: **Tasks → Generate → Phashes** (or the button in the dialog, which starts that task for scenes without one). Byte-identical files are already one scene in Stash and share their markers anyway.
+**Marker Sync** (whole library) — a page of its own: **Marker Sync** in the classic navigation, **Manage → Marker-Abgleich / Marker sync** in Stash UI, or *All same videos of the library* in the Same videos dialog. It lists every group of same videos (Stash's duplicate search over the phashes, at most 4 of 64 bits apart, length within 3 s) as cards with thumbnail, path, length and markers. The video with the most markers is the **source** (**Use as source** picks another); groups where videos lack markers come first (*Markers missing* / *All groups*). Copy per group or **Copy all ticked** at once — same preselection (within 1 s, no short clips) and **Undo** as in the dialog.
+
+*Same videos* and *Marker Sync* need phashes: **Tasks → Generate → Phashes** (or the button in the dialog, which starts that task for scenes without one). Byte-identical files are already one scene in Stash and share their markers anyway.
 
 ## Stash UI
 
@@ -255,8 +257,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.6.0`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.6.0**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.7.0`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.7.0**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -477,6 +479,10 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.6.0`.
 
 - **Stash UI support** — Categories is a page of Stash UI itself (Library → Categories) instead of opening in embedded classic Stash: tag chips, search, sort, List / Preview, paging, scenes open in the Stash UI player
 - Same categories and settings as in classic Stash; the classic page is unchanged
+
+### Quick Markers 1.7.0
+
+- **Marker Sync** page for the whole library: all groups of same videos with thumbnails and markers, source per group, copy per group or all ticked at once, Undo; classic navigation entry and Stash UI menu entry (Manage)
 
 ### Quick Markers 1.6.0
 

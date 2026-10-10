@@ -252,6 +252,144 @@
   margin: 0;
 }
 
+/* ── Library page: Marker sync ── */
+
+.qm-sync {
+  display: grid;
+  gap: 16px;
+}
+
+.qm-sync > .kb-hint {
+  margin: 0;
+  max-width: 900px;
+}
+
+.qm-sync-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.qm-sync-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  background: var(--bg);
+}
+
+.qm-sync-bar .kb-spacer {
+  flex: 1;
+}
+
+.qm-sync-group {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg-2);
+}
+
+.qm-sync-group.is-complete {
+  opacity: 0.75;
+}
+
+.qm-sync-group > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.qm-sync-group > header .kb-spacer {
+  flex: 1;
+}
+
+.qm-sync-missing {
+  color: var(--pink);
+  font-weight: 600;
+}
+
+.qm-sync-ok {
+  color: var(--ok);
+}
+
+.qm-sync-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.qm-sync-card {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg);
+}
+
+.qm-sync-card.is-source {
+  border-color: var(--pink);
+  box-shadow: inset 0 0 0 1px var(--pink);
+}
+
+.qm-sync-card.is-unsure {
+  border-style: dashed;
+}
+
+.qm-sync-card .qm-x-thumb {
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.qm-sync-card b {
+  overflow-wrap: anywhere;
+}
+
+.qm-sync-card small {
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qm-sync-badge {
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--ink);
+  font: 700 11px/1.4 var(--f-label);
+  font-style: normal;
+  background: var(--pink);
+}
+
+.qm-sync-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-top: 4px;
+}
+
+.qm-sync-card-actions .kb-btn {
+  height: 30px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.qm-sync-more {
+  justify-self: center;
+}
+
 /* ── Settings → Plugins → Quick Markers ── */
 
 .qm-set {
