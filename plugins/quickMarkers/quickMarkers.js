@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.7.1";
+  const PLUGIN_VERSION = "1.8.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -611,6 +611,24 @@
     } catch (e) {
       console.error("[Quick Markers] refresh failed", e);
     }
+  }
+
+  const scenesWord = function (n) {
+    return n + (n === 1 ? " scene" : " scenes");
+  };
+
+  // Confirm text and result message of undoing a transfer (rec from readUndo).
+  function undoQuestion(rec) {
+    const where = " (in " + scenesWord(rec.sceneIds.length) + ")";
+    if (!rec.restore.length) return "Delete the " + rec.ids.length + " markers that were copied last" + where + "?";
+    return (
+      "Undo the last transfer" + where + ": delete the " + rec.ids.length + " copied markers and restore the " +
+      rec.restore.length + " replaced ones?"
+    );
+  }
+
+  function undoDoneText(rec) {
+    return rec.ids.length + " markers removed" + (rec.restore.length ? ", " + rec.restore.length + " restored" : "");
   }
 
   const PLAN_STATUS_NOTE = { exists: "already there", outside: "outside the video" };
@@ -1380,14 +1398,10 @@
           const mc = await loadMarkerCopy();
           const rec = mc.readUndo();
           if (!rec) return;
-          const ok = window.confirm(
-            "Delete the " + rec.ids.length + " markers that were copied last (into " +
-              rec.sceneIds.length + (rec.sceneIds.length === 1 ? " scene" : " scenes") + ")?"
-          );
-          if (!ok) return;
+          if (!window.confirm(undoQuestion(rec))) return;
           await mc.undoLastTransfer(mc.gqlFetch);
           refreshClassicViews();
-          Toast.success(rec.ids.length + " markers removed");
+          Toast.success(undoDoneText(rec));
         } catch (e) {
           Toast.error(formatError(e));
         }
@@ -1754,7 +1768,7 @@
                           React.createElement(
                             "span",
                             { className: "quick-markers-tool-count" },
-                            undo.ids.length
+                            undo.ids.length + undo.restore.length
                           )
                         )
                       : null
@@ -1972,6 +1986,8 @@
     const [shown, setShown] = React.useState(SYNC_PAGE_SIZE);
     const [busy, setBusy] = React.useState("");
     const [picked, setPicked] = React.useState({}); // group key → { scene id: true }
+    // scene id → true: add to that video's own markers instead of replacing them (default: replace).
+    const [keep, setKeep] = React.useState({});
 
     const load = React.useCallback(async function () {
       setGroups(null);
@@ -1982,6 +1998,7 @@
         setCoverage(await m.phashCoverage(m.gqlFetch));
         setMc(m);
         setPicked({});
+        setKeep({});
         setGroups(found);
       } catch (e) {
         setError(formatError(e));
@@ -1995,11 +2012,21 @@
       [load]
     );
 
+    // Markers of a target that copying deletes: those the source lacks, unless its own are kept.
+    function removeOf(x) {
+      return keep[x.scene.id] ? [] : x.remove;
+    }
+
+    function hasWork(x) {
+      return x.add > 0 || removeOf(x).length > 0;
+    }
+
+    // Preselected: sure matches that only gain markers — deleting is always a click of its own.
     function pickedOf(g) {
       if (picked[g.key]) return picked[g.key];
       const pre = {};
       g.targets.forEach(function (x) {
-        if (x.sure && x.add > 0) pre[x.scene.id] = true;
+        if (x.sure && x.add > 0 && !x.remove.length) pre[x.scene.id] = true;
       });
       return pre;
     }
@@ -2008,10 +2035,10 @@
       const p = pickedOf(g);
       return g.targets
         .filter(function (x) {
-          return x.add > 0 && p[x.scene.id];
+          return hasWork(x) && p[x.scene.id];
         })
         .map(function (x) {
-          return { sceneId: x.scene.id, plan: x.plan, add: x.add };
+          return { sceneId: x.scene.id, plan: x.plan, add: x.add, remove: removeOf(x) };
         });
     }
 
@@ -2019,6 +2046,18 @@
       return jobs.reduce(function (n, j) {
         return n + j.add;
       }, 0);
+    };
+
+    const sumRemove = function (jobs) {
+      return jobs.reduce(function (n, j) {
+        return n + j.remove.length;
+      }, 0);
+    };
+
+    // "Copy 3 markers" / "Copy 3 markers, delete 2"
+    const jobsText = function (jobs) {
+      const rem = sumRemove(jobs);
+      return "Copy " + markersText(sumAdd(jobs)) + (rem ? ", delete " + rem : "");
     };
 
     function replaceGroup(next) {
@@ -2030,24 +2069,19 @@
     }
 
     async function run(jobs) {
-      const created = [];
       try {
-        for (let i = 0; i < jobs.length; i++) {
+        const done = await mc.syncScenes(mc.gqlFetch, mc.createWithGql(mc.gqlFetch), jobs, function (i) {
           setBusy(i + 1 + " / " + jobs.length);
-          await mc.applyPlan(mc.createWithGql(mc.gqlFetch), jobs[i].sceneId, jobs[i].plan, null, created);
-        }
+        });
         Toast.success(
-          created.length + " markers copied to " + jobs.length + (jobs.length === 1 ? " scene" : " scenes") +
-            " — Undo at the top of this page"
+          done.added + " markers copied to " + scenesWord(jobs.length) +
+            (done.removed ? ", " + done.removed + " deleted" : "") + " — Undo at the top of this page"
         );
         return true;
       } catch (e) {
         Toast.error(formatError(e));
         return false;
       } finally {
-        mc.rememberTransfer(created, jobs.map(function (j) {
-          return j.sceneId;
-        }));
         setBusy("");
       }
     }
@@ -2068,8 +2102,10 @@
 
     async function onCopyAll(list) {
       const jobs = [].concat.apply([], list.map(jobsOf));
+      const rem = sumRemove(jobs);
       const ok = window.confirm(
-        "Copy " + markersText(sumAdd(jobs)) + " into " + jobs.length + (jobs.length === 1 ? " scene" : " scenes") +
+        "Copy " + markersText(sumAdd(jobs)) + " into " + scenesWord(jobs.length) +
+          (rem ? " and delete " + markersText(rem) + " there that the sources don't have" : "") +
           " (only the groups shown on this page)? Undo stays possible afterwards."
       );
       if (!ok) return;
@@ -2080,15 +2116,11 @@
     async function onUndo() {
       const rec = mc && mc.readUndo();
       if (!rec) return;
-      const ok = window.confirm(
-        "Delete the " + rec.ids.length + " markers that were copied last (into " + rec.sceneIds.length +
-          (rec.sceneIds.length === 1 ? " scene" : " scenes") + ")?"
-      );
-      if (!ok) return;
+      if (!window.confirm(undoQuestion(rec))) return;
       try {
         setBusy("…");
         await mc.undoLastTransfer(mc.gqlFetch);
-        Toast.success(rec.ids.length + " markers removed");
+        Toast.success(undoDoneText(rec));
         refreshClassicViews();
       } catch (e) {
         Toast.error(formatError(e));
@@ -2118,15 +2150,16 @@
     } else if (!groups || !mc) {
       content = h("p", { className: "text-muted" }, "Comparing the fingerprints of the library …");
     } else {
+      const differs = function (g) {
+        return g.missing > 0 || g.extra > 0;
+      };
       const list = groups.filter(function (g) {
-        return showAll || g.missing > 0;
+        return showAll || differs(g);
       });
-      const missingGroups = groups.filter(function (g) {
-        return g.missing > 0;
-      }).length;
+      const missingGroups = groups.filter(differs).length;
       // Only groups on screen: "all ticked" must never reach groups nobody has looked at.
       const onScreen = list.slice(0, shown);
-      const bulk = sumAdd([].concat.apply([], onScreen.map(jobsOf)));
+      const bulkJobs = [].concat.apply([], onScreen.map(jobsOf));
       content = h(
         React.Fragment,
         null,
@@ -2154,7 +2187,7 @@
                   setShown(SYNC_PAGE_SIZE);
                 },
               },
-              "Markers missing (" + missingGroups + ")"
+              "Markers differ (" + missingGroups + ")"
             ),
             h(
               "button",
@@ -2175,7 +2208,7 @@
             ? h(
                 "button",
                 { type: "button", className: "btn btn-secondary btn-sm", disabled: !!busy, onClick: onUndo },
-                "↶ Undo (" + undo.ids.length + ")"
+                "↶ Undo (" + (undo.ids.length + undo.restore.length) + ")"
               )
             : null,
           h("button", { type: "button", className: "btn btn-secondary btn-sm", disabled: !!busy, onClick: load }, "Reload"),
@@ -2184,32 +2217,147 @@
             {
               type: "button",
               className: "btn btn-primary btn-sm",
-              disabled: !bulk || !!busy,
+              disabled: !bulkJobs.length || !!busy,
               onClick: function () {
                 onCopyAll(onScreen);
               },
             },
-            "Copy all ticked (" + markersText(bulk) + ")"
+            "All ticked: " + jobsText(bulkJobs)
           )
         ),
         list.length
           ? list.slice(0, shown).map(function (g) {
               const jobs = jobsOf(g);
               const p = pickedOf(g);
+              const removing = g.targets.reduce(function (n, x) {
+                return n + removeOf(x).length;
+              }, 0);
+              const status = [];
+              if (g.missing) status.push("+" + markersText(g.missing) + " missing");
+              if (removing) status.push("−" + removing + " not in the source");
+              const byId = {};
+              g.targets.forEach(function (x) {
+                byId[x.scene.id] = x;
+              });
+
+              function sourceRadio(s) {
+                return h(
+                  "label",
+                  {
+                    className: "quick-markers-sync-pick",
+                    title: s.markers.length ? "Copy the markers of this video to the others" : "This video has no markers",
+                  },
+                  h("input", {
+                    type: "radio",
+                    name: "quick-markers-source-" + g.key,
+                    checked: s === g.source,
+                    disabled: !!busy || !s.markers.length,
+                    onChange: function () {
+                      replaceGroup(mc.analyzeGroup(g.scenes, s.id));
+                      setPicked(function (all) {
+                        const out = Object.assign({}, all);
+                        delete out[g.key];
+                        return out;
+                      });
+                    },
+                  }),
+                  s === g.source ? h("em", { className: "quick-markers-sync-badge" }, "Source") : " Source"
+                );
+              }
+
+              function targetCard(x) {
+                const diff = x.durationDiff < 0.05 ? "same length" : "± " + x.durationDiff.toFixed(1) + " s";
+                const rem = removeOf(x).length;
+                return h(
+                  "div",
+                  { key: x.scene.id, className: "quick-markers-sync-card" + (x.sure ? "" : " is-unsure") },
+                  h(
+                    "div",
+                    { className: "quick-markers-sync-card-top" },
+                    sourceRadio(x.scene),
+                    x.remove.length
+                      ? h(
+                          "label",
+                          {
+                            className: "quick-markers-sync-pick",
+                            title: "Off: this video gets exactly the markers of the source. On: its own markers stay, the source's are added.",
+                          },
+                          h("input", {
+                            type: "checkbox",
+                            checked: !!keep[x.scene.id],
+                            disabled: !!busy,
+                            onChange: function (e) {
+                              const checked = e.target.checked;
+                              setKeep(function (all) {
+                                const out = Object.assign({}, all);
+                                if (checked) out[x.scene.id] = true;
+                                else delete out[x.scene.id];
+                                return out;
+                              });
+                            },
+                          }),
+                          " keep its markers"
+                        )
+                      : null
+                  ),
+                  h(SyncThumb, { scene: x.scene, mc: mc }),
+                  h(
+                    "strong",
+                    null,
+                    x.scene.title,
+                    x.short ? h("em", { className: "quick-markers-flag" }, "short clip — check") : null
+                  ),
+                  h("small", null, x.scene.path),
+                  h(
+                    "small",
+                    null,
+                    diff + " · " + markersText(x.scene.markers.length) +
+                      (x.add ? " · +" + x.add + " new" : "") +
+                      (rem ? " · −" + rem + " deleted" : "")
+                  ),
+                  h(
+                    "div",
+                    { className: "quick-markers-sync-card-actions" },
+                    hasWork(x)
+                      ? h(
+                          "label",
+                          null,
+                          h("input", {
+                            type: "checkbox",
+                            checked: !!p[x.scene.id],
+                            disabled: !!busy,
+                            onChange: function (e) {
+                              const next = Object.assign({}, p);
+                              if (e.target.checked) next[x.scene.id] = true;
+                              else delete next[x.scene.id];
+                              setPicked(function (all) {
+                                const out = Object.assign({}, all);
+                                out[g.key] = next;
+                                return out;
+                              });
+                            },
+                          }),
+                          rem ? " replace markers here" : " copy here"
+                        )
+                      : h("span", { className: "quick-markers-sync-ok" }, "has all markers")
+                  )
+                );
+              }
+
               return h(
                 "section",
-                { key: g.key, className: "quick-markers-sync-group" + (g.missing ? "" : " is-complete") },
+                { key: g.key, className: "quick-markers-sync-group" + (differs(g) ? "" : " is-complete") },
                 h(
                   "header",
                   null,
                   h("strong", null, g.scenes.length + " videos"),
                   h(
                     "span",
-                    { className: g.missing ? "quick-markers-sync-missing" : "quick-markers-sync-ok" },
-                    g.missing ? "+" + markersText(g.missing) + " missing" : "all have the same markers"
+                    { className: status.length ? "quick-markers-sync-missing" : "quick-markers-sync-ok" },
+                    status.length ? status.join(" · ") : "all have the same markers"
                   ),
                   h("span", { className: "quick-markers-sync-spacer" }),
-                  g.missing
+                  differs(g)
                     ? h(
                         "button",
                         {
@@ -2220,91 +2368,23 @@
                             onCopyGroup(g);
                           },
                         },
-                        "Copy " + markersText(sumAdd(jobs))
+                        jobsText(jobs)
                       )
                     : null
                 ),
                 h(
                   "div",
                   { className: "quick-markers-sync-cards" },
-                  h(
-                    "div",
-                    { className: "quick-markers-sync-card is-source" },
-                    h(SyncThumb, { scene: g.source, mc: mc }),
-                    h("strong", null, g.source.title),
-                    h("small", null, g.source.path),
-                    h(
-                      "small",
-                      null,
-                      h("em", { className: "quick-markers-sync-badge" }, "Source"),
-                      " " + g.source.markers.length + (g.source.markers.length === 1 ? " marker" : " markers")
-                    )
-                  ),
-                  g.targets.map(function (x) {
-                    const diff = x.durationDiff < 0.05 ? "same length" : "± " + x.durationDiff.toFixed(1) + " s";
+                  g.scenes.map(function (s) {
+                    if (s !== g.source) return targetCard(byId[s.id]);
                     return h(
                       "div",
-                      { key: x.scene.id, className: "quick-markers-sync-card" + (x.sure ? "" : " is-unsure") },
-                      h(SyncThumb, { scene: x.scene, mc: mc }),
-                      h(
-                        "strong",
-                        null,
-                        x.scene.title,
-                        x.short ? h("em", { className: "quick-markers-flag" }, "short clip — check") : null
-                      ),
-                      h("small", null, x.scene.path),
-                      h(
-                        "small",
-                        null,
-                        diff + " · " + x.scene.markers.length + (x.scene.markers.length === 1 ? " marker" : " markers") +
-                          (x.add ? " · +" + x.add + " new" : "")
-                      ),
-                      h(
-                        "div",
-                        { className: "quick-markers-sync-card-actions" },
-                        x.add
-                          ? h(
-                              "label",
-                              null,
-                              h("input", {
-                                type: "checkbox",
-                                checked: !!p[x.scene.id],
-                                disabled: !!busy,
-                                onChange: function (e) {
-                                  const next = Object.assign({}, p);
-                                  if (e.target.checked) next[x.scene.id] = true;
-                                  else delete next[x.scene.id];
-                                  setPicked(function (all) {
-                                    const out = Object.assign({}, all);
-                                    out[g.key] = next;
-                                    return out;
-                                  });
-                                },
-                              }),
-                              " copy here"
-                            )
-                          : h("span", { className: "quick-markers-sync-ok" }, "has all markers"),
-                        x.scene.markers.length
-                          ? h(
-                              "button",
-                              {
-                                type: "button",
-                                className: "btn btn-link btn-sm",
-                                disabled: !!busy,
-                                title: "Copy from this video instead",
-                                onClick: function () {
-                                  replaceGroup(mc.analyzeGroup(g.scenes, x.scene.id));
-                                  setPicked(function (all) {
-                                    const out = Object.assign({}, all);
-                                    delete out[g.key];
-                                    return out;
-                                  });
-                                },
-                              },
-                              "Use as source"
-                            )
-                          : null
-                      )
+                      { key: s.id, className: "quick-markers-sync-card is-source" },
+                      h("div", { className: "quick-markers-sync-card-top" }, sourceRadio(s)),
+                      h(SyncThumb, { scene: s, mc: mc }),
+                      h("strong", null, s.title),
+                      h("small", null, s.path),
+                      h("small", null, markersText(s.markers.length))
                     );
                   })
                 )
@@ -2314,7 +2394,7 @@
               "p",
               { className: "text-muted" },
               groups.length
-                ? "No group with missing markers — every video has the markers of its copies."
+                ? "No group with different markers — every video has the same markers as its copies."
                 : "No scenes with the same video found."
             ),
         list.length > shown
@@ -2340,7 +2420,7 @@
       h(
         "p",
         { className: "text-muted" },
-        "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Ticked are only videos within 1 s that are not short clips — compare the pictures before copying."
+        "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Pick the source per group; the others get exactly its markers — markers they have that the source lacks are deleted unless “keep its markers” is ticked. Ticked are only videos within 1 s that are not short clips and lose nothing — compare the pictures before copying."
       ),
       content
     );

@@ -3,8 +3,9 @@
 //
 // The clipboard lives in localStorage, so a copy in classic Stash can be pasted in Stash UI
 // and the other way round (same origin). "Same videos" are scenes whose video fingerprint
-// (phash) is (almost) the same and whose length matches. The last transfer can be undone
-// (its marker ids are kept in localStorage too, for a day).
+// (phash) is (almost) the same and whose length matches. A transfer can also replace the
+// markers of the target (delete the ones the source doesn't have). The last transfer can be
+// undone (the new marker ids and the deleted markers are kept in localStorage too, for a day).
 
 export const CLIPBOARD_KEY = "quickMarkers.clipboard";
 export const UNDO_KEY = "quickMarkers.lastTransfer";
@@ -64,6 +65,7 @@ function toScene(raw) {
 
 function toMarker(m) {
   return {
+    id: m.id != null ? String(m.id) : null,
     title: m.title || "",
     seconds: m.seconds,
     end_seconds: m.end_seconds != null ? m.end_seconds : null,
@@ -159,6 +161,17 @@ export function planCopy(source, target, offset) {
 
 export const countNew = (plan) => plan.filter((p) => p.status === "new").length;
 
+/**
+ * Markers of `target` that none of the copied markers of `plan` (planCopy into target) match:
+ * what replacing the target's markers with the source's would delete.
+ */
+export function planRemove(plan, target) {
+  const kept = plan
+    .filter((p) => p.status !== "outside")
+    .map((p) => ({ primaryTag: p.marker.primaryTag, seconds: p.seconds, end_seconds: p.end_seconds }));
+  return target.markers.filter((m) => m.id && !kept.some((k) => sameMarker(m, k)));
+}
+
 function markerInput(sceneId, item) {
   const m = item.marker;
   const input = {
@@ -170,6 +183,33 @@ function markerInput(sceneId, item) {
   };
   if (item.end_seconds != null) input.end_seconds = item.end_seconds;
   return input;
+}
+
+// Deletes markers by id; when the batch call fails (some gone already), one by one.
+async function destroyMarkers(gql, ids) {
+  if (!ids.length) return;
+  try {
+    await gql("mutation($ids: [ID!]!) { sceneMarkersDestroy(ids: $ids) }", { ids });
+  } catch (e) {
+    for (const id of ids) {
+      try {
+        await gql("mutation($id: ID!) { sceneMarkerDestroy(id: $id) }", { id });
+      } catch (err) {
+        /* already deleted */
+      }
+    }
+  }
+}
+
+/**
+ * Deletes `markers` (from loadScene) of a scene. removed: optional array that gets what is
+ * needed to create them again (for undo). → number deleted.
+ */
+export async function removeMarkers(gql, sceneId, markers, removed) {
+  const list = markers.filter((m) => m.id && m.primaryTag);
+  await destroyMarkers(gql, list.map((m) => m.id));
+  if (removed) list.forEach((m) => removed.push(markerInput(sceneId, { marker: m, seconds: m.seconds, end_seconds: m.end_seconds })));
+  return list.length;
 }
 
 export const createWithGql = (gql) => (input) =>
@@ -196,45 +236,68 @@ export async function applyPlan(create, sceneId, plan, onProgress, created) {
   return items.length;
 }
 
+/**
+ * Runs sync jobs [{ sceneId, plan, remove? }]: creates the "new" markers of each plan and deletes
+ * its `remove` markers, then remembers all of it for undo (also when a job fails).
+ * onProgress(job index, done, total) per created marker. → { added, removed }
+ */
+export async function syncScenes(gql, create, jobs, onProgress) {
+  const created = [];
+  const restore = [];
+  try {
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i];
+      await applyPlan(create, job.sceneId, job.plan, (done, total) => onProgress && onProgress(i, done, total), created);
+      if (job.remove && job.remove.length) await removeMarkers(gql, job.sceneId, job.remove, restore);
+    }
+  } finally {
+    rememberTransfer(created, jobs.map((j) => j.sceneId), restore);
+  }
+  return { added: created.length, removed: restore.length };
+}
+
 // ---------- Undo ----------
 
-// Remembers the markers of one transfer (replaces the previous one). sceneIds: the scenes they went to.
-export function rememberTransfer(ids, sceneIds) {
-  if (!ids || !ids.length) return;
+/**
+ * Remembers one transfer (replaces the previous one). ids: the created markers; sceneIds: the
+ * scenes it changed; restore: inputs of the markers it deleted (created again on undo).
+ */
+export function rememberTransfer(ids, sceneIds, restore) {
+  ids = ids || [];
+  restore = restore || [];
+  if (!ids.length && !restore.length) return;
   try {
-    localStorage.setItem(UNDO_KEY, JSON.stringify({ ids, sceneIds: sceneIds.map(String), at: Date.now() }));
+    localStorage.setItem(UNDO_KEY, JSON.stringify({ ids, restore, sceneIds: sceneIds.map(String), at: Date.now() }));
   } catch (e) {
     return;
   }
   window.dispatchEvent(new Event(CLIPBOARD_EVENT));
 }
 
-// → { ids, sceneIds, at } of the last transfer, or null (none, or older than a day).
+// → { ids, restore, sceneIds, at } of the last transfer, or null (none, or older than a day).
 export function readUndo() {
   try {
     const rec = JSON.parse(localStorage.getItem(UNDO_KEY) || "null");
-    return rec && Array.isArray(rec.ids) && rec.ids.length && Date.now() - rec.at < UNDO_MAX_AGE ? rec : null;
+    if (!rec || !Array.isArray(rec.ids) || !(Date.now() - rec.at < UNDO_MAX_AGE)) return null;
+    rec.restore = Array.isArray(rec.restore) ? rec.restore : [];
+    return rec.ids.length || rec.restore.length ? rec : null;
   } catch (e) {
     return null;
   }
 }
 
-// Deletes the markers of the last transfer. → the undone record (null if there was none).
+// How many markers undoing `rec` touches (copied ones deleted + deleted ones restored).
+export const undoSize = (rec) => (rec ? rec.ids.length + rec.restore.length : 0);
+
+// Deletes the markers of the last transfer and creates the ones it deleted again.
+// → the undone record (null if there was none).
 export async function undoLastTransfer(gql) {
   const rec = readUndo();
   if (!rec) return null;
-  try {
-    await gql("mutation($ids: [ID!]!) { sceneMarkersDestroy(ids: $ids) }", { ids: rec.ids });
-  } catch (e) {
-    // Some may be gone already (deleted by hand): delete the rest one by one.
-    for (const id of rec.ids) {
-      try {
-        await gql("mutation($id: ID!) { sceneMarkerDestroy(id: $id) }", { id });
-      } catch (err) {
-        /* already deleted */
-      }
-    }
-  }
+  // Some may be gone already (deleted by hand): destroyMarkers then deletes the rest one by one.
+  await destroyMarkers(gql, rec.ids);
+  const create = createWithGql(gql);
+  for (const input of rec.restore) await create(input);
   try {
     localStorage.removeItem(UNDO_KEY);
   } catch (e) {
@@ -291,8 +354,9 @@ const GROUP_DISTANCE = PHASH_DISTANCE - 1;
 
 /**
  * One group of same videos, seen from `sourceId` (default: the scene with the most markers).
- * → { key, scenes, source, targets: [{ scene, plan, add, durationDiff, short, sure }], missing }
- *   missing = markers of the source that the others don't have yet.
+ * → { key, scenes, source, targets: [{ scene, plan, add, remove, durationDiff, short, sure }], missing, extra }
+ *   missing = markers of the source that the others don't have yet; remove / extra = markers of
+ *   the others that the source doesn't have (deleted when a target's markers are replaced).
  */
 export function analyzeGroup(scenes, sourceId) {
   const source =
@@ -304,10 +368,25 @@ export function analyzeGroup(scenes, sourceId) {
       const plan = planCopy(source.markers, s, 0);
       const diff = durationDiff(source, s);
       const short = Math.min(source.duration, s.duration) < SHORT_CLIP;
-      return { scene: s, plan, add: countNew(plan), durationDiff: diff, short, sure: diff <= SURE_DURATION_DIFF && !short };
+      return {
+        scene: s,
+        plan,
+        add: countNew(plan),
+        remove: planRemove(plan, s),
+        durationDiff: diff,
+        short,
+        sure: diff <= SURE_DURATION_DIFF && !short,
+      };
     });
   const key = scenes.map((s) => s.id).sort((a, b) => Number(a) - Number(b)).join(",");
-  return { key, scenes, source, targets, missing: targets.reduce((n, x) => n + x.add, 0) };
+  return {
+    key,
+    scenes,
+    source,
+    targets,
+    missing: targets.reduce((n, x) => n + x.add, 0),
+    extra: targets.reduce((n, x) => n + x.remove.length, 0),
+  };
 }
 
 /**
@@ -322,7 +401,7 @@ export async function findSameVideoGroups(gql) {
   );
   return ((d && d.findDuplicateScenes) || [])
     .map((group) => analyzeGroup(group.map(toScene)))
-    .sort((a, b) => b.missing - a.missing || b.source.markers.length - a.source.markers.length);
+    .sort((a, b) => b.missing - a.missing || b.extra - a.extra || b.source.markers.length - a.source.markers.length);
 }
 
 // Loads one group again (after copying), keeping its source. → analyzeGroup(...)

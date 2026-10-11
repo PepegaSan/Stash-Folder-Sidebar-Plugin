@@ -386,6 +386,26 @@
   font-size: 13px;
 }
 
+/* Source radio and "keep its markers" above the thumbnail */
+.qm-sync-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  min-height: 24px;
+  font-size: 13px;
+}
+
+.qm-sync-pick {
+  cursor: pointer;
+}
+
+.qm-sync-pick:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .qm-sync-more {
   justify-self: center;
 }

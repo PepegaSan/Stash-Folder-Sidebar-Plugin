@@ -109,33 +109,46 @@ const STRINGS_DE = {
   "+{n} markers missing": "+{n} fehlende Marker",
   "all have the same markers": "alle haben dieselben Marker",
   "Copy {n} markers": "{n} Marker übertragen",
+  "Copy {n} markers, delete {r}": "{n} Marker übertragen, {r} löschen",
+  "All ticked: {text}": "Alle angehakten: {text}",
+  "−{n} not in the source": "−{n} nicht in der Quelle",
+  "−{n} deleted": "−{n} werden gelöscht",
   Source: "Quelle",
+  "Copy the markers of this video to the others": "Die Marker dieses Videos auf die anderen übertragen",
+  "This video has no markers": "Dieses Video hat keine Marker",
+  "keep its markers": "eigene Marker behalten",
+  "Off: this video gets exactly the markers of the source. On: its own markers stay, the source's are added.":
+    "Aus: Dieses Video bekommt genau die Marker der Quelle. An: Seine eigenen Marker bleiben, die der Quelle kommen dazu.",
   "copy here": "hierher kopieren",
-  "Copy from this video instead": "Stattdessen von diesem Video kopieren",
-  "Use as source": "Als Quelle",
+  "replace markers here": "Marker hier ersetzen",
   Reload: "Neu laden",
   "Comparing the fingerprints of the library …": "Fingerabdrücke der Bibliothek werden verglichen …",
-  "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Ticked are only videos within 1 s that are not short clips — compare the pictures.":
-    "Gruppen von Szenen mit demselben Video (Fingerabdruck höchstens 4 von 64 Bits verschieden, Länge innerhalb von 3 s). Angehakt sind nur Videos mit höchstens 1 s Unterschied, die keine kurzen Clips sind – die Bilder vergleichen.",
+  "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Pick the source per group; the others get exactly its markers — markers they have that the source lacks are deleted unless “keep its markers” is ticked. Ticked are only videos within 1 s that are not short clips and lose nothing — compare the pictures.":
+    "Gruppen von Szenen mit demselben Video (Fingerabdruck höchstens 4 von 64 Bits verschieden, Länge innerhalb von 3 s). Die Quelle ist pro Gruppe wählbar; die anderen bekommen genau ihre Marker – Marker, die die Quelle nicht hat, werden gelöscht, außer „eigene Marker behalten“ ist angehakt. Angehakt sind nur Videos mit höchstens 1 s Unterschied, die keine kurzen Clips sind und nichts verlieren – die Bilder vergleichen.",
   "Only those are compared.": "Nur diese werden verglichen.",
-  "Markers missing": "Marker fehlen",
+  "Markers differ": "Marker unterschiedlich",
   "All groups": "Alle Gruppen",
-  "Copy all ticked ({n} markers)": "Alle angehakten übertragen ({n} Marker)",
-  "No group with missing markers — every video has the markers of its copies.":
-    "Keine Gruppe mit fehlenden Markern – jedes Video hat die Marker seiner Kopien.",
+  "No group with different markers — every video has the same markers as its copies.":
+    "Keine Gruppe mit unterschiedlichen Markern – jedes Video hat dieselben Marker wie seine Kopien.",
   "No scenes with the same video found.": "Keine Szenen mit demselben Video gefunden.",
   "Show more ({n} left)": "Mehr anzeigen (noch {n})",
   "Copy {n} markers into {scenes} (only the groups shown on this page)? Undo stays possible afterwards.":
     "{n} Marker in {scenes} übertragen (nur die hier angezeigten Gruppen)? Rückgängig bleibt danach möglich.",
+  "Copy {n} markers into {scenes} and delete {r} markers there that the sources don't have (only the groups shown on this page)? Undo stays possible afterwards.":
+    "{n} Marker in {scenes} übertragen und dort {r} Marker löschen, die die Quellen nicht haben (nur die hier angezeigten Gruppen)? Rückgängig bleibt danach möglich.",
   "All same videos of the library": "Alle gleichen Videos der Bibliothek",
   "Undo last transfer": "Letzte Übertragung rückgängig machen",
   "Delete the {n} markers that were copied last (into {scenes})?": "Die {n} zuletzt übertragenen Marker (in {scenes}) löschen?",
+  "Undo the last transfer (in {scenes}): delete the {n} copied markers and restore the {r} replaced ones?":
+    "Letzte Übertragung (in {scenes}) rückgängig machen: die {n} übertragenen Marker löschen und die {r} ersetzten wiederherstellen?",
   "1 scene": "1 Szene",
   "{k} scenes": "{k} Szenen",
   "{n} markers removed": "{n} Marker entfernt",
+  "{n} markers removed, {r} restored": "{n} Marker entfernt, {r} wiederhergestellt",
   "Remove the markers of the last transfer": "Marker der letzten Übertragung wieder entfernen",
   "Copy markers to {scenes}": "Marker auf {scenes} übertragen",
   "{n} markers copied to {scenes}": "{n} Marker auf {scenes} übertragen",
+  "{n} markers copied to {scenes}, {r} deleted": "{n} Marker auf {scenes} übertragen, {r} gelöscht",
   'Edit preset "{label}"': "Preset „{label}“ bearbeiten",
   "Save changes": "Änderungen speichern",
   Cancel: "Abbrechen",
@@ -486,19 +499,12 @@ export default function setup(stashui) {
     }
   };
 
-  // One transfer: jobs = [{ sceneId, plan }]. Whatever was created — also before an error — is
-  // remembered, so "Undo" can remove it again. → number of markers created.
-  async function transfer(mc, jobs, onProgress) {
-    const created = [];
-    try {
-      for (let i = 0; i < jobs.length; i++) {
-        await mc.applyPlan(mc.createWithGql(stashui.gql), jobs[i].sceneId, jobs[i].plan, (done, total) => onProgress && onProgress(i, done, total), created);
-      }
-    } finally {
-      mc.rememberTransfer(created, jobs.map((j) => j.sceneId));
-    }
-    return created.length;
-  }
+  // One transfer: jobs = [{ sceneId, plan, remove? }]. Whatever was changed — also before an error —
+  // is remembered, so "Undo" can revert it. → { added, removed }
+  const syncTransfer = (mc, jobs, onProgress) => mc.syncScenes(stashui.gql, mc.createWithGql(stashui.gql), jobs, onProgress);
+
+  // Like syncTransfer, only adding. → number of markers created.
+  const transfer = async (mc, jobs, onProgress) => (await syncTransfer(mc, jobs, onProgress)).added;
 
   // The Undo in this message belongs to the transfer just made; if a newer one replaced it, it asks first.
   const doneToast = (mc, message, reload) => {
@@ -515,14 +521,21 @@ export default function setup(stashui) {
       if (ask || (expectedAt && rec.at !== expectedAt)) {
         const answer = await ui.confirmDialog({
           title: t("Undo last transfer"),
-          text: t("Delete the {n} markers that were copied last (into {scenes})?", { n: rec.ids.length, scenes: scenesText(rec.sceneIds.length) }),
-          ok: t("Delete"),
+          text: rec.restore.length
+            ? t("Undo the last transfer (in {scenes}): delete the {n} copied markers and restore the {r} replaced ones?", { n: rec.ids.length, r: rec.restore.length, scenes: scenesText(rec.sceneIds.length) })
+            : t("Delete the {n} markers that were copied last (into {scenes})?", { n: rec.ids.length, scenes: scenesText(rec.sceneIds.length) }),
+          ok: rec.restore.length ? t("Undo") : t("Delete"),
           danger: true,
         });
         if (!answer || !answer.ok) return;
       }
       await mc.undoLastTransfer(stashui.gql);
-      ui.toast(t("{n} markers removed", { n: rec.ids.length }), "ok");
+      ui.toast(
+        rec.restore.length
+          ? t("{n} markers removed, {r} restored", { n: rec.ids.length, r: rec.restore.length })
+          : t("{n} markers removed", { n: rec.ids.length }),
+        "ok"
+      );
       safeReload(reload);
     } catch (e) {
       ui.errorToast(e, "Quick Markers");
@@ -725,15 +738,26 @@ export default function setup(stashui) {
     let coverage = null;
     let undo = null;
     const picked = new Map(); // group key → ids of the ticked targets
+    const keep = new Set(); // ids of videos whose own markers stay (default: replaced by the source's)
 
-    const visible = () => (groups || []).filter((g) => showAll || g.missing > 0);
+    const differs = (g) => g.missing > 0 || g.extra > 0;
+    const visible = () => (groups || []).filter((g) => showAll || differs(g));
+    // Markers of a target that copying deletes: those the source lacks, unless its own are kept.
+    const removeOf = (x) => (keep.has(x.scene.id) ? [] : x.remove);
+    const hasWork = (x) => x.add > 0 || removeOf(x).length > 0;
+    // Preselected: sure matches that only gain markers — deleting is always a click of its own.
     const pickedOf = (g) => {
-      if (!picked.has(g.key)) picked.set(g.key, new Set(g.targets.filter((x) => x.sure && x.add > 0).map((x) => x.scene.id)));
+      if (!picked.has(g.key)) picked.set(g.key, new Set(g.targets.filter((x) => x.sure && x.add > 0 && !x.remove.length).map((x) => x.scene.id)));
       return picked.get(g.key);
     };
-    const jobsOf = (g) => g.targets.filter((x) => x.add > 0 && pickedOf(g).has(x.scene.id)).map((x) => ({ sceneId: x.scene.id, plan: x.plan, add: x.add }));
+    const jobsOf = (g) => g.targets.filter((x) => hasWork(x) && pickedOf(g).has(x.scene.id)).map((x) => ({ sceneId: x.scene.id, plan: x.plan, add: x.add, remove: removeOf(x) }));
     const groupOf = (key) => (groups || []).findIndex((g) => g.key === key);
     const sumAdd = (jobs) => jobs.reduce((n, j) => n + j.add, 0);
+    const sumRemove = (jobs) => jobs.reduce((n, j) => n + j.remove.length, 0);
+    const jobsText = (jobs) => {
+      const r = sumRemove(jobs);
+      return r ? t("Copy {n} markers, delete {r}", { n: sumAdd(jobs), r }) : t("Copy {n} markers", { n: sumAdd(jobs) });
+    };
     const lengthNote = (x) => (x.durationDiff < 0.05 ? t("same length") : "± " + x.durationDiff.toFixed(1) + " s");
 
     async function load() {
@@ -744,6 +768,8 @@ export default function setup(stashui) {
         mc = await markerCopy();
         const found = await mc.findSameVideoGroups(stashui.gql);
         coverage = await mc.phashCoverage(stashui.gql);
+        picked.clear();
+        keep.clear();
         groups = found;
         undo = mc.readUndo();
       } catch (e) {
@@ -760,32 +786,47 @@ export default function setup(stashui) {
     function groupHtml(g) {
       const jobs = jobsOf(g);
       const picks = pickedOf(g);
-      return `<section class="qm-sync-group${g.missing ? "" : " is-complete"}" data-group="${esc(g.key)}">
-        <header>
-          <b>${esc(t("{n} videos", { n: g.scenes.length }))}</b>
-          <span class="${g.missing ? "qm-sync-missing" : "qm-sync-ok"}">${esc(g.missing ? t("+{n} markers missing", { n: g.missing }) : t("all have the same markers"))}</span>
-          <span class="kb-spacer"></span>
-          ${g.missing ? `<button type="button" class="kb-btn" data-go${jobs.length && !busy ? "" : " disabled"}>${ui.icon("copies")}${esc(t("Copy {n} markers", { n: sumAdd(jobs) }))}</button>` : ""}
-        </header>
-        <div class="qm-sync-cards">
-          <div class="qm-sync-card is-source">
-            ${thumb(g.source)}
-            <b>${esc(g.source.title)}</b>
-            <small>${esc(g.source.path)}</small>
-            <small><em class="qm-sync-badge">${esc(t("Source"))}</em> ${esc(t("{n} markers", { n: g.source.markers.length }))}</small>
-          </div>
-          ${g.targets
-            .map(
-              (x) => `<div class="qm-sync-card${x.sure ? "" : " is-unsure"}">
+      const removing = g.targets.reduce((n, x) => n + removeOf(x).length, 0);
+      const status = [];
+      if (g.missing) status.push(t("+{n} markers missing", { n: g.missing }));
+      if (removing) status.push(t("−{n} not in the source", { n: removing }));
+      const sourceRadio = (s) =>
+        `<label class="kb-check qm-sync-pick" title="${esc(s.markers.length ? t("Copy the markers of this video to the others") : t("This video has no markers"))}"><input type="radio" name="qm-src-${esc(g.key)}" data-src="${esc(s.id)}"${s === g.source ? " checked" : ""}${busy || !s.markers.length ? " disabled" : ""}>${s === g.source ? `<em class="qm-sync-badge">${esc(t("Source"))}</em>` : esc(t("Source"))}</label>`;
+      const targetCard = (x) => {
+        const rem = removeOf(x).length;
+        return `<div class="qm-sync-card${x.sure ? "" : " is-unsure"}">
+            <div class="qm-sync-card-top">
+              ${sourceRadio(x.scene)}
+              ${x.remove.length ? `<label class="kb-check qm-sync-pick" title="${esc(t("Off: this video gets exactly the markers of the source. On: its own markers stay, the source's are added."))}"><input type="checkbox" data-keep="${esc(x.scene.id)}"${keep.has(x.scene.id) ? " checked" : ""}${busy ? " disabled" : ""}>${esc(t("keep its markers"))}</label>` : ""}
+            </div>
             ${thumb(x.scene)}
             <b>${esc(x.scene.title)}${x.short ? ` <em class="qm-x-flag">${esc(t("short clip — check"))}</em>` : ""}</b>
             <small>${esc(x.scene.path)}</small>
-            <small>${esc(lengthNote(x))} · ${esc(t("{n} markers", { n: x.scene.markers.length }))}${x.add ? " · " + esc(t("+{n} new", { n: x.add })) : ""}</small>
+            <small>${esc(lengthNote(x))} · ${esc(t("{n} markers", { n: x.scene.markers.length }))}${x.add ? " · " + esc(t("+{n} new", { n: x.add })) : ""}${rem ? " · " + esc(t("−{n} deleted", { n: rem })) : ""}</small>
             <div class="qm-sync-card-actions">
-              ${x.add ? `<label class="kb-check"><input type="checkbox" data-pick="${esc(x.scene.id)}"${picks.has(x.scene.id) ? " checked" : ""}${busy ? " disabled" : ""}>${esc(t("copy here"))}</label>` : `<span class="qm-sync-ok">${esc(t("has all markers"))}</span>`}
-              ${x.scene.markers.length ? `<button type="button" class="kb-btn is-ghost" data-source="${esc(x.scene.id)}"${busy ? " disabled" : ""} title="${esc(t("Copy from this video instead"))}">${esc(t("Use as source"))}</button>` : ""}
+              ${hasWork(x) ? `<label class="kb-check"><input type="checkbox" data-pick="${esc(x.scene.id)}"${picks.has(x.scene.id) ? " checked" : ""}${busy ? " disabled" : ""}>${esc(rem ? t("replace markers here") : t("copy here"))}</label>` : `<span class="qm-sync-ok">${esc(t("has all markers"))}</span>`}
             </div>
+          </div>`;
+      };
+      return `<section class="qm-sync-group${differs(g) ? "" : " is-complete"}" data-group="${esc(g.key)}">
+        <header>
+          <b>${esc(t("{n} videos", { n: g.scenes.length }))}</b>
+          <span class="${status.length ? "qm-sync-missing" : "qm-sync-ok"}">${esc(status.length ? status.join(" · ") : t("all have the same markers"))}</span>
+          <span class="kb-spacer"></span>
+          ${differs(g) ? `<button type="button" class="kb-btn" data-go${jobs.length && !busy ? "" : " disabled"}>${ui.icon("copies")}${esc(jobsText(jobs))}</button>` : ""}
+        </header>
+        <div class="qm-sync-cards">
+          ${g.scenes
+            .map((s) =>
+              s === g.source
+                ? `<div class="qm-sync-card is-source">
+            <div class="qm-sync-card-top">${sourceRadio(s)}</div>
+            ${thumb(s)}
+            <b>${esc(s.title)}</b>
+            <small>${esc(s.path)}</small>
+            <small>${esc(t("{n} markers", { n: s.markers.length }))}</small>
           </div>`
+                : targetCard(g.targets.find((x) => x.scene === s))
             )
             .join("")}
         </div>
@@ -803,27 +844,27 @@ export default function setup(stashui) {
         return;
       }
       const list = visible();
-      const missingGroups = groups.filter((g) => g.missing > 0).length;
+      const missingGroups = groups.filter(differs).length;
       // Only groups on screen: "all ticked" must never reach groups nobody has looked at.
       const bulkJobs = list.slice(0, shown).flatMap(jobsOf);
       el.innerHTML = `
         <div class="qm-sync">
-          <p class="kb-hint">${esc(t("Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Ticked are only videos within 1 s that are not short clips — compare the pictures."))}</p>
+          <p class="kb-hint">${esc(t("Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Pick the source per group; the others get exactly its markers — markers they have that the source lacks are deleted unless “keep its markers” is ticked. Ticked are only videos within 1 s that are not short clips and lose nothing — compare the pictures."))}</p>
           ${coverage && coverage.withPhash < coverage.total ? `<p class="kb-hint qm-sync-coverage">${esc(t("{n} of {total} scenes have a fingerprint so far.", { n: coverage.withPhash, total: coverage.total }))} ${esc(t("Only those are compared."))} <button type="button" class="kb-btn is-ghost" data-gen>${ui.icon("bolt")}${esc(t("Generate missing phashes now"))}</button></p>` : ""}
           <div class="qm-sync-bar">
             <div class="kb-seg">
-              <button type="button" data-filter="missing" class="${showAll ? "" : "is-on"}">${esc(t("Markers missing"))} (${missingGroups})</button>
+              <button type="button" data-filter="missing" class="${showAll ? "" : "is-on"}">${esc(t("Markers differ"))} (${missingGroups})</button>
               <button type="button" data-filter="all" class="${showAll ? "is-on" : ""}">${esc(t("All groups"))} (${groups.length})</button>
             </div>
             <span class="kb-spacer"></span>
             <span class="kb-hint" data-busy></span>
-            ${undo ? `<button type="button" class="kb-btn is-ghost" data-undo${busy ? " disabled" : ""}>${ui.icon("undo")}${esc(t("Undo"))} (${undo.ids.length})</button>` : ""}
+            ${undo ? `<button type="button" class="kb-btn is-ghost" data-undo${busy ? " disabled" : ""}>${ui.icon("undo")}${esc(t("Undo"))} (${mc.undoSize(undo)})</button>` : ""}
             <button type="button" class="kb-btn is-ghost" data-reload${busy ? " disabled" : ""}>${esc(t("Reload"))}</button>
-            <button type="button" class="kb-btn is-primary" data-bulk${bulkJobs.length && !busy ? "" : " disabled"}>${esc(t("Copy all ticked ({n} markers)", { n: sumAdd(bulkJobs) }))}</button>
+            <button type="button" class="kb-btn is-primary" data-bulk${bulkJobs.length && !busy ? "" : " disabled"}>${esc(t("All ticked: {text}", { text: jobsText(bulkJobs) }))}</button>
           </div>
           ${list.length
             ? list.slice(0, shown).map(groupHtml).join("")
-            : `<div class="kb-empty"><p>${esc(groups.length ? t("No group with missing markers — every video has the markers of its copies.") : t("No scenes with the same video found."))}</p></div>`}
+            : `<div class="kb-empty"><p>${esc(groups.length ? t("No group with different markers — every video has the same markers as its copies.") : t("No scenes with the same video found."))}</p></div>`}
           ${list.length > shown ? `<button type="button" class="kb-btn qm-sync-more" data-more>${esc(t("Show more ({n} left)", { n: list.length - shown }))}</button>` : ""}
         </div>`;
     }
@@ -833,12 +874,16 @@ export default function setup(stashui) {
       if (s) s.textContent = text;
     };
 
-    async function run(jobs, message) {
+    async function run(jobs) {
       busy = true;
       paint();
       try {
-        const n = await transfer(mc, jobs, (job, done, total) => setBusy(job + 1 + " / " + jobs.length + " · " + done + " / " + total));
-        doneToast(mc, t(message, { n, scenes: scenesText(jobs.length) }), load);
+        const done = await syncTransfer(mc, jobs, (job, i, total) => setBusy(job + 1 + " / " + jobs.length + " · " + i + " / " + total));
+        const scenes = scenesText(jobs.length);
+        const message = done.removed
+          ? t("{n} markers copied to {scenes}, {r} deleted", { n: done.added, r: done.removed, scenes })
+          : t("{n} markers copied to {scenes}", { n: done.added, scenes });
+        doneToast(mc, message, load);
         return true;
       } catch (e) {
         ui.errorToast(e, "Quick Markers");
@@ -863,14 +908,9 @@ export default function setup(stashui) {
       } else if (b.hasAttribute("data-more")) {
         shown += SYNC_PAGE_SIZE;
         paint();
-      } else if (b.dataset.source && gi >= 0) {
-        const g = groups[gi];
-        groups[gi] = mc.analyzeGroup(g.scenes, b.dataset.source);
-        picked.delete(g.key);
-        paint();
       } else if (b.hasAttribute("data-go") && gi >= 0) {
         const g = groups[gi];
-        if (await run(jobsOf(g), "{n} markers copied to {scenes}")) {
+        if (await run(jobsOf(g))) {
           try {
             groups[gi] = await mc.reloadGroup(stashui.gql, g);
             picked.delete(g.key);
@@ -881,13 +921,17 @@ export default function setup(stashui) {
         paint();
       } else if (b.hasAttribute("data-bulk")) {
         const jobs = visible().slice(0, shown).flatMap(jobsOf);
+        const r = sumRemove(jobs);
         const answer = await ui.confirmDialog({
           title: t("Marker sync"),
-          text: t("Copy {n} markers into {scenes} (only the groups shown on this page)? Undo stays possible afterwards.", { n: sumAdd(jobs), scenes: scenesText(jobs.length) }),
+          text: r
+            ? t("Copy {n} markers into {scenes} and delete {r} markers there that the sources don't have (only the groups shown on this page)? Undo stays possible afterwards.", { n: sumAdd(jobs), r, scenes: scenesText(jobs.length) })
+            : t("Copy {n} markers into {scenes} (only the groups shown on this page)? Undo stays possible afterwards.", { n: sumAdd(jobs), scenes: scenesText(jobs.length) }),
           ok: t("Copy"),
+          danger: r > 0,
         });
         if (!answer || !answer.ok) return;
-        await run(jobs, "{n} markers copied to {scenes}");
+        await run(jobs);
         load();
       } else if (b.hasAttribute("data-undo")) {
         undoTransfer(load, true);
@@ -904,13 +948,23 @@ export default function setup(stashui) {
     }, { signal });
 
     el.addEventListener("change", (e) => {
-      const id = e.target.dataset && e.target.dataset.pick;
+      const data = e.target.dataset || {};
       const section = e.target.closest("[data-group]");
-      if (id == null || !section) return;
-      const g = groups[groupOf(section.dataset.group)];
-      if (!g) return;
-      if (e.target.checked) pickedOf(g).add(id);
-      else pickedOf(g).delete(id);
+      const gi = section ? groupOf(section.dataset.group) : -1;
+      if (gi < 0) return;
+      const g = groups[gi];
+      if (data.src != null) {
+        groups[gi] = mc.analyzeGroup(g.scenes, data.src);
+        picked.delete(g.key);
+      } else if (data.keep != null) {
+        if (e.target.checked) keep.add(data.keep);
+        else keep.delete(data.keep);
+      } else if (data.pick != null) {
+        if (e.target.checked) pickedOf(g).add(data.pick);
+        else pickedOf(g).delete(data.pick);
+      } else {
+        return;
+      }
       paint();
     }, { signal });
 
@@ -1104,7 +1158,7 @@ export default function setup(stashui) {
               <button type="button" class="kb-btn is-ghost" data-qm="copy" title="${esc(t("Copy all markers of this scene (times, titles, tags)"))}">${ui.icon("copies")}${esc(t("Copy"))}</button>
               <button type="button" class="kb-btn is-ghost" data-qm="paste"${clip ? "" : " disabled"} title="${esc(clip ? t("Paste {n} markers from {title}", { n: clip.markers.length, title: clip.sceneTitle }) : t("Copy the markers of another scene first"))}">${ui.icon("download")}${esc(t("Paste"))}${clip ? `<small>${clip.markers.length}</small>` : ""}</button>
               <button type="button" class="kb-btn is-ghost" data-qm="same" title="${esc(t("Copy markers to scenes with the same video"))}">${ui.icon("layers")}${esc(t("Same videos"))}</button>
-              ${undo ? `<button type="button" class="kb-btn is-ghost" data-qm="undo" title="${esc(t("Remove the markers of the last transfer"))}">${ui.icon("undo")}${esc(t("Undo"))}<small>${undo.ids.length}</small></button>` : ""}
+              ${undo ? `<button type="button" class="kb-btn is-ghost" data-qm="undo" title="${esc(t("Remove the markers of the last transfer"))}">${ui.icon("undo")}${esc(t("Undo"))}<small>${undo.ids.length + undo.restore.length}</small></button>` : ""}
             </div>
           </div>`;
       }
