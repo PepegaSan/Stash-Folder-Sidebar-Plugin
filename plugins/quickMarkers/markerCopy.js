@@ -120,6 +120,46 @@ export async function copySceneMarkers(gql, sceneId) {
   return data;
 }
 
+// ---------- Marker names (transfer only some of them) ----------
+// A name filter is null (all markers) or an array of names; a marker's name is what Stash shows:
+// its title, or its primary tag when it has none (markerLabel).
+
+// The markers whose name is in `names` (all of them when names is null or empty).
+export function pickMarkers(markers, names) {
+  if (!names || !names.length) return markers;
+  return markers.filter((m) => names.indexOf(markerLabel(m)) >= 0);
+}
+
+/**
+ * The names of `markers` with how often each occurs, for the filter chips; names of `selected`
+ * that none of the markers has are listed too (with 0), so a chosen name can still be unticked.
+ * → [{ name, count }] sorted by name
+ */
+export function markerNames(markers, selected) {
+  const counts = new Map();
+  markers.forEach((m) => {
+    const name = markerLabel(m);
+    counts.set(name, (counts.get(name) || 0) + 1);
+  });
+  (selected || []).forEach((name) => {
+    if (!counts.has(name)) counts.set(name, 0);
+  });
+  return Array.from(counts, ([name, count]) => ({ name, count })).sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+  );
+}
+
+// A click on a filter chip: from "all" to only that name, then adding / removing names; none left
+// (or name null, the "All" chip) = all markers again. → the new filter
+export function toggleName(names, name) {
+  if (name == null) return null;
+  const list = names ? names.slice() : [];
+  const i = list.indexOf(name);
+  if (i >= 0) list.splice(i, 1);
+  else list.push(name);
+  return list.length ? list : null;
+}
+
 // ---------- Planning ----------
 
 const close = (a, b) => Math.abs(a - b) <= SAME_MARKER_TOLERANCE;
@@ -354,25 +394,34 @@ const GROUP_DISTANCE = PHASH_DISTANCE - 1;
 
 /**
  * One group of same videos, seen from `sourceId` (default: the scene with the most markers).
- * → { key, scenes, source, targets: [{ scene, plan, add, remove, durationDiff, short, sure }], missing, extra }
+ * names: optional name filter (pickMarkers) — then only markers with those names are copied, and
+ * replacing a target's markers leaves it with exactly those, like without a filter.
+ * keepOthers: with a name filter, replacing deletes only markers with those names; the target's
+ * markers with other names stay.
+ * → { key, scenes, source, names, keepOthers, targets: [{ scene, plan, add, remove, durationDiff, short, sure }], missing, extra }
  *   missing = markers of the source that the others don't have yet; remove / extra = markers of
  *   the others that the source doesn't have (deleted when a target's markers are replaced).
  */
-export function analyzeGroup(scenes, sourceId) {
+export function analyzeGroup(scenes, sourceId, names, keepOthers) {
+  names = names && names.length ? names.slice() : null;
+  keepOthers = !!keepOthers;
+  const count = (s) => pickMarkers(s.markers, names).length;
+  // A source without such markers would only delete: then the one with the most of them.
   const source =
-    scenes.find((s) => s.id === String(sourceId)) ||
-    scenes.slice().sort((a, b) => b.markers.length - a.markers.length || Number(a.id) - Number(b.id))[0];
+    scenes.find((s) => s.id === String(sourceId) && count(s) > 0) ||
+    scenes.slice().sort((a, b) => count(b) - count(a) || b.markers.length - a.markers.length || Number(a.id) - Number(b.id))[0];
+  const from = pickMarkers(source.markers, names);
   const targets = scenes
     .filter((s) => s !== source)
     .map((s) => {
-      const plan = planCopy(source.markers, s, 0);
+      const plan = planCopy(from, s, 0);
       const diff = durationDiff(source, s);
       const short = Math.min(source.duration, s.duration) < SHORT_CLIP;
       return {
         scene: s,
         plan,
         add: countNew(plan),
-        remove: planRemove(plan, s),
+        remove: planRemove(plan, keepOthers ? { markers: pickMarkers(s.markers, names) } : s),
         durationDiff: diff,
         short,
         sure: diff <= SURE_DURATION_DIFF && !short,
@@ -383,6 +432,8 @@ export function analyzeGroup(scenes, sourceId) {
     key,
     scenes,
     source,
+    names,
+    keepOthers,
     targets,
     missing: targets.reduce((n, x) => n + x.add, 0),
     extra: targets.reduce((n, x) => n + x.remove.length, 0),
@@ -390,25 +441,26 @@ export function analyzeGroup(scenes, sourceId) {
 }
 
 /**
- * All groups of same videos in the library (Stash's duplicate search over the phashes).
- * Groups where a video has markers the others lack come first. → [analyzeGroup(...)]
+ * All groups of same videos in the library (Stash's duplicate search over the phashes), with an
+ * optional name filter (see analyzeGroup). Groups where a video has markers the others lack come
+ * first. → [analyzeGroup(...)]
  */
-export async function findSameVideoGroups(gql) {
+export async function findSameVideoGroups(gql, names, keepOthers) {
   const d = await gql(
     `query($d: Int, $dd: Float) { findDuplicateScenes(distance: $d, duration_diff: $dd) { ${SCENE_FIELDS} } }`,
     { d: GROUP_DISTANCE, dd: MAX_DURATION_DIFF },
     { heavy: true }
   );
   return ((d && d.findDuplicateScenes) || [])
-    .map((group) => analyzeGroup(group.map(toScene)))
+    .map((group) => analyzeGroup(group.map(toScene), null, names, keepOthers))
     .sort((a, b) => b.missing - a.missing || b.extra - a.extra || b.source.markers.length - a.source.markers.length);
 }
 
-// Loads one group again (after copying), keeping its source. → analyzeGroup(...)
+// Loads one group again (after copying), keeping its source and name filter. → analyzeGroup(...)
 export async function reloadGroup(gql, group) {
   const scenes = [];
   for (const s of group.scenes) scenes.push(await loadScene(gql, s.id));
-  return analyzeGroup(scenes, group.source.id);
+  return analyzeGroup(scenes, group.source.id, group.names, group.keepOthers);
 }
 
 // How many scenes have a phash: only those can be found as same videos. → { total, withPhash }

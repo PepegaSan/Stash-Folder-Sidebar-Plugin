@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.8.0";
+  const PLUGIN_VERSION = "1.9.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -673,6 +673,45 @@
   }
 
   /**
+   * Chips to transfer only markers with some names (e.g. only "Party"). value: null (all) or an
+   * array of names; list: mc.markerNames(...); onChange(next filter).
+   */
+  function NameFilter(props) {
+    const mc = props.mc;
+    const value = props.value;
+    if (!props.list.length) return null;
+    const chip = function (name, label, on) {
+      return React.createElement(
+        "button",
+        {
+          key: name == null ? "" : "n:" + name,
+          type: "button",
+          className: "quick-markers-name" + (on ? " is-on" : ""),
+          "aria-pressed": on,
+          disabled: !!props.disabled,
+          onClick: function () {
+            props.onChange(mc.toggleName(value, name));
+          },
+        },
+        label
+      );
+    };
+    return React.createElement(
+      "div",
+      { className: "quick-markers-names", role: "group", "aria-label": "Transfer only these markers" },
+      React.createElement("span", { className: "text-muted small" }, "Only these markers:"),
+      chip(null, "All", !value),
+      props.list.map(function (x) {
+        return chip(
+          x.name,
+          React.createElement(React.Fragment, null, x.name, React.createElement("small", null, x.count)),
+          !!value && value.indexOf(x.name) >= 0
+        );
+      })
+    );
+  }
+
+  /**
    * mode "paste": paste the copied markers into this scene (with an optional shift).
    * mode "same":  copy this scene's markers to scenes with the same video (phash),
    *               or take the markers of one of them.
@@ -685,6 +724,7 @@
     const [error, setError] = React.useState(null);
     const [offset, setOffset] = React.useState("0");
     const [picked, setPicked] = React.useState({});
+    const [names, setNames] = React.useState(null); // null: all markers, else only these names
     const [busy, setBusy] = React.useState("");
     const [coverage, setCoverage] = React.useState("");
 
@@ -769,11 +809,8 @@
       }
     }
 
-    async function runCopyToScenes() {
+    async function runCopyToScenes(targets) {
       const mc = data.mc;
-      const targets = data.list.filter(function (x) {
-        return picked[x.scene.id];
-      });
       const created = [];
       try {
         for (let i = 0; i < targets.length; i++) {
@@ -816,7 +853,7 @@
       body = React.createElement("p", { className: "text-muted" }, "Loading…");
     } else if (props.mode === "paste") {
       const mc = data.mc;
-      const plan = mc.planCopy(data.clip.markers, data.scene, Number(offset) || 0);
+      const plan = mc.planCopy(mc.pickMarkers(data.clip.markers, names), data.scene, Number(offset) || 0);
       const n = mc.countNew(plan);
       body = React.createElement(
         React.Fragment,
@@ -850,6 +887,13 @@
             "Only needed when this video starts earlier or later than the copied one (e.g. -12.5)."
           )
         ),
+        React.createElement(NameFilter, {
+          mc: mc,
+          list: mc.markerNames(data.clip.markers, names),
+          value: names,
+          disabled: !!busy,
+          onChange: setNames,
+        }),
         React.createElement(PlanList, { mc: mc, plan: plan })
       );
       action = React.createElement(
@@ -895,9 +939,17 @@
     } else {
       const mc = data.mc;
       const scene = data.scene;
-      const count = data.list.filter(function (x) {
-        return picked[x.scene.id];
-      }).length;
+      const own = mc.pickMarkers(scene.markers, names);
+      // With a name filter, the plans only hold markers with those names.
+      const rows = data.list.map(function (x) {
+        if (!names) return x;
+        const plan = mc.planCopy(own, x.scene, 0);
+        return Object.assign({}, x, { plan: plan, add: mc.countNew(plan) });
+      });
+      const targets = rows.filter(function (x) {
+        return picked[x.scene.id] && x.add > 0;
+      });
+      const count = targets.length;
       // Thumbnail with length; opens the scene in a new tab, to compare before copying.
       const thumb = function (sc) {
         return React.createElement(
@@ -940,11 +992,26 @@
               ". Pick the scenes that should get them:"
             : "This scene has no markers yet — take them from one of the videos below."
         ),
+        React.createElement(NameFilter, {
+          mc: mc,
+          list: mc.markerNames(
+            [].concat.apply(
+              scene.markers,
+              data.list.map(function (x) {
+                return x.scene.markers;
+              })
+            ),
+            names
+          ),
+          value: names,
+          disabled: !!busy,
+          onChange: setNames,
+        }),
         React.createElement(
           "div",
           { className: "quick-markers-same" },
-          data.list.map(function (x) {
-            const pull = mc.countNew(mc.planCopy(x.scene.markers, scene, 0));
+          rows.map(function (x) {
+            const pull = mc.countNew(mc.planCopy(mc.pickMarkers(x.scene.markers, names), scene, 0));
             const diff = x.durationDiff < 0.05 ? "same length" : "± " + x.durationDiff.toFixed(1) + " s";
             return React.createElement(
               "div",
@@ -954,7 +1021,7 @@
               },
               React.createElement("input", {
                 type: "checkbox",
-                checked: !!picked[x.scene.id],
+                checked: !!picked[x.scene.id] && x.add > 0,
                 disabled: !x.add || !!busy,
                 "aria-label": "Copy markers to " + x.scene.title,
                 onChange: function (e) {
@@ -995,7 +1062,7 @@
                       disabled: !!busy,
                       title: "Copy its markers into this scene",
                       onClick: function () {
-                        runPaste(mc.planCopy(x.scene.markers, scene, 0));
+                        runPaste(mc.planCopy(mc.pickMarkers(x.scene.markers, names), scene, 0));
                       },
                     },
                     "Take " + pull
@@ -1004,7 +1071,7 @@
             );
           })
         ),
-        data.list.some(function (x) {
+        rows.some(function (x) {
           return !x.sure;
         })
           ? React.createElement(
@@ -1021,7 +1088,9 @@
               type: "button",
               className: "btn btn-primary",
               disabled: !count || !!busy,
-              onClick: runCopyToScenes,
+              onClick: function () {
+                runCopyToScenes(targets);
+              },
             },
             busy || "Copy markers to " + count + " scenes"
           )
@@ -1988,17 +2057,25 @@
     const [picked, setPicked] = React.useState({}); // group key → { scene id: true }
     // scene id → true: add to that video's own markers instead of replacing them (default: replace).
     const [keep, setKeep] = React.useState({});
+    // null: all markers; else only markers with these names are copied (and deleted when replacing).
+    const [names, setNames] = React.useState(null);
+    const namesRef = React.useRef(null);
+    // With a name filter: replacing deletes only markers with those names (default: all others too).
+    const [keepOthers, setKeepOthers] = React.useState(false);
+    const keepOthersRef = React.useRef(false);
+    const [sources, setSources] = React.useState({}); // group key → scene id picked as source
 
     const load = React.useCallback(async function () {
       setGroups(null);
       setError(null);
       try {
         const m = await loadMarkerCopy();
-        const found = await m.findSameVideoGroups(m.gqlFetch);
+        const found = await m.findSameVideoGroups(m.gqlFetch, namesRef.current, keepOthersRef.current);
         setCoverage(await m.phashCoverage(m.gqlFetch));
         setMc(m);
         setPicked({});
         setKeep({});
+        setSources({});
         setGroups(found);
       } catch (e) {
         setError(formatError(e));
@@ -2059,6 +2136,34 @@
       const rem = sumRemove(jobs);
       return "Copy " + markersText(sumAdd(jobs)) + (rem ? ", delete " + rem : "");
     };
+
+    // A new name filter or "keep markers with other names": every group planned again.
+    function refilter(nextNames, nextKeep) {
+      namesRef.current = nextNames;
+      keepOthersRef.current = nextKeep;
+      setNames(nextNames);
+      setKeepOthers(nextKeep);
+      setGroups(function (list) {
+        return list.map(function (g) {
+          return mc.analyzeGroup(g.scenes, sources[g.key], nextNames, nextKeep);
+        });
+      });
+      setPicked({});
+    }
+
+    const nameList = React.useMemo(
+      function () {
+        if (!mc || !groups) return [];
+        const all = [];
+        groups.forEach(function (g) {
+          g.scenes.forEach(function (s) {
+            all.push.apply(all, s.markers);
+          });
+        });
+        return mc.markerNames(all, names);
+      },
+      [mc, groups, names]
+    );
 
     function replaceGroup(next) {
       setGroups(function (list) {
@@ -2171,6 +2276,33 @@
               h("button", { type: "button", className: "btn btn-secondary btn-sm", onClick: onGenerate }, "Generate missing phashes now")
             )
           : null,
+        h(NameFilter, {
+          mc: mc,
+          list: nameList,
+          value: names,
+          disabled: !!busy,
+          onChange: function (next) {
+            refilter(next, keepOthers);
+          },
+        }),
+        names
+          ? h(
+              "label",
+              {
+                className: "quick-markers-sync-pick quick-markers-keep-others",
+                title: "Off: a replaced video gets exactly the chosen markers of the source, its other markers are deleted. On: only markers with the chosen names are replaced, all others stay.",
+              },
+              h("input", {
+                type: "checkbox",
+                checked: keepOthers,
+                disabled: !!busy,
+                onChange: function (e) {
+                  refilter(names, e.target.checked);
+                },
+              }),
+              " keep markers with other names"
+            )
+          : null,
         h(
           "div",
           { className: "quick-markers-sync-bar" },
@@ -2240,20 +2372,36 @@
                 byId[x.scene.id] = x;
               });
 
+              // "12 markers", or "5 of 12 markers" with a name filter.
+              const countText = function (s) {
+                const k = mc.pickMarkers(s.markers, g.names).length;
+                return g.names ? k + " of " + markersText(s.markers.length) : markersText(k);
+              };
+
               function sourceRadio(s) {
+                const usable = mc.pickMarkers(s.markers, g.names).length > 0;
                 return h(
                   "label",
                   {
                     className: "quick-markers-sync-pick",
-                    title: s.markers.length ? "Copy the markers of this video to the others" : "This video has no markers",
+                    title: usable
+                      ? "Copy the markers of this video to the others"
+                      : g.names
+                        ? "This video has no markers with the chosen names"
+                        : "This video has no markers",
                   },
                   h("input", {
                     type: "radio",
                     name: "quick-markers-source-" + g.key,
                     checked: s === g.source,
-                    disabled: !!busy || !s.markers.length,
+                    disabled: !!busy || !usable,
                     onChange: function () {
-                      replaceGroup(mc.analyzeGroup(g.scenes, s.id));
+                      setSources(function (all) {
+                        const out = Object.assign({}, all);
+                        out[g.key] = s.id;
+                        return out;
+                      });
+                      replaceGroup(mc.analyzeGroup(g.scenes, s.id, g.names, g.keepOthers));
                       setPicked(function (all) {
                         const out = Object.assign({}, all);
                         delete out[g.key];
@@ -2311,7 +2459,7 @@
                   h(
                     "small",
                     null,
-                    diff + " · " + markersText(x.scene.markers.length) +
+                    diff + " · " + countText(x.scene) +
                       (x.add ? " · +" + x.add + " new" : "") +
                       (rem ? " · −" + rem + " deleted" : "")
                   ),
@@ -2384,7 +2532,7 @@
                       h(SyncThumb, { scene: s, mc: mc }),
                       h("strong", null, s.title),
                       h("small", null, s.path),
-                      h("small", null, markersText(s.markers.length))
+                      h("small", null, countText(s))
                     );
                   })
                 )
@@ -2420,7 +2568,7 @@
       h(
         "p",
         { className: "text-muted" },
-        "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Pick the source per group; the others get exactly its markers — markers they have that the source lacks are deleted unless “keep its markers” is ticked. Ticked are only videos within 1 s that are not short clips and lose nothing — compare the pictures before copying."
+        "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Pick the source per group; the others get exactly its markers — markers they have that the source lacks are deleted unless “keep its markers” is ticked. Ticked are only videos within 1 s that are not short clips and lose nothing — compare the pictures before copying. With “Only these markers” just markers with those names are copied; replacing still deletes all other markers of a video, unless “keep markers with other names” is ticked."
       ),
       content
     );

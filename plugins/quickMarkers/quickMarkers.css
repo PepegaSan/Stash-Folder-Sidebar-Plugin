@@ -663,6 +663,56 @@
   background: color-mix(in srgb, var(--qm-accent) 22%, transparent);
 }
 
+/* "Only these markers": name filter of paste, same videos and Marker Sync */
+.quick-markers-names {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.quick-markers-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--qm-line, rgba(255, 255, 255, 0.12));
+  border-radius: 999px;
+  color: inherit;
+  font-size: 0.8rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.quick-markers-name small {
+  color: var(--qm-muted, #a7b6c2);
+  font-variant-numeric: tabular-nums;
+}
+
+.quick-markers-name:hover:not(:disabled) {
+  border-color: var(--qm-accent, #137cbd);
+}
+
+.quick-markers-name.is-on {
+  border-color: var(--qm-accent, #137cbd);
+  background: color-mix(in srgb, var(--qm-accent, #137cbd) 30%, transparent);
+}
+
+.quick-markers-name.is-on small {
+  color: inherit;
+}
+
+.quick-markers-name:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.quick-markers-keep-others {
+  margin: -0.35rem 0 0.75rem;
+  font-size: 0.85rem;
+}
+
 .quick-markers-same {
   display: grid;
   gap: 0.4rem;
