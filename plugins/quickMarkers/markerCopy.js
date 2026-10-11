@@ -136,7 +136,7 @@ export function pickMarkers(markers, names) {
  * The marker names of `scenes` (anything with .markers) for the filter chips: count = how many
  * markers have the name, videos = in how many of the scenes. Names of `selected` that none has
  * are listed too (with 0), so a chosen name can still be unticked.
- * → [{ name, count, videos }], the names most videos have first
+ * → [{ name, count, videos }] in alphabetical order
  */
 export function markerNames(scenes, selected) {
   const stats = new Map();
@@ -157,8 +157,8 @@ export function markerNames(scenes, selected) {
     here.forEach((name) => stat(name).videos++);
   });
   (selected || []).forEach(stat);
-  return Array.from(stats.values()).sort(
-    (a, b) => b.videos - a.videos || b.count - a.count || a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+  return Array.from(stats.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true })
   );
 }
 
@@ -239,30 +239,58 @@ function markerInput(sceneId, item) {
 }
 
 // Deletes markers by id; when the batch call fails (some gone already), one by one.
+// → the ids that were really deleted (a marker that is gone already is not one of them).
 async function destroyMarkers(gql, ids) {
-  if (!ids.length) return;
+  if (!ids.length) return [];
   try {
     await gql("mutation($ids: [ID!]!) { sceneMarkersDestroy(ids: $ids) }", { ids });
+    return ids.slice();
   } catch (e) {
+    const done = [];
     for (const id of ids) {
       try {
         await gql("mutation($id: ID!) { sceneMarkerDestroy(id: $id) }", { id });
+        done.push(id);
       } catch (err) {
         /* already deleted */
       }
     }
+    return done;
   }
 }
 
 /**
  * Deletes `markers` (from loadScene) of a scene. removed: optional array that gets what is
- * needed to create them again (for undo). → number deleted.
+ * needed to create them again (for undo) — only of markers this call really deleted, so an undo
+ * never brings back a marker someone else deleted. → number deleted.
  */
 export async function removeMarkers(gql, sceneId, markers, removed) {
   const list = markers.filter((m) => m.id && m.primaryTag);
-  await destroyMarkers(gql, list.map((m) => m.id));
-  if (removed) list.forEach((m) => removed.push(markerInput(sceneId, { marker: m, seconds: m.seconds, end_seconds: m.end_seconds })));
-  return list.length;
+  const gone = await destroyMarkers(gql, list.map((m) => m.id));
+  const deleted = list.filter((m) => gone.indexOf(m.id) >= 0);
+  if (removed) deleted.forEach((m) => removed.push(markerInput(sceneId, { marker: m, seconds: m.seconds, end_seconds: m.end_seconds })));
+  return deleted.length;
+}
+
+const sameTags = (a, b) =>
+  a.tags.map((t) => t.id).sort().join(",") === b.tags.map((t) => t.id).sort().join(",");
+
+/**
+ * A job planned on data loaded earlier, checked against the scene as it is now (`fresh`, from
+ * loadScene): markers that exist by now are not created again, and only markers that are still
+ * there unchanged (time, tags, title) are deleted. → { plan, remove }
+ */
+export function recheckJob(job, fresh) {
+  const plan = job.plan.map((p) =>
+    p.status === "new" &&
+    fresh.markers.some((x) => sameMarker(x, { primaryTag: p.marker.primaryTag, seconds: p.seconds, end_seconds: p.end_seconds }))
+      ? Object.assign({}, p, { status: "exists" })
+      : p
+  );
+  const remove = (job.remove || []).filter((m) =>
+    fresh.markers.some((x) => x.id === m.id && sameMarker(x, m) && x.title === m.title && sameTags(x, m))
+  );
+  return { plan, remove };
 }
 
 export const createWithGql = (gql) => (input) =>
@@ -291,22 +319,27 @@ export async function applyPlan(create, sceneId, plan, onProgress, created) {
 
 /**
  * Runs sync jobs [{ sceneId, plan, remove? }]: creates the "new" markers of each plan and deletes
- * its `remove` markers, then remembers all of it for undo (also when a job fails).
- * onProgress(job index, done, total) per created marker. → { added, removed }
+ * its `remove` markers, then remembers all of it for undo (also when a job fails). Each scene is
+ * loaded again right before (recheckJob): a page open for a while, a double click or the same
+ * scene in two jobs then neither creates duplicates nor deletes markers changed meanwhile.
+ * onProgress(job index, done, total) per created marker.
+ * → { added, removed, at } — at: the undo record of this transfer (readUndo().at), null when
+ *   nothing changed or the browser could not store it.
  */
 export async function syncScenes(gql, create, jobs, onProgress) {
   const created = [];
   const restore = [];
+  let at = null;
   try {
     for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i];
-      await applyPlan(create, job.sceneId, job.plan, (done, total) => onProgress && onProgress(i, done, total), created);
-      if (job.remove && job.remove.length) await removeMarkers(gql, job.sceneId, job.remove, restore);
+      const job = recheckJob(jobs[i], await loadScene(gql, jobs[i].sceneId));
+      await applyPlan(create, jobs[i].sceneId, job.plan, (done, total) => onProgress && onProgress(i, done, total), created);
+      if (job.remove.length) await removeMarkers(gql, jobs[i].sceneId, job.remove, restore);
     }
   } finally {
-    rememberTransfer(created, jobs.map((j) => j.sceneId), restore);
+    at = rememberTransfer(created, jobs.map((j) => j.sceneId), restore);
   }
-  return { added: created.length, removed: restore.length };
+  return { added: created.length, removed: restore.length, at };
 }
 
 // ---------- Undo ----------
@@ -314,15 +347,29 @@ export async function syncScenes(gql, create, jobs, onProgress) {
 /**
  * Remembers one transfer (replaces the previous one). ids: the created markers; sceneIds: the
  * scenes it changed; restore: inputs of the markers it deleted (created again on undo).
+ * → the record's `at`, or null: nothing to remember, or the browser refused to store it (then
+ *   the previous record is dropped too, so no Undo button undoes an older transfer instead).
  */
 export function rememberTransfer(ids, sceneIds, restore) {
   ids = ids || [];
   restore = restore || [];
-  if (!ids.length && !restore.length) return;
+  if (!ids.length && !restore.length) return null;
+  const at = Date.now();
   try {
-    localStorage.setItem(UNDO_KEY, JSON.stringify({ ids, restore, sceneIds: sceneIds.map(String), at: Date.now() }));
+    localStorage.setItem(UNDO_KEY, JSON.stringify({ ids, restore, sceneIds: sceneIds.map(String), at }));
   } catch (e) {
-    return;
+    dropUndo();
+    return null;
+  }
+  window.dispatchEvent(new Event(CLIPBOARD_EVENT));
+  return at;
+}
+
+function dropUndo() {
+  try {
+    localStorage.removeItem(UNDO_KEY);
+  } catch (e) {
+    /* ignore */
   }
   window.dispatchEvent(new Event(CLIPBOARD_EVENT));
 }
@@ -342,22 +389,42 @@ export function readUndo() {
 // How many markers undoing `rec` touches (copied ones deleted + deleted ones restored).
 export const undoSize = (rec) => (rec ? rec.ids.length + rec.restore.length : 0);
 
+let undoRunning = null;
+
 // Deletes the markers of the last transfer and creates the ones it deleted again.
-// → the undone record (null if there was none).
-export async function undoLastTransfer(gql) {
+// → the undone record (null if there was none). A second call while one runs gets the same promise.
+export function undoLastTransfer(gql) {
+  if (!undoRunning) undoRunning = runUndo(gql).finally(() => (undoRunning = null));
+  return undoRunning;
+}
+
+async function runUndo(gql) {
   const rec = readUndo();
   if (!rec) return null;
-  // Some may be gone already (deleted by hand): destroyMarkers then deletes the rest one by one.
-  await destroyMarkers(gql, rec.ids);
-  const create = createWithGql(gql);
-  for (const input of rec.restore) await create(input);
+  // Taken off first: a second click or another tab finds nothing, instead of restoring twice.
+  dropUndo();
+  const restore = rec.restore.slice();
+  let ids = rec.ids;
   try {
-    localStorage.removeItem(UNDO_KEY);
+    // Some may be gone already (deleted by hand): destroyMarkers then deletes the rest one by one.
+    await destroyMarkers(gql, ids);
+    ids = [];
+    const create = createWithGql(gql);
+    while (restore.length) {
+      await create(restore[0]);
+      restore.shift();
+    }
+    return rec;
   } catch (e) {
-    /* ignore */
+    // What is left can be undone again — without the markers restored already.
+    try {
+      localStorage.setItem(UNDO_KEY, JSON.stringify(Object.assign({}, rec, { ids, restore })));
+      window.dispatchEvent(new Event(CLIPBOARD_EVENT));
+    } catch (err) {
+      /* ignore */
+    }
+    throw e;
   }
-  window.dispatchEvent(new Event(CLIPBOARD_EVENT));
-  return rec;
 }
 
 // ---------- Same videos ----------
@@ -406,27 +473,41 @@ export async function findSameVideos(gql, scene) {
 const GROUP_DISTANCE = PHASH_DISTANCE - 1;
 
 /**
- * One group of same videos, seen from `sourceId` (default: the scene with the most markers).
+ * Whether `scene` may be the source of a group transfer (names / keepOthers as in analyzeGroup).
+ * A source without the markers to copy would only delete — all markers of the others, like an
+ * empty source without a filter. With keepOthers that is wanted: only markers with the chosen
+ * names go (e.g. a wrongly set "Party"), so then any video may be the source.
+ */
+export function canBeSource(scene, names, keepOthers) {
+  if (names && names.length && keepOthers) return true;
+  return pickMarkers(scene.markers, names).length > 0;
+}
+
+/**
+ * One group of same videos, seen from `sourceId` (default: the scene with the most markers; an id
+ * that canBeSource refuses is ignored).
  * names: optional name filter (pickMarkers) — then only markers with those names are copied, and
  * replacing a target's markers leaves it with exactly those, like without a filter.
  * keepOthers: with a name filter, replacing deletes only markers with those names; the target's
  * markers with other names stay.
- * → { key, scenes, source, names, keepOthers, short, targets: [{ scene, plan, add, remove, durationDiff, short, sure }], missing, extra }
+ * → { key, scenes, source, names, keepOthers, short, targets: [{ scene, plan, add, remove, durationDiff, short, sure }], sourceRemove, missing, extra }
  *   missing = markers of the source that the others don't have yet; remove / extra = markers of
  *   the others that the source doesn't have (deleted when a target's markers are replaced);
- *   short = a video of the group is a short clip (those are easily mixed up).
+ *   short = a video of the group is a short clip (those are easily mixed up); sourceRemove = with a
+ *   name filter (and not keepOthers): the source's markers with other names, so it can end up with
+ *   only the chosen markers too (deleted only when asked for).
  */
 export function analyzeGroup(scenes, sourceId, names, keepOthers) {
   names = names && names.length ? names.slice() : null;
   keepOthers = !!keepOthers;
   const count = (s) => pickMarkers(s.markers, names).length;
-  // A source without such markers would only delete: then the one with the most of them.
   const source =
-    scenes.find((s) => s.id === String(sourceId) && count(s) > 0) ||
+    scenes.find((s) => s.id === String(sourceId) && canBeSource(s, names, keepOthers)) ||
     scenes.slice().sort((a, b) => count(b) - count(a) || b.markers.length - a.markers.length || Number(a.id) - Number(b.id))[0];
   const from = pickMarkers(source.markers, names);
-  // No video has markers with the chosen names: nothing to copy, so nothing to replace either.
-  const idle = !!names && !from.length;
+  // The source has none of the chosen markers: nothing to copy, and (unless only those are
+  // replaced) nothing to replace either — no video of the group has them.
+  const idle = !!names && !from.length && !keepOthers;
   const targets = scenes
     .filter((s) => s !== source)
     .map((s) => {
@@ -451,6 +532,7 @@ export function analyzeGroup(scenes, sourceId, names, keepOthers) {
     names,
     keepOthers,
     short: targets.some((x) => x.short),
+    sourceRemove: idle || !names || keepOthers ? [] : source.markers.filter((m) => m.id && from.indexOf(m) < 0),
     targets,
     missing: targets.reduce((n, x) => n + x.add, 0),
     extra: targets.reduce((n, x) => n + x.remove.length, 0),

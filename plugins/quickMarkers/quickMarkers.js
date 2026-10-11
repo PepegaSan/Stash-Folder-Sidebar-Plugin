@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.10.0";
+  const PLUGIN_VERSION = "1.11.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -631,6 +631,13 @@
     );
   }
 
+  // After a transfer (done: from syncScenes) whose undo record the browser could not store.
+  function warnNoUndo(Toast, done) {
+    if (!done.at && (done.added || done.removed)) {
+      Toast.error("Undo is not possible for this transfer: the browser could not store it.");
+    }
+  }
+
   function undoDoneText(rec) {
     return rec.ids.length + " markers removed" + (rec.restore.length ? ", " + rec.restore.length + " restored" : "");
   }
@@ -676,28 +683,18 @@
     );
   }
 
-  // Name chips shown before "more": the most frequent names (chosen ones are always shown).
-  const NAME_CHIPS = 12;
-
   /**
    * Chips to transfer only markers with some names (e.g. only "Party"). value: null (all) or an
    * array of names; list: mc.markerNames(...); videos: show in how many videos a name is;
-   * onChange(next filter).
+   * label: the text in front (default "Only these markers:"); onChange(next filter).
    */
   function NameFilter(props) {
     const mc = props.mc;
     const value = props.value;
-    const [open, setOpen] = React.useState(false);
     if (!props.list.length) return null;
     const isOn = function (name) {
       return !!value && value.indexOf(name) >= 0;
     };
-    const visible = open
-      ? props.list
-      : props.list.filter(function (x, i) {
-          return i < NAME_CHIPS || isOn(x.name);
-        });
-    const hidden = props.list.length - visible.length;
     const chip = function (name, label, on, title) {
       return React.createElement(
         "button",
@@ -718,10 +715,10 @@
     };
     return React.createElement(
       "div",
-      { className: "quick-markers-names", role: "group", "aria-label": "Transfer only these markers" },
-      React.createElement("span", { className: "text-muted small" }, "Only these markers:"),
+      { className: "quick-markers-names", role: "group", "aria-label": props.label || "Only these markers:" },
+      React.createElement("span", { className: "text-muted small" }, props.label || "Only these markers:"),
       chip(null, "All", !value),
-      visible.map(function (x) {
+      props.list.map(function (x) {
         return chip(
           x.name,
           React.createElement(
@@ -733,20 +730,7 @@
           isOn(x.name),
           markersText(x.count) + " in " + x.videos + (x.videos === 1 ? " video" : " videos")
         );
-      }),
-      hidden > 0 || open
-        ? React.createElement(
-            "button",
-            {
-              type: "button",
-              className: "quick-markers-name is-more",
-              onClick: function () {
-                setOpen(!open);
-              },
-            },
-            open ? "less" : "+" + hidden + " more"
-          )
-        : null
+      })
     );
   }
 
@@ -832,40 +816,39 @@
       props.onClose();
     }
 
+    // syncScenes checks each scene again right before, so a stale dialog never creates duplicates.
     async function runPaste(plan) {
-      const created = [];
+      const mc = data.mc;
       setBusy("…");
       try {
-        await data.mc.applyPlan(props.createInScene, sceneId, plan, function (i, total) {
+        const done = await mc.syncScenes(mc.gqlFetch, props.createInScene, [{ sceneId: sceneId, plan: plan }], function (job, i, total) {
           setBusy(i + " / " + total);
-        }, created);
-        Toast.success(created.length + " markers pasted — Undo in the Quick Markers panel");
+        });
+        Toast.success(done.added + " markers pasted" + (done.at ? " — Undo in the Quick Markers panel" : ""));
+        warnNoUndo(Toast, done);
         props.onClose();
       } catch (e) {
         fail(e);
-      } finally {
-        data.mc.rememberTransfer(created, [sceneId]);
       }
     }
 
     async function runCopyToScenes(targets) {
       const mc = data.mc;
-      const created = [];
+      setBusy("…");
       try {
-        for (let i = 0; i < targets.length; i++) {
-          setBusy(i + 1 + " / " + targets.length);
-          await mc.applyPlan(mc.createWithGql(mc.gqlFetch), targets[i].scene.id, targets[i].plan, null, created);
-        }
+        const jobs = targets.map(function (x) {
+          return { sceneId: x.scene.id, plan: x.plan };
+        });
+        const done = await mc.syncScenes(mc.gqlFetch, mc.createWithGql(mc.gqlFetch), jobs, function (job) {
+          setBusy(job + 1 + " / " + targets.length);
+        });
         Toast.success(
-          created.length + " markers copied to " + targets.length + " scenes — Undo in the Quick Markers panel"
+          done.added + " markers copied to " + scenesWord(targets.length) + (done.at ? " — Undo in the Quick Markers panel" : "")
         );
+        warnNoUndo(Toast, done);
         props.onClose();
       } catch (e) {
         fail(e);
-      } finally {
-        mc.rememberTransfer(created, targets.map(function (x) {
-          return x.scene.id;
-        }));
       }
     }
 
@@ -2093,12 +2076,14 @@
     const [picked, setPicked] = React.useState({}); // group key → { scene id: true }
     // scene id → true: add to that video's own markers instead of replacing them (default: replace).
     const [keep, setKeep] = React.useState({});
-    // null: all markers; else only markers with these names are copied (and deleted when replacing).
+    // Chosen marker names (null: none): only groups where a video has such a marker are shown.
     const [names, setNames] = React.useState(null);
-    const namesRef = React.useRef(null);
-    // With a name filter: replacing deletes only markers with those names (default: all others too).
+    // With names: transfer only markers with those names (default), or all markers.
+    const [onlyChosen, setOnlyChosen] = React.useState(true);
+    // With only the chosen ones: replacing deletes only markers with those names (default: all others too).
     const [keepOthers, setKeepOthers] = React.useState(false);
-    const keepOthersRef = React.useRef(false);
+    // What load() plans with: { names (transferred names or null), keepOthers }.
+    const planRef = React.useRef({ names: null, keepOthers: false });
     const [sources, setSources] = React.useState({}); // group key → scene id picked as source
 
     const load = React.useCallback(async function () {
@@ -2106,7 +2091,7 @@
       setError(null);
       try {
         const m = await loadMarkerCopy();
-        const found = await m.findSameVideoGroups(m.gqlFetch, namesRef.current, keepOthersRef.current);
+        const found = await m.findSameVideoGroups(m.gqlFetch, planRef.current.names, planRef.current.keepOthers);
         setCoverage(await m.phashCoverage(m.gqlFetch));
         setMc(m);
         setPicked({});
@@ -2146,13 +2131,30 @@
 
     function jobsOf(g) {
       const p = pickedOf(g);
-      return g.targets
+      const jobs = g.targets
         .filter(function (x) {
           return hasWork(x) && p[x.scene.id];
         })
         .map(function (x) {
           return { sceneId: x.scene.id, plan: x.plan, add: x.add, remove: removeOf(x) };
         });
+      // The source keeps only the chosen markers: last, after the others got theirs.
+      if (g.sourceRemove.length && p[g.source.id]) {
+        jobs.push({ sceneId: g.source.id, plan: [], add: 0, remove: g.sourceRemove });
+      }
+      return jobs;
+    }
+
+    // Ticks or unticks one video of a group (target or the source's cleanup).
+    function setPick(g, id, checked) {
+      const next = Object.assign({}, pickedOf(g));
+      if (checked) next[id] = true;
+      else delete next[id];
+      setPicked(function (all) {
+        const out = Object.assign({}, all);
+        out[g.key] = next;
+        return out;
+      });
     }
 
     const sumAdd = function (jobs) {
@@ -2173,15 +2175,16 @@
       return "Copy " + markersText(sumAdd(jobs)) + (rem ? ", delete " + rem : "");
     };
 
-    // A new name filter or "keep markers with other names": every group planned again.
-    function refilter(nextNames, nextKeep) {
-      namesRef.current = nextNames;
-      keepOthersRef.current = nextKeep;
+    // New chosen names, "only these / all markers" or "keep markers with other names": every group planned again.
+    function refilter(nextNames, nextOnly, nextKeep) {
+      const plan = { names: nextNames && nextOnly ? nextNames : null, keepOthers: nextKeep };
+      planRef.current = plan;
       setNames(nextNames);
+      setOnlyChosen(nextOnly);
       setKeepOthers(nextKeep);
       setGroups(function (list) {
         return list.map(function (g) {
-          return mc.analyzeGroup(g.scenes, sources[g.key], nextNames, nextKeep);
+          return mc.analyzeGroup(g.scenes, sources[g.key], plan.names, plan.keepOthers);
         });
       });
       setPicked({});
@@ -2222,14 +2225,17 @@
     }
 
     async function run(jobs) {
+      // Busy at once: a double click must not start the same transfer twice.
+      setBusy("…");
       try {
         const done = await mc.syncScenes(mc.gqlFetch, mc.createWithGql(mc.gqlFetch), jobs, function (i) {
           setBusy(i + 1 + " / " + jobs.length);
         });
         Toast.success(
           done.added + " markers copied to " + scenesWord(jobs.length) +
-            (done.removed ? ", " + done.removed + " deleted" : "") + " — Undo at the top of this page"
+            (done.removed ? ", " + done.removed + " deleted" : "") + (done.at ? " — Undo at the top of this page" : "")
         );
+        warnNoUndo(Toast, done);
         return true;
       } catch (e) {
         Toast.error(formatError(e));
@@ -2304,15 +2310,24 @@
       content = h("p", { className: "text-muted" }, "Comparing the fingerprints of the library …");
     } else {
       const differs = function (g) {
-        return g.missing > 0 || g.extra > 0;
+        return g.missing > 0 || g.extra > 0 || g.sourceRemove.length > 0;
       };
       const isDone = function (g) {
         return done.has(g.key);
       };
-      const open = groups.filter(function (g) {
+      // Chosen names: only groups where a video has such a marker.
+      const found = groups.filter(function (g) {
+        return (
+          !names ||
+          g.scenes.some(function (s) {
+            return mc.pickMarkers(s.markers, names).length > 0;
+          })
+        );
+      });
+      const open = found.filter(function (g) {
         return !isDone(g);
       });
-      const doneGroups = groups.filter(isDone);
+      const doneGroups = found.filter(isDone);
       const list =
         tab === "done"
           ? doneGroups
@@ -2360,28 +2375,64 @@
           mc: mc,
           list: nameList,
           videos: true,
+          label: "Show groups with:",
           value: names,
           disabled: !!busy,
           onChange: function (next) {
-            refilter(next, keepOthers);
+            refilter(next, onlyChosen, keepOthers);
           },
         }),
         names
           ? h(
-              "label",
-              {
-                className: "quick-markers-sync-pick quick-markers-keep-others",
-                title: "Off: a replaced video gets exactly the chosen markers of the source, its other markers are deleted. On: only markers with the chosen names are replaced, all others stay.",
-              },
-              h("input", {
-                type: "checkbox",
-                checked: keepOthers,
-                disabled: !!busy,
-                onChange: function (e) {
-                  refilter(names, e.target.checked);
-                },
-              }),
-              " keep markers with other names"
+              "div",
+              { className: "quick-markers-transfer-mode" },
+              h("span", { className: "text-muted small" }, "Transfer:"),
+              h(
+                "label",
+                { className: "quick-markers-sync-pick" },
+                h("input", {
+                  type: "radio",
+                  name: "quick-markers-transfer-mode",
+                  checked: onlyChosen,
+                  disabled: !!busy,
+                  onChange: function () {
+                    refilter(names, true, keepOthers);
+                  },
+                }),
+                " only " + names.join(", ")
+              ),
+              h(
+                "label",
+                { className: "quick-markers-sync-pick" },
+                h("input", {
+                  type: "radio",
+                  name: "quick-markers-transfer-mode",
+                  checked: !onlyChosen,
+                  disabled: !!busy,
+                  onChange: function () {
+                    refilter(names, false, keepOthers);
+                  },
+                }),
+                " all markers"
+              ),
+              onlyChosen
+                ? h(
+                    "label",
+                    {
+                      className: "quick-markers-sync-pick",
+                      title: "Off: a replaced video gets exactly the chosen markers of the source, its other markers are deleted. On: only markers with the chosen names are replaced, all others stay — then a video without them can be the source too, to delete them in the others.",
+                    },
+                    h("input", {
+                      type: "checkbox",
+                      checked: keepOthers,
+                      disabled: !!busy,
+                      onChange: function (e) {
+                        refilter(names, onlyChosen, e.target.checked);
+                      },
+                    }),
+                    " keep markers with other names"
+                  )
+                : null
             )
           : null,
         h(
@@ -2442,19 +2493,20 @@
               const status = [];
               if (g.missing) status.push("+" + markersText(g.missing) + " missing");
               if (removing) status.push("−" + removing + " not in the source");
+              if (g.sourceRemove.length) status.push("−" + g.sourceRemove.length + " other markers in the source");
               const byId = {};
               g.targets.forEach(function (x) {
                 byId[x.scene.id] = x;
               });
 
-              // "12 markers", or "5 of 12 markers" with a name filter.
+              // "12 markers", or "5 of 12 markers" with chosen names.
               const countText = function (s) {
-                const k = mc.pickMarkers(s.markers, g.names).length;
-                return g.names ? k + " of " + markersText(s.markers.length) : markersText(k);
+                const k = mc.pickMarkers(s.markers, names).length;
+                return names ? k + " of " + markersText(s.markers.length) : markersText(k);
               };
 
               function sourceRadio(s) {
-                const usable = mc.pickMarkers(s.markers, g.names).length > 0;
+                const usable = mc.canBeSource(s, g.names, g.keepOthers);
                 return h(
                   "label",
                   {
@@ -2462,7 +2514,7 @@
                     title: usable
                       ? "Copy the markers of this video to the others"
                       : g.names
-                        ? "This video has no markers with the chosen names"
+                        ? "Without the chosen markers this video would delete all markers of the others. Tick “keep markers with other names” to only remove the chosen ones there."
                         : "This video has no markers",
                   },
                   h("input", {
@@ -2550,14 +2602,7 @@
                             checked: !!p[x.scene.id],
                             disabled: !!busy,
                             onChange: function (e) {
-                              const next = Object.assign({}, p);
-                              if (e.target.checked) next[x.scene.id] = true;
-                              else delete next[x.scene.id];
-                              setPicked(function (all) {
-                                const out = Object.assign({}, all);
-                                out[g.key] = next;
-                                return out;
-                              });
+                              setPick(g, x.scene.id, e.target.checked);
                             },
                           }),
                           rem ? " replace markers here" : " copy here"
@@ -2623,7 +2668,34 @@
                       h(SyncThumb, { scene: s, mc: mc }),
                       h("strong", null, s.title),
                       h("small", null, s.path),
-                      h("small", null, countText(s))
+                      h(
+                        "small",
+                        null,
+                        countText(s) + (g.sourceRemove.length && p[s.id] ? " · −" + g.sourceRemove.length + " deleted" : "")
+                      ),
+                      g.sourceRemove.length
+                        ? h(
+                            "div",
+                            { className: "quick-markers-sync-card-actions" },
+                            h(
+                              "label",
+                              {
+                                title:
+                                  "Deletes the " + markersText(g.sourceRemove.length) +
+                                  " of the source with other names, so it ends up with only the chosen markers too.",
+                              },
+                              h("input", {
+                                type: "checkbox",
+                                checked: !!p[s.id],
+                                disabled: !!busy,
+                                onChange: function (e) {
+                                  setPick(g, s.id, e.target.checked);
+                                },
+                              }),
+                              " only keep the chosen markers (−" + g.sourceRemove.length + ")"
+                            )
+                          )
+                        : null
                     );
                   })
                 )
@@ -2634,9 +2706,11 @@
               { className: "text-muted" },
               tab === "done"
                 ? "No group ticked off yet. “✓ Tick off” on a group moves it here."
-                : groups.length
+                : found.length
                   ? "No group with different markers — every video has the same markers as its copies."
-                  : "No scenes with the same video found."
+                  : names
+                    ? "No group has a video with these markers."
+                    : "No scenes with the same video found."
             ),
         list.length > shown
           ? h(
@@ -2665,7 +2739,7 @@
         h(
           "p",
           null,
-          "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Pick the source per group; the others get exactly its markers — markers they have that the source lacks are deleted unless “keep its markers” is ticked. Ticked are only videos within 1 s that are not short clips and lose nothing — compare the pictures before copying. With “Only these markers” just markers with those names are copied; replacing still deletes all other markers of a video, unless “keep markers with other names” is ticked. Groups with a short clip (under 30 s) come last; “✓ Tick off” hides a group until you restore it in the tab “Ticked off” (kept in this browser)."
+          "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Pick the source per group; the others get exactly its markers — markers they have that the source lacks are deleted unless “keep its markers” is ticked. Ticked are only videos within 1 s that are not short clips and lose nothing — compare the pictures before copying. “Show groups with” a marker name lists only groups where a video has such a marker; “Transfer” then copies only those markers or all of them. With only the chosen markers, replacing still deletes all other markers of a video, unless “keep markers with other names” is ticked (then a video without them can be the source too, to delete them in the others); “only keep the chosen markers” on the source cleans it up the same way. Groups with a short clip (under 30 s) come last; “✓ Tick off” hides a group until you restore it in the tab “Ticked off” (kept in this browser)."
         )
       ),
       content

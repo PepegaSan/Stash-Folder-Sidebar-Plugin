@@ -133,11 +133,6 @@
   opacity: 0.5;
 }
 
-.qm-x-name.is-more {
-  border-style: dashed;
-  opacity: 0.8;
-}
-
 .qm-sync-help summary {
   cursor: pointer;
 }
@@ -147,8 +142,16 @@
   margin: 6px 0 0;
 }
 
-.qm-sync-keep-others {
+.qm-sync-transfer-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
   margin-top: -8px;
+}
+
+.qm-sync-transfer-mode .kb-hint {
+  margin: 0;
 }
 
 .qm-x-offset {
