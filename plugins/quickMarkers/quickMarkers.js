@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.9.0";
+  const PLUGIN_VERSION = "1.10.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -575,17 +575,17 @@
   }
 
   /**
-   * Copied markers and the last transfer (for Undo); follows changes made in other tabs and
-   * in Stash UI (same localStorage). → { clip, undo }
+   * Copied markers, the last transfer (for Undo) and the Marker Sync groups ticked off; follows
+   * changes made in other tabs and in Stash UI (same localStorage). → { clip, undo, done }
    */
   function useMarkerTransferState() {
-    const [state, setState] = React.useState({ clip: null, undo: null });
+    const [state, setState] = React.useState({ clip: null, undo: null, done: new Set() });
     React.useEffect(function () {
       let cancelled = false;
       function read() {
         loadMarkerCopy()
           .then(function (mc) {
-            if (!cancelled) setState({ clip: mc.readClipboard(), undo: mc.readUndo() });
+            if (!cancelled) setState({ clip: mc.readClipboard(), undo: mc.readUndo(), done: mc.readDone() });
           })
           .catch(function (e) {
             console.error("[Quick Markers] markerCopy.js not loaded", e);
@@ -615,6 +615,10 @@
 
   const scenesWord = function (n) {
     return n + (n === 1 ? " scene" : " scenes");
+  };
+
+  const markersText = function (n) {
+    return n + (n === 1 ? " marker" : " markers");
   };
 
   // Confirm text and result message of undoing a transfer (rec from readUndo).
@@ -672,28 +676,44 @@
     );
   }
 
+  // Name chips shown before "more": the most frequent names (chosen ones are always shown).
+  const NAME_CHIPS = 12;
+
   /**
    * Chips to transfer only markers with some names (e.g. only "Party"). value: null (all) or an
-   * array of names; list: mc.markerNames(...); onChange(next filter).
+   * array of names; list: mc.markerNames(...); videos: show in how many videos a name is;
+   * onChange(next filter).
    */
   function NameFilter(props) {
     const mc = props.mc;
     const value = props.value;
+    const [open, setOpen] = React.useState(false);
     if (!props.list.length) return null;
-    const chip = function (name, label, on) {
+    const isOn = function (name) {
+      return !!value && value.indexOf(name) >= 0;
+    };
+    const visible = open
+      ? props.list
+      : props.list.filter(function (x, i) {
+          return i < NAME_CHIPS || isOn(x.name);
+        });
+    const hidden = props.list.length - visible.length;
+    const chip = function (name, label, on, title) {
       return React.createElement(
         "button",
         {
           key: name == null ? "" : "n:" + name,
           type: "button",
           className: "quick-markers-name" + (on ? " is-on" : ""),
+          title: title,
           "aria-pressed": on,
           disabled: !!props.disabled,
           onClick: function () {
             props.onChange(mc.toggleName(value, name));
           },
         },
-        label
+        label,
+        title
       );
     };
     return React.createElement(
@@ -701,13 +721,32 @@
       { className: "quick-markers-names", role: "group", "aria-label": "Transfer only these markers" },
       React.createElement("span", { className: "text-muted small" }, "Only these markers:"),
       chip(null, "All", !value),
-      props.list.map(function (x) {
+      visible.map(function (x) {
         return chip(
           x.name,
-          React.createElement(React.Fragment, null, x.name, React.createElement("small", null, x.count)),
-          !!value && value.indexOf(x.name) >= 0
+          React.createElement(
+            React.Fragment,
+            null,
+            x.name,
+            React.createElement("small", null, props.videos ? x.videos + (x.videos === 1 ? " video" : " videos") : x.count)
+          ),
+          isOn(x.name),
+          markersText(x.count) + " in " + x.videos + (x.videos === 1 ? " video" : " videos")
         );
-      })
+      }),
+      hidden > 0 || open
+        ? React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "quick-markers-name is-more",
+              onClick: function () {
+                setOpen(!open);
+              },
+            },
+            open ? "less" : "+" + hidden + " more"
+          )
+        : null
     );
   }
 
@@ -889,7 +928,7 @@
         ),
         React.createElement(NameFilter, {
           mc: mc,
-          list: mc.markerNames(data.clip.markers, names),
+          list: mc.markerNames([data.clip], names),
           value: names,
           disabled: !!busy,
           onChange: setNames,
@@ -995,14 +1034,14 @@
         React.createElement(NameFilter, {
           mc: mc,
           list: mc.markerNames(
-            [].concat.apply(
-              scene.markers,
+            [scene].concat(
               data.list.map(function (x) {
-                return x.scene.markers;
+                return x.scene;
               })
             ),
             names
           ),
+          videos: true,
           value: names,
           disabled: !!busy,
           onChange: setNames,
@@ -2023,10 +2062,6 @@
   const BS = libraries.Bootstrap || {};
   const faSolid = libraries.FontAwesomeSolid || {};
 
-  const markersText = function (n) {
-    return n + (n === 1 ? " marker" : " markers");
-  };
-
   function SyncThumb(props) {
     const s = props.scene;
     return React.createElement(
@@ -2051,7 +2086,8 @@
     const [groups, setGroups] = React.useState(null);
     const [error, setError] = React.useState(null);
     const [coverage, setCoverage] = React.useState(null);
-    const [showAll, setShowAll] = React.useState(false);
+    const done = transferState.done; // keys of the groups ticked off
+    const [tab, setTab] = React.useState("differ"); // "differ" | "all" | "done"
     const [shown, setShown] = React.useState(SYNC_PAGE_SIZE);
     const [busy, setBusy] = React.useState("");
     const [picked, setPicked] = React.useState({}); // group key → { scene id: true }
@@ -2156,14 +2192,26 @@
         if (!mc || !groups) return [];
         const all = [];
         groups.forEach(function (g) {
-          g.scenes.forEach(function (s) {
-            all.push.apply(all, s.markers);
-          });
+          all.push.apply(all, g.scenes);
         });
         return mc.markerNames(all, names);
       },
       [mc, groups, names]
     );
+
+    // Ticks groups off (they leave the list, see the tab "Ticked off") or brings them back.
+    function tickOff(keys, value) {
+      try {
+        mc.setDone(keys, value);
+      } catch (e) {
+        Toast.error(formatError(e));
+      }
+    }
+
+    function openTab(next) {
+      setTab(next);
+      setShown(SYNC_PAGE_SIZE);
+    }
 
     function replaceGroup(next) {
       setGroups(function (list) {
@@ -2258,13 +2306,45 @@
       const differs = function (g) {
         return g.missing > 0 || g.extra > 0;
       };
-      const list = groups.filter(function (g) {
-        return showAll || differs(g);
+      const isDone = function (g) {
+        return done.has(g.key);
+      };
+      const open = groups.filter(function (g) {
+        return !isDone(g);
       });
-      const missingGroups = groups.filter(differs).length;
-      // Only groups on screen: "all ticked" must never reach groups nobody has looked at.
+      const doneGroups = groups.filter(isDone);
+      const list =
+        tab === "done"
+          ? doneGroups
+          : open.filter(function (g) {
+              return tab === "all" || differs(g);
+            });
+      const missingGroups = open.filter(differs).length;
+      const shortKeys = tab === "done"
+        ? []
+        : list
+            .filter(function (g) {
+              return g.short;
+            })
+            .map(function (g) {
+              return g.key;
+            });
+      // Only groups on screen, never ticked-off ones: "all ticked" must not reach groups nobody looks at.
       const onScreen = list.slice(0, shown);
-      const bulkJobs = [].concat.apply([], onScreen.map(jobsOf));
+      const bulkJobs = tab === "done" ? [] : [].concat.apply([], onScreen.map(jobsOf));
+      const tabButton = function (id, label) {
+        return h(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-sm " + (tab === id ? "btn-primary" : "btn-secondary"),
+            onClick: function () {
+              openTab(id);
+            },
+          },
+          label
+        );
+      };
       content = h(
         React.Fragment,
         null,
@@ -2279,6 +2359,7 @@
         h(NameFilter, {
           mc: mc,
           list: nameList,
+          videos: true,
           value: names,
           disabled: !!busy,
           onChange: function (next) {
@@ -2309,31 +2390,25 @@
           h(
             "div",
             { className: "btn-group" },
-            h(
-              "button",
-              {
-                type: "button",
-                className: "btn btn-sm " + (showAll ? "btn-secondary" : "btn-primary"),
-                onClick: function () {
-                  setShowAll(false);
-                  setShown(SYNC_PAGE_SIZE);
-                },
-              },
-              "Markers differ (" + missingGroups + ")"
-            ),
-            h(
-              "button",
-              {
-                type: "button",
-                className: "btn btn-sm " + (showAll ? "btn-primary" : "btn-secondary"),
-                onClick: function () {
-                  setShowAll(true);
-                  setShown(SYNC_PAGE_SIZE);
-                },
-              },
-              "All groups (" + groups.length + ")"
-            )
+            tabButton("differ", "Markers differ (" + missingGroups + ")"),
+            tabButton("all", "All groups (" + open.length + ")"),
+            tabButton("done", "✓ Ticked off (" + doneGroups.length + ")")
           ),
+          shortKeys.length
+            ? h(
+                "button",
+                {
+                  type: "button",
+                  className: "btn btn-secondary btn-sm",
+                  title: "Groups with a clip under 30 s — they are always at the end of the list",
+                  disabled: !!busy,
+                  onClick: function () {
+                    tickOff(shortKeys, true);
+                  },
+                },
+                "✓ Tick off short clips (" + shortKeys.length + ")"
+              )
+            : null,
           h("span", { className: "quick-markers-sync-spacer" }),
           busy ? h("span", { className: "text-muted" }, busy) : null,
           undo
@@ -2499,12 +2574,28 @@
                   "header",
                   null,
                   h("strong", null, g.scenes.length + " videos"),
+                  g.short ? h("em", { className: "quick-markers-flag" }, "short clip") : null,
                   h(
                     "span",
                     { className: status.length ? "quick-markers-sync-missing" : "quick-markers-sync-ok" },
                     status.length ? status.join(" · ") : "all have the same markers"
                   ),
                   h("span", { className: "quick-markers-sync-spacer" }),
+                  h(
+                    "button",
+                    {
+                      type: "button",
+                      className: "btn btn-secondary btn-sm",
+                      disabled: !!busy,
+                      title: isDone(g)
+                        ? "Back into the list"
+                        : "Hide this group — it stays in the tab “Ticked off”",
+                      onClick: function () {
+                        tickOff(g.key, !isDone(g));
+                      },
+                    },
+                    isDone(g) ? "↺ Restore" : "✓ Tick off"
+                  ),
                   differs(g)
                     ? h(
                         "button",
@@ -2541,9 +2632,11 @@
           : h(
               "p",
               { className: "text-muted" },
-              groups.length
-                ? "No group with different markers — every video has the same markers as its copies."
-                : "No scenes with the same video found."
+              tab === "done"
+                ? "No group ticked off yet. “✓ Tick off” on a group moves it here."
+                : groups.length
+                  ? "No group with different markers — every video has the same markers as its copies."
+                  : "No scenes with the same video found."
             ),
         list.length > shown
           ? h(
@@ -2566,9 +2659,14 @@
       { className: "quick-markers-sync" },
       h("h2", null, "Marker Sync"),
       h(
-        "p",
-        { className: "text-muted" },
-        "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Pick the source per group; the others get exactly its markers — markers they have that the source lacks are deleted unless “keep its markers” is ticked. Ticked are only videos within 1 s that are not short clips and lose nothing — compare the pictures before copying. With “Only these markers” just markers with those names are copied; replacing still deletes all other markers of a video, unless “keep markers with other names” is ticked."
+        "details",
+        { className: "quick-markers-sync-help text-muted" },
+        h("summary", null, "Videos that exist more than once, with their markers. How it works"),
+        h(
+          "p",
+          null,
+          "Groups of scenes with the same video (fingerprint at most 4 of 64 bits apart, length within 3 s). Pick the source per group; the others get exactly its markers — markers they have that the source lacks are deleted unless “keep its markers” is ticked. Ticked are only videos within 1 s that are not short clips and lose nothing — compare the pictures before copying. With “Only these markers” just markers with those names are copied; replacing still deletes all other markers of a video, unless “keep markers with other names” is ticked. Groups with a short clip (under 30 s) come last; “✓ Tick off” hides a group until you restore it in the tab “Ticked off” (kept in this browser)."
+        )
       ),
       content
     );

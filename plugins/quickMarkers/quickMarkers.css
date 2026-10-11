@@ -708,6 +708,24 @@
   opacity: 0.5;
 }
 
+.quick-markers-name.is-more {
+  border-style: dashed;
+  color: var(--qm-muted, #a7b6c2);
+}
+
+.quick-markers-sync-help {
+  margin-bottom: 0.75rem;
+}
+
+.quick-markers-sync-help summary {
+  cursor: pointer;
+}
+
+.quick-markers-sync-help p {
+  max-width: 900px;
+  margin: 0.5rem 0 0;
+}
+
 .quick-markers-keep-others {
   margin: -0.35rem 0 0.75rem;
   font-size: 0.85rem;

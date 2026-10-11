@@ -144,7 +144,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.9.0-informational)
+![Version](https://img.shields.io/badge/version-1.10.0-informational)
 
 ## Requirements
 
@@ -183,9 +183,9 @@ For videos that exist more than once (re-encodes, renamed copies) — in the exp
 - **Paste** — pastes them into the scene you are on. Shows a preview first; markers that are already there (same tag, start and end within 0.5 s) are skipped. **Shift (seconds)** moves all markers, for a copy that starts earlier or later; markers that would start before 0 or after the end are left out, ends are cut at the end of the video. Copy and paste also work across classic Stash and Stash UI
 - **Same videos** — finds scenes with the same video fingerprint (phash, at most 4 of 64 bits different) and almost the same length (within 3 s). It shows them with a thumbnail (click opens the scene in a new tab), path, length and markers next to the current scene, ticks only those within 1 s that are not short clips (under 30 s — those are flagged *short clip — check*), and copies the markers there with one click. **Take** copies the markers of one of them into the current scene instead
 - **Undo** — removes the markers of the last paste / transfer again (button in the panel, in Stash UI also in the message); kept for a day, also across classic Stash and Stash UI
-- **Only these markers** — *Paste*, *Same videos* and *Marker Sync* show the marker names as chips (with how often each occurs). *All* is on by default; click a name (e.g. `Party`) to transfer only markers with that name, click more names to add them. The name is what Stash shows: the marker's title, or its primary tag when it has no title
+- **Only these markers** — *Paste*, *Same videos* and *Marker Sync* show the marker names as chips, the names most videos have first (with in how many videos each is; hover for the number of markers). Only the 12 most frequent are shown until you click *+N more*. *All* is on by default; click a name (e.g. `Party`) to transfer only markers with that name, click more names to add them. The name is what Stash shows: the marker's title, or its primary tag when it has no title
 
-**Marker Sync** (whole library) — a page of its own: **Marker Sync** in the classic navigation, **Manage → Marker-Abgleich / Marker sync** in Stash UI, or *All same videos of the library* in the Same videos dialog. It lists every group of same videos (Stash's duplicate search over the phashes, at most 4 of 64 bits apart, length within 3 s) as cards with thumbnail, path, length and markers. The video with the most markers is preselected as **source**; the **Source** radio on every card picks another (e.g. a video you marked by hand). The other videos then get exactly the source's markers: markers they have that the source lacks are **deleted** — unless **keep its markers** is ticked on that card (off by default), then the source's markers are only added. Groups whose markers differ come first (*Markers differ* / *All groups*). Copy per group or **All ticked** at once — preselected are videos within 1 s, no short clips, that would lose no markers. **Undo** removes the copied markers and restores deleted ones. With **Only these markers** (e.g. just `Party`) only markers with those names are copied; replacing works as without a filter — a video then has exactly the source's `Party` markers and nothing else. Tick **keep markers with other names** to replace only the `Party` markers and leave all others (e.g. `schlafen`) as they are.
+**Marker Sync** (whole library) — a page of its own: **Marker Sync** in the classic navigation, **Manage → Marker-Abgleich / Marker sync** in Stash UI, or *All same videos of the library* in the Same videos dialog. It lists every group of same videos (Stash's duplicate search over the phashes, at most 4 of 64 bits apart, length within 3 s) as cards with thumbnail, path, length and markers. The video with the most markers is preselected as **source**; the **Source** radio on every card picks another (e.g. a video you marked by hand). The other videos then get exactly the source's markers: markers they have that the source lacks are **deleted** — unless **keep its markers** is ticked on that card (off by default), then the source's markers are only added. Groups whose markers differ come first (*Markers differ* / *All groups*). Copy per group or **All ticked** at once — preselected are videos within 1 s, no short clips, that would lose no markers. **Undo** removes the copied markers and restores deleted ones. With **Only these markers** (e.g. just `Party`) only markers with those names are copied; replacing works as without a filter — a video then has exactly the source's `Party` markers and nothing else. Tick **keep markers with other names** to replace only the `Party` markers and leave all others (e.g. `schlafen`) as they are. Groups with a **short clip** (under 30 s) are flagged and always come last. **✓ Tick off** on a group hides it (also *Tick off short clips* for all of them at once); the tab **Ticked off** lists them, **↺ Restore** brings one back. Ticked-off groups are kept in this browser (classic Stash and Stash UI share them); a group that gets another video counts as new.
 
 *Same videos* and *Marker Sync* need phashes: **Tasks → Generate → Phashes** (or the button in the dialog, which starts that task for scenes without one). Byte-identical files are already one scene in Stash and share their markers anyway.
 
@@ -258,8 +258,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.9.0`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.9.0**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.10.0`.
+6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.10.0**.
 
 If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
 
@@ -480,6 +480,14 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.6.0`.
 
 - **Stash UI support** — Categories is a page of Stash UI itself (Library → Categories) instead of opening in embedded classic Stash: tag chips, search, sort, List / Preview, paging, scenes open in the Stash UI player
 - Same categories and settings as in classic Stash; the classic page is unchanged
+
+### Quick Markers 1.10.0
+
+- **Marker Sync: tick off groups** — *✓ Tick off* hides a group, the new tab *Ticked off* brings it back; *Tick off short clips* hides all groups with a clip under 30 s at once
+- **Marker Sync: short clips last** — groups with a clip under 30 s are flagged and always at the end of the list
+- **Marker name chips** sorted by how many videos have the name, showing that number; only the 12 most frequent until *+N more*
+- Marker Sync: the explanation is folded away (*How it works*)
+- Fix: with a name filter no video of a group has, the group no longer offers to delete the other markers
 
 ### Quick Markers 1.9.0
 

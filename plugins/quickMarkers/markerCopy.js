@@ -9,7 +9,9 @@
 
 export const CLIPBOARD_KEY = "quickMarkers.clipboard";
 export const UNDO_KEY = "quickMarkers.lastTransfer";
-// Fired when the clipboard or the undo record changes (the name is kept for compatibility).
+// Marker Sync groups ticked off by hand (their keys), so they leave the list until restored.
+export const DONE_KEY = "quickMarkers.syncDone";
+// Fired when the clipboard, the undo record or the ticked-off groups change (the name is kept for compatibility).
 export const CLIPBOARD_EVENT = "quickMarkers:clipboard";
 const UNDO_MAX_AGE = 24 * 60 * 60 * 1000;
 
@@ -131,21 +133,32 @@ export function pickMarkers(markers, names) {
 }
 
 /**
- * The names of `markers` with how often each occurs, for the filter chips; names of `selected`
- * that none of the markers has are listed too (with 0), so a chosen name can still be unticked.
- * → [{ name, count }] sorted by name
+ * The marker names of `scenes` (anything with .markers) for the filter chips: count = how many
+ * markers have the name, videos = in how many of the scenes. Names of `selected` that none has
+ * are listed too (with 0), so a chosen name can still be unticked.
+ * → [{ name, count, videos }], the names most videos have first
  */
-export function markerNames(markers, selected) {
-  const counts = new Map();
-  markers.forEach((m) => {
-    const name = markerLabel(m);
-    counts.set(name, (counts.get(name) || 0) + 1);
+export function markerNames(scenes, selected) {
+  const stats = new Map();
+  const stat = (name) => {
+    if (!stats.has(name)) stats.set(name, { name, count: 0, videos: 0 });
+    return stats.get(name);
+  };
+  const seen = new Set();
+  scenes.forEach((s) => {
+    if (s.id != null && seen.has(s.id)) return;
+    if (s.id != null) seen.add(s.id);
+    const here = new Set();
+    s.markers.forEach((m) => {
+      const name = markerLabel(m);
+      stat(name).count++;
+      here.add(name);
+    });
+    here.forEach((name) => stat(name).videos++);
   });
-  (selected || []).forEach((name) => {
-    if (!counts.has(name)) counts.set(name, 0);
-  });
-  return Array.from(counts, ([name, count]) => ({ name, count })).sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+  (selected || []).forEach(stat);
+  return Array.from(stats.values()).sort(
+    (a, b) => b.videos - a.videos || b.count - a.count || a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
   );
 }
 
@@ -398,9 +411,10 @@ const GROUP_DISTANCE = PHASH_DISTANCE - 1;
  * replacing a target's markers leaves it with exactly those, like without a filter.
  * keepOthers: with a name filter, replacing deletes only markers with those names; the target's
  * markers with other names stay.
- * → { key, scenes, source, names, keepOthers, targets: [{ scene, plan, add, remove, durationDiff, short, sure }], missing, extra }
+ * → { key, scenes, source, names, keepOthers, short, targets: [{ scene, plan, add, remove, durationDiff, short, sure }], missing, extra }
  *   missing = markers of the source that the others don't have yet; remove / extra = markers of
- *   the others that the source doesn't have (deleted when a target's markers are replaced).
+ *   the others that the source doesn't have (deleted when a target's markers are replaced);
+ *   short = a video of the group is a short clip (those are easily mixed up).
  */
 export function analyzeGroup(scenes, sourceId, names, keepOthers) {
   names = names && names.length ? names.slice() : null;
@@ -411,6 +425,8 @@ export function analyzeGroup(scenes, sourceId, names, keepOthers) {
     scenes.find((s) => s.id === String(sourceId) && count(s) > 0) ||
     scenes.slice().sort((a, b) => count(b) - count(a) || b.markers.length - a.markers.length || Number(a.id) - Number(b.id))[0];
   const from = pickMarkers(source.markers, names);
+  // No video has markers with the chosen names: nothing to copy, so nothing to replace either.
+  const idle = !!names && !from.length;
   const targets = scenes
     .filter((s) => s !== source)
     .map((s) => {
@@ -421,7 +437,7 @@ export function analyzeGroup(scenes, sourceId, names, keepOthers) {
         scene: s,
         plan,
         add: countNew(plan),
-        remove: planRemove(plan, keepOthers ? { markers: pickMarkers(s.markers, names) } : s),
+        remove: idle ? [] : planRemove(plan, keepOthers ? { markers: pickMarkers(s.markers, names) } : s),
         durationDiff: diff,
         short,
         sure: diff <= SURE_DURATION_DIFF && !short,
@@ -434,6 +450,7 @@ export function analyzeGroup(scenes, sourceId, names, keepOthers) {
     source,
     names,
     keepOthers,
+    short: targets.some((x) => x.short),
     targets,
     missing: targets.reduce((n, x) => n + x.add, 0),
     extra: targets.reduce((n, x) => n + x.remove.length, 0),
@@ -443,7 +460,7 @@ export function analyzeGroup(scenes, sourceId, names, keepOthers) {
 /**
  * All groups of same videos in the library (Stash's duplicate search over the phashes), with an
  * optional name filter (see analyzeGroup). Groups where a video has markers the others lack come
- * first. → [analyzeGroup(...)]
+ * first, groups with a short clip last. → [analyzeGroup(...)]
  */
 export async function findSameVideoGroups(gql, names, keepOthers) {
   const d = await gql(
@@ -453,7 +470,33 @@ export async function findSameVideoGroups(gql, names, keepOthers) {
   );
   return ((d && d.findDuplicateScenes) || [])
     .map((group) => analyzeGroup(group.map(toScene), null, names, keepOthers))
-    .sort((a, b) => b.missing - a.missing || b.extra - a.extra || b.source.markers.length - a.source.markers.length);
+    .sort(
+      (a, b) =>
+        a.short - b.short || b.missing - a.missing || b.extra - a.extra || b.source.markers.length - a.source.markers.length
+    );
+}
+
+// → Set of the keys of the Marker Sync groups ticked off by hand.
+export function readDone() {
+  try {
+    const list = JSON.parse(localStorage.getItem(DONE_KEY) || "[]");
+    return new Set(Array.isArray(list) ? list.map(String) : []);
+  } catch (e) {
+    return new Set();
+  }
+}
+
+// Ticks groups off (done = true) or brings them back into the list. keys: one key or an array.
+export function setDone(keys, done) {
+  const set = readDone();
+  [].concat(keys).forEach((k) => (done ? set.add(String(k)) : set.delete(String(k))));
+  try {
+    localStorage.setItem(DONE_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {
+    throw new Error("The browser does not allow storing the ticked-off groups.");
+  }
+  window.dispatchEvent(new Event(CLIPBOARD_EVENT));
+  return set;
 }
 
 // Loads one group again (after copying), keeping its source and name filter. → analyzeGroup(...)

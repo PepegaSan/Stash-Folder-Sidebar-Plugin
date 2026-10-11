@@ -133,6 +133,20 @@
   opacity: 0.5;
 }
 
+.qm-x-name.is-more {
+  border-style: dashed;
+  opacity: 0.8;
+}
+
+.qm-sync-help summary {
+  cursor: pointer;
+}
+
+.qm-sync-help p {
+  max-width: 900px;
+  margin: 6px 0 0;
+}
+
 .qm-sync-keep-others {
   margin-top: -8px;
 }
