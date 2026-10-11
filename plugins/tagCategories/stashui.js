@@ -369,11 +369,33 @@ export default function setup(stashui) {
       const dur = file.duration ? ui.fmtDuration(file.duration) : "";
       const href = `#/scene/${encodeURIComponent(s.id)}`;
       if (S.view === "preview") {
-        return `<a class="tcx-card" href="${href}" title="${esc(sceneTitle(s))}">
+        return `<a class="tcx-card" href="${href}" data-scene="${esc(s.id)}" title="${esc(sceneTitle(s))}">
             <span class="tcx-thumb">${s.paths.screenshot ? `<img loading="lazy" src="${esc(s.paths.screenshot)}" alt="">` : ""}${s.paths.preview ? `<video muted loop playsinline preload="none" data-src="${esc(s.paths.preview)}"></video>` : ""}${dur ? `<em>${dur}</em>` : ""}</span>
             <span class="tcx-card-title">${esc(sceneTitle(s))}</span></a>`;
       }
-      return `<a class="tcx-row" href="${href}"><b>${esc(sceneTitle(s))}</b><small>${esc([dur, file.path].filter(Boolean).join(" · "))}</small></a>`;
+      return `<a class="tcx-row" href="${href}" data-scene="${esc(s.id)}"><b>${esc(sceneTitle(s))}</b><small>${esc([dur, file.path].filter(Boolean).join(" · "))}</small></a>`;
+    }
+
+    // Open a scene so that the player's next / previous go on in this list (same selection, search and order).
+    // Only the pages loaded so far are shown; the rest of the list follows in the background. false = plain link.
+    function playFrom(id) {
+      const i = S.scenes.findIndex((s) => String(s.id) === id);
+      if (i < 0 || !stashui.has("play")) return false;
+      const piece = (s) => ({ id: s.id, title: sceneTitle(s), thumb: s.paths.screenshot });
+      const queue = stashui.play(S.scenes.map(piece), i);
+      if (!queue) return false;
+      if (S.total != null && S.scenes.length < S.total) {
+        const sort = SORTS.find((s) => s[0] === S.sort) || SORTS[0];
+        stashui
+          .gql(
+            `query($f: FindFilterType, $x: SceneFilterType) { findScenes(filter: $f, scene_filter: $x) { scenes { id title paths { screenshot } files { path } } } }`,
+            { f: { per_page: -1, sort: sort[2], direction: sort[3], q: S.q || undefined }, x: { tags: crit() } },
+            { heavy: true }
+          )
+          .then((d) => queue.add(d.findScenes.scenes.map(piece)))
+          .catch(() => {}); // (then "next" stops at the end of the pages loaded so far)
+      }
+      return true;
     }
 
     function paintList() {
@@ -447,6 +469,12 @@ export default function setup(stashui) {
     }
 
     main.addEventListener("click", (e) => {
+      const card = e.target.closest("[data-scene]");
+      if (card) {
+        const plain = e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey; // (new tab / window)
+        if (!plain && playFrom(card.dataset.scene)) e.preventDefault();
+        return;
+      }
       const chip = e.target.closest("[data-chip]");
       if (chip) return toggleChip(chip.dataset.chip, false);
       const mode = e.target.closest("[data-mode] [data-v]");

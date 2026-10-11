@@ -366,7 +366,7 @@ Named **categories**, each with a list of Stash **tags**. Open **Categories** in
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.6.0-informational)
+![Version](https://img.shields.io/badge/version-1.7.0-informational)
 
 ## Features
 
@@ -459,6 +459,7 @@ With the [Stash UI](https://github.com/AffordObedienceUntamed/stash-pmv-plugins)
 - **Library → Categories** in the left menu, right after Tags (movable and hideable in Customize → Sidebar)
 - The same page as in classic Stash: categories with their number of scenes, tag chips (click / right-click, *Any of them* / *All*), search, sort, **List / Preview** (the preview plays on hover), more scenes while scrolling
 - A click on a scene opens the **Stash UI player**; **Open in classic Stash** shows the same selection as a regular scene list (paging, bulk edit)
+- **Next / previous** in the player (and the next video when one ends) follow the category's list — same tag chips, search and sort, all scenes, not only the ones loaded so far. Needs a Stash UI with `stashui.play` (Pepega fork); otherwise the player goes on as usual
 - Each category has its own address (`#/p/tagCategories/<id>`), so Back and bookmarks work
 - Same categories (`categoriesJson`) as in classic Stash; edit them under **Settings → Plugins → Tag Categories**
 - Follows Stash UI's colour presets, liquid glass and interface language (English / German)
@@ -470,11 +471,16 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.6.0`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.7.0`.
 
 ---
 
 ## Changelog
+
+### Tag Categories 1.7.0
+
+- **Stash UI: next video from the category** — a scene opened from Categories plays on in that list: next / previous and the end of a video take the next scene of the category (with the chosen tag chips, search and sort), also beyond the scenes loaded so far
+- Ctrl / middle click on a scene still opens it in a new tab
 
 ### Tag Categories 1.6.0
 
