@@ -2,13 +2,14 @@
 
 Community plugins for [Stash](https://github.com/stashapp/stash), installable via [source URL](#installation-from-stash-plugin-source-url) or manual copy from `plugins/<id>/`.
 
-**Jump to:** [Folder Sidebar](#folder-sidebar) · [Quick Markers](#quick-markers) · [Bracket Tags](#bracket-tags) · [Tag Categories](#tag-categories)
+**Jump to:** [Folder Sidebar](#folder-sidebar) · [Quick Markers](#quick-markers) · [Bracket Tags](#bracket-tags) · [Tag Performers](#tag-performers) · [Tag Categories](#tag-categories)
 
 | Plugin | Description |
 |--------|-------------|
 | [Folder Sidebar](#folder-sidebar) | Browse scenes by filesystem folder |
 | [Quick Markers](#quick-markers) | Hotkey scene markers with presets |
 | [Bracket Tags](#bracket-tags) | Tags from `[brackets]` in filenames |
+| [Tag Performers](#tag-performers) | Add performers to scenes that have a tag with their name |
 | [Tag Categories](#tag-categories) | Browse scenes by named categories (any matching tag or performer) |
 
 ---
@@ -45,7 +46,7 @@ Fixed sidebar with your own root folders, drill into subfolders, and list scenes
    https://pepegasan.github.io/Stash-Folder-Sidebar-Plugin/main/index.yml
    ```
 
-3. Install **Folder Sidebar**, **Quick Markers**, **Bracket Tags**, and/or **Tag Categories** from the list, then reload plugins if prompted.
+3. Install **Folder Sidebar**, **Quick Markers**, **Bracket Tags**, **Tag Performers**, and/or **Tag Categories** from the list, then reload plugins if prompted.
 
 ### Manual
 
@@ -359,6 +360,74 @@ Reload plugins in Stash, then run the task or enable **Auto on new scenes**.
 
 ---
 
+# Tag Performers
+
+Many scenes carry the model name as a **tag** (for example from a `[bracket]` via [Bracket Tags](#bracket-tags)). Tag
+Performers adds the matching **performer** to those scenes: create the performer "Anna" and every scene with the tag
+"Anna" gets her as performer.
+
+![Stash](https://img.shields.io/badge/Stash-task%20plugin-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-informational)
+
+## Features
+
+- **Auto on new performers** — optional hook: a newly created performer is added to all scenes with a tag of the same name
+- **Task for the whole library** — checks every existing performer once
+- Matches the performer's **name and aliases** against tag **names and aliases**; exact match, case-insensitive, never partial
+- Only the tag itself counts, not its sub-tags
+- Performers are **only added**, never removed; other performers and tags on the scene stay as they are
+- **Remove the matching tag** — optional, off by default: the tag with the performer's name is removed from those scenes
+
+## Installation
+
+Install from the [plugin source URL](#installation-from-stash-plugin-source-url) (**Tag Performers** in the list), or copy manually:
+
+| OS | Path |
+|----|------|
+| Windows | `%USERPROFILE%\.stash\plugins\tagPerformers\` |
+| Linux / macOS | `~/.stash/plugins/tagPerformers/` |
+
+Required files: `tagPerformers.yml`, `tagPerformers.js`
+
+Then **Settings → Plugins → Reload plugins**.
+
+## Configuration
+
+**Settings → Plugins → Tag Performers**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Auto on new performers** | off | When a performer is created, add it to every scene with a tag of the same name or alias |
+| **Remove the matching tag** | off | After adding the performer, remove the matching tag from those scenes |
+
+## Usage
+
+| How | What it does |
+|-----|--------------|
+| **Auto on new performers** (setting) | Create a performer in Stash, its tagged scenes get it right away |
+| **Add performers to tagged scenes** (task) | Goes through all performers; use it once for existing performers and after a scan that brought new tagged scenes |
+
+Every changed performer and the number of scenes are shown in the task log.
+
+## Notes
+
+- The hook only runs when a performer is **created**. Scenes that get the tag later (new files, Bracket Tags on scan)
+  get the performer the next time you run the task
+- With **Remove the matching tag** on, Bracket Tags adds the tag again on its next run as long as the `[name]` is
+  still in the filename
+- If two performers share an alias that is also a tag, scenes with that tag get both
+
+## Manual install
+
+```bash
+git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
+cp -r Stash-Folder-Sidebar-Plugin/plugins/tagPerformers ~/.stash/plugins/tagPerformers
+```
+
+Reload plugins in Stash, then run the task or enable **Auto on new performers**.
+
+---
+
 # Tag Categories
 
 Named **categories**, each with a list of Stash **tags** and optionally **performers**. Open **Categories** in the main menu, pick a category, and browse every scene that has **any** of those tags or performers (OR filter). Categories live in plugin settings — they are not a native Stash entity.
@@ -491,6 +560,10 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.8.1`.
 ---
 
 ## Changelog
+
+### Tag Performers 1.0.0
+
+- New plugin: adds performers to scenes that have a tag with the performer's name or alias, on creating a performer or as a task for all performers; optionally removes the tag
 
 ### Tag Categories 1.8.1
 

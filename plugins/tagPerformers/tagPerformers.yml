@@ -1,0 +1,28 @@
+name: Tag Performers
+description: Add performers to scenes that carry a tag with the performer's name
+version: 1.0.0
+url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
+exec:
+  - tagPerformers.js
+interface: js
+settings:
+  autoOnCreate:
+    displayName: Auto on new performers
+    description: When you create a performer, add it to every scene with a tag of the same name (or alias).
+    type: BOOLEAN
+  removeTag:
+    displayName: Remove the matching tag
+    description: After adding the performer, remove the tag with the performer's name from those scenes. Off = the tag stays.
+    type: BOOLEAN
+hooks:
+  - name: Add new performer to tagged scenes
+    description: Runs when auto on new performers is enabled.
+    triggeredBy:
+      - Performer.Create.Post
+    defaultArgs:
+      mode: hook
+tasks:
+  - name: Add performers to tagged scenes
+    description: For every performer, add it to all scenes with a tag of the same name or alias. Performers are only added, never removed. Removes the tag too if that setting is on.
+    defaultArgs:
+      mode: allPerformers
