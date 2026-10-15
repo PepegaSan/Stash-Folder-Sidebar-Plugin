@@ -479,7 +479,7 @@ export default function setup(stashui) {
         const on = sel.on.includes(c.key);
         const not = sel.not.includes(c.key);
         const title = main ? t("Main tag: every scene has it, the other chips count only scenes with it – click to remove") : not ? t("Excluded – click to remove") : hint;
-        return `<button type="button" class="kb-chip tcx-chip${main ? " is-main" : on ? " is-on" : not ? " is-not" : ""}" data-chip="${esc(c.key)}" aria-pressed="${main || on}" title="${esc(title)}"><span class="tcx-star" data-star title="${esc(t("Make this the main tag: every scene has it, the other chips show what goes with it"))}">★</span>${esc(c.name)}<small>${S.counting && !main ? "…" : ui.fmtNum(count(c))}</small></button>`;
+        return `<button type="button" class="kb-chip tcx-chip${main ? " is-main" : on ? " is-on" : not ? " is-not" : ""}" data-chip="${esc(c.key)}" aria-pressed="${main || on}" title="${esc(title)}"><span class="tcx-star" data-star title="${esc(t("Make this the main tag: every scene has it, the other chips show what goes with it"))}">★</span>${on ? '<span class="tcx-mark" aria-hidden="true">✓</span>' : not ? '<span class="tcx-mark" aria-hidden="true">✕</span>' : ""}${esc(c.name)}<small>${S.counting && !main ? "…" : ui.fmtNum(count(c))}</small></button>`;
       };
       const tags = group("t");
       const perfs = group("p");
@@ -487,7 +487,7 @@ export default function setup(stashui) {
       const row = (label, list) => (list.length ? `<div class="tcx-chiprow">${labelled ? `<span class="tcx-chiplabel">${esc(t(label))}</span>` : ""}<div class="kb-chips">${list.map(chip).join("")}</div></div>` : "");
       const active = sel.main.length || sel.on.length || sel.not.length;
       const mainNames = sel.main.map((k) => S.names[k] || k).join(", ");
-      box.innerHTML = `<div class="tcx-filter">
+      box.innerHTML = `<div class="tcx-filter${active ? " has-sel" : ""}">
           <div class="tcx-filter-head">
             <div class="kb-seg" data-mode><button type="button" data-v="any" class="${sel.mode === "any" ? "is-on" : ""}">${t("Any of them")}</button><button type="button" data-v="all" class="${sel.mode === "all" ? "is-on" : ""}">${t("All")}</button></div>
             ${sel.main.length ? `<span class="tcx-mainnote">★ ${esc(t("Main: {names}", { names: mainNames }))}</span>` : `<span class="kb-hint">${esc(hint)}</span>`}

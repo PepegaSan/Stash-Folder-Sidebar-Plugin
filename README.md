@@ -366,7 +366,7 @@ Named **categories**, each with a list of Stash **tags** and optionally **perfor
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.8.0-informational)
+![Version](https://img.shields.io/badge/version-1.8.1-informational)
 
 ## Features
 
@@ -374,8 +374,9 @@ The same tag can appear in multiple categories; categories do not block or claim
 - Click a category → scenes matching **any** of its tags
 - **Sub-tags** — optionally a category includes all child tags of its tags (Stash tag hierarchy, any depth). A parent
   tag such as **Bracket Tags** becomes a category on its own, and new child tags show up automatically
-- **Tag chips** — narrow a category down: click = select, right-click = exclude, **Any of them / All** for several
-  selected tags. Each chip shows its number of scenes
+- **Tag chips** — narrow a category down: click = select (pink, ✓), right-click = exclude (red outline, ✕, struck
+  through), **Any of them / All** for several selected tags. While something is chosen, the untouched chips fade.
+  Each chip shows its number of scenes
 - **Main tag (★)** — like the main tags of the PMV Generator: ★ on a chip (or Shift+click) makes it the main tag.
   Every scene then has it, and the other chips only show what goes with it, counted within its scenes — e.g. main tag
   *Model X* shows *Model X* with action *Z, A, D* and how many scenes each. Click it again to take it back; it is
@@ -485,11 +486,16 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.8.0`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.8.1`.
 
 ---
 
 ## Changelog
+
+### Tag Categories 1.8.1
+
+- **Clearer chips** — selected chips have a ✓, excluded ones a ✕ with a red outline, red text and a stronger strike-through (before they looked almost like chips that weren't clicked); while something is chosen, the chips that aren't fade, so it is clear at a glance what counts
+- **Bigger star** — the ★ for the main tag is larger and its click area covers the left edge of the chip, so it is hard to miss (it lights up gold when you point at it)
 
 ### Tag Categories 1.8.0
 

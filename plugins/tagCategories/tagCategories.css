@@ -682,19 +682,32 @@
 }
 
 /* ★ = main chip: every scene has it, the other chips count only what goes with it */
+/* the star fills the chip's left edge, so it is easy to hit */
 .tc-star {
-  margin: 0 -2px 0 -3px;
-  font-size: 0.7rem;
-  opacity: 0.3;
-  transition: opacity 0.12s;
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  margin: 0 -3px 0 -11px;
+  padding: 0 4px 0 9px;
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.45;
+  cursor: pointer;
+  transition: opacity 0.12s, transform 0.12s, color 0.12s;
 }
 
 .tc-chip:hover .tc-star {
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 .tc-chip .tc-star:hover {
   opacity: 1;
+  color: var(--tc-gold);
+  transform: scale(1.2);
+}
+
+.tc-chip.is-main .tc-star:hover {
+  color: inherit;
 }
 
 .tc-chip.is-main {
@@ -710,6 +723,35 @@
 
 .tc-chip.is-main small {
   opacity: 0.75;
+}
+
+/* selected ✓ (pink), excluded ✕ (red outline, struck through), untouched chips fade while something is chosen */
+.tc-mark {
+  margin-right: -2px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.tc-chip.is-not {
+  color: #ff5a5a;
+  background: rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 0 0 1.5px #ff5a5a;
+  text-decoration: line-through 2px;
+  text-decoration-color: #ff5a5a;
+}
+
+.tc-chip.is-not .tc-mark,
+.tc-chip.is-not small {
+  display: inline-block;
+  text-decoration: none;
+}
+
+.tc-filter.has-sel .tc-chip:not(.is-on):not(.is-not):not(.is-main):not(.tc-chip-more) {
+  opacity: 0.5;
+}
+
+.tc-filter.has-sel .tc-chip:not(.is-on):not(.is-not):not(.is-main):hover {
+  opacity: 1;
 }
 
 .tc-main-note {

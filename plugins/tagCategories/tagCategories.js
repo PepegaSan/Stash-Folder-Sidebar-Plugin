@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.8.0";
+  const PLUGIN_VERSION = "1.8.1";
   const SEARCH_DEBOUNCE_MS = 250;
   const PAGE_SIZE = 60; // scenes per request; more are loaded while scrolling
   const CHIPS_COLLAPSED = 24; // tag chips shown before "+N more"
@@ -1232,6 +1232,9 @@
           },
         },
         React.createElement("span", { className: "tc-star", title: t(lang, "starTitle") }, "★"),
+        on || not
+          ? React.createElement("span", { className: "tc-mark", "aria-hidden": true }, on ? "✓" : "✕")
+          : null,
         chip.name,
         React.createElement(
           "small",
@@ -1253,7 +1256,7 @@
 
     return React.createElement(
       "div",
-      { className: "tc-filter" },
+      { className: "tc-filter" + (active ? " has-sel" : "") },
       React.createElement(
         "div",
         { className: "tc-filter-head" },
