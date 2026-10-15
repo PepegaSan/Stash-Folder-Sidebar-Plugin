@@ -9,7 +9,7 @@ Community plugins for [Stash](https://github.com/stashapp/stash), installable vi
 | [Folder Sidebar](#folder-sidebar) | Browse scenes by filesystem folder |
 | [Quick Markers](#quick-markers) | Hotkey scene markers with presets |
 | [Bracket Tags](#bracket-tags) | Tags from `[brackets]` in filenames |
-| [Tag Categories](#tag-categories) | Browse scenes by named categories (any matching tag) |
+| [Tag Categories](#tag-categories) | Browse scenes by named categories (any matching tag or performer) |
 
 ---
 
@@ -361,12 +361,12 @@ Reload plugins in Stash, then run the task or enable **Auto on new scenes**.
 
 # Tag Categories
 
-Named **categories**, each with a list of Stash **tags**. Open **Categories** in the main menu, pick a category, and browse every scene that has **any** of those tags (OR filter). Categories live in plugin settings — they are not a native Stash entity.
+Named **categories**, each with a list of Stash **tags** and optionally **performers**. Open **Categories** in the main menu, pick a category, and browse every scene that has **any** of those tags or performers (OR filter). Categories live in plugin settings — they are not a native Stash entity.
 
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.7.0-informational)
+![Version](https://img.shields.io/badge/version-1.8.0-informational)
 
 ## Features
 
@@ -376,12 +376,18 @@ The same tag can appear in multiple categories; categories do not block or claim
   tag such as **Bracket Tags** becomes a category on its own, and new child tags show up automatically
 - **Tag chips** — narrow a category down: click = select, right-click = exclude, **Any of them / All** for several
   selected tags. Each chip shows its number of scenes
+- **Main tag (★)** — like the main tags of the PMV Generator: ★ on a chip (or Shift+click) makes it the main tag.
+  Every scene then has it, and the other chips only show what goes with it, counted within its scenes — e.g. main tag
+  *Model X* shows *Model X* with action *Z, A, D* and how many scenes each. Click it again to take it back; it is
+  optional, without ★ everything works as before
+- **Performers** — a category can also list performers (e.g. *Performer X* with action *F*): they get a chip row of
+  their own (click, right-click, ★ as main performer) and their scenes belong to the category too
 - **Loads page by page** — 60 scenes at a time, more while scrolling (or **Load more**), so large categories open fast
 - **Search** and **Sort** (title, duration, date) run on the Stash server, over the whole category
 - **Open in Stash** — the same selection (tags, excluded tags, search, sort) as a regular Stash scene list, with
   paging, bulk edit and queue
 - **List / Preview** view toggle (thumbnails in Preview; preference kept in the browser)
-- Settings UI: name + comma-separated tags + **Include sub-tags**, edit/delete, collapsible sections
+- Settings UI: name + comma-separated tags + optional performers + **Include sub-tags**, edit/delete, collapsible sections
 - **Edit JSON (advanced)** modal with short help
 - UI language follows Stash (**English** / **German**; otherwise English)
 
@@ -410,7 +416,7 @@ Then **Settings → Plugins → Reload plugins**.
 | Section | Description |
 |---------|-------------|
 | **Categories** | List, edit, or delete categories |
-| **Add category** | Name + tags (`Action, Comedy, Drama`) |
+| **Add category** | Name + tags (`Action, Comedy, Drama`) + performers (optional) |
 | **Edit JSON** | Full config editor + help button |
 
 ### JSON shape
@@ -427,6 +433,11 @@ Then **Settings → Plugins → Reload plugins**.
       "name": "Bracket Tags",
       "tags": ["Bracket Tags"],
       "subTags": true
+    },
+    {
+      "name": "Models",
+      "tags": ["Dance", "Outdoor"],
+      "performers": ["Jane Doe", "John Doe"]
     }
   ]
 }
@@ -436,6 +447,7 @@ Then **Settings → Plugins → Reload plugins**.
 |-------|------|
 | `name` | Label in the UI |
 | `tags` | Tag names to filter by (any match) |
+| `performers` | Performer names (or an alias) — their scenes count too, each gets a chip (optional) |
 | `subTags` | `true` = child tags of these tags count too, any depth (optional) |
 | `id` | Fixed browser URL (optional; otherwise from `name`) |
 
@@ -447,21 +459,23 @@ Saved in plugin settings (`categoriesJson`) after you save in the UI. An optiona
 2. Open **Categories** in the main menu
 3. Select a category in the left sidebar — matching scenes appear on the right
 4. Narrow it down with the **tag chips**: click to select, right-click to exclude; with several selected tags choose
-   **Any of them** or **All**. **Reset** clears the selection
+   **Any of them** or **All**. **★** (or Shift+click) makes a chip the main tag: only what goes with it is left, with
+   its numbers. **Reset** clears the selection
 5. Switch **List** / **Preview** above the results; more scenes load while you scroll
 6. Use the search box and **Sort** for title, duration, or date
-7. **Open in Stash** shows the same selection in the regular scene list
+7. **Open in Stash** shows the same selection in the regular scene list. Stash's list can't combine tags *or*
+   performers with *Any of them*, nor a main tag with *Any of* more tags — then the button is greyed out
 
 ## Stash UI
 
 With the [Stash UI](https://github.com/AffordObedienceUntamed/stash-pmv-plugins) plugin (alternative interface, extension API v2), Tag Categories loads `stashui.js` from this plugin automatically — nothing to configure. Before, its menu entry opened the page in embedded classic Stash; now it is a page of Stash UI itself:
 
 - **Library → Categories** in the left menu, right after Tags (movable and hideable in Customize → Sidebar)
-- The same page as in classic Stash: categories with their number of scenes, tag chips (click / right-click, *Any of them* / *All*), search, sort, **List / Preview** (the preview plays on hover), more scenes while scrolling
+- The same page as in classic Stash: categories with their number of scenes, tag and performer chips (click / right-click / ★ main tag, *Any of them* / *All*), search, sort, **List / Preview** (the preview plays on hover), more scenes while scrolling
 - A click on a scene opens the **Stash UI player**; **Open in classic Stash** shows the same selection as a regular scene list (paging, bulk edit)
 - **Next / previous** in the player (and the next video when one ends) follow the category's list — same tag chips, search and sort, all scenes, not only the ones loaded so far. Needs a Stash UI with `stashui.play` (Pepega fork); otherwise the player goes on as usual
 - Each category has its own address (`#/p/tagCategories/<id>`), so Back and bookmarks work
-- Same categories (`categoriesJson`) as in classic Stash; edit them under **Settings → Plugins → Tag Categories**
+- Same categories (`categoriesJson`) as in classic Stash; edit them under **Settings → Plugins → Tag Categories** (performers: `performers` in the JSON, or the form in classic Stash)
 - Follows Stash UI's colour presets, liquid glass and interface language (English / German)
 
 ## Manual install
@@ -471,11 +485,18 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.7.0`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.8.0`.
 
 ---
 
 ## Changelog
+
+### Tag Categories 1.8.0
+
+- **Main tag (★)** — ★ on a chip (or Shift+click) makes it the main tag, like in the PMV Generator: every scene has it, the other chips only show what goes with it, with their number of scenes together with it. Optional; several main tags = scenes with all of them
+- **Performers in categories** — `performers` next to `tags` (settings form: *Performers*); their scenes belong to the category, they get a chip row of their own and can be the main one (e.g. *Performer X* with action *F*)
+- *Any of them* with a single chip counts like *All*, so main tag + one more chip can still be opened in Stash
+- Selections with several tag conditions at once are built so Stash evaluates them correctly (Stash joins the tags only once per kind of condition; a second one would break the list). Main tag + *Any of* several tags + an excluded tag can't be a single Stash query: that list is loaded whole and the plugin drops the scenes with the excluded tag itself
 
 ### Tag Categories 1.7.0
 

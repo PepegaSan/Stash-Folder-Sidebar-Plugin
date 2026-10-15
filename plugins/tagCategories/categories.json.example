@@ -9,6 +9,12 @@
       "id": "quality",
       "name": "Quality",
       "tags": ["4K", "HD"]
+    },
+    {
+      "id": "models",
+      "name": "Models",
+      "tags": ["Dance", "Outdoor"],
+      "performers": ["Jane Doe", "John Doe"]
     }
   ]
 }

@@ -17,6 +17,19 @@
 .tcx-filter { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 .tcx-filter-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .tcx-chip small { margin-left: 6px; opacity: .7; font-size: 11px; }
+.tcx-chiprow { display: flex; align-items: baseline; gap: 10px; }
+.tcx-chiplabel { flex: 0 0 auto; min-width: 72px; color: var(--faint); font-size: 12px; }
+.tcx-chiprow .kb-chips { flex: 1; min-width: 0; }
+/* ★ = main chip: every scene has it, the other chips count only what goes with it */
+.tcx-star { margin: 0 5px 0 -2px; font-size: 11px; opacity: .3; transition: opacity .12s; }
+.tcx-chip:hover .tcx-star { opacity: .6; }
+.tcx-chip .tcx-star:hover { opacity: 1; }
+.kb-chip.tcx-chip.is-main { color: #1a1206; background: var(--tcx-gold); box-shadow: none; font-weight: 600; }
+.tcx-chip.is-main .tcx-star { opacity: 1; }
+html.kb-glass .kb-chip.tcx-chip.is-main { color: var(--text); background: var(--glass-shine), color-mix(in srgb, var(--tcx-gold) 50%, transparent); border-color: color-mix(in srgb, var(--tcx-gold) 75%, transparent); }
+.tcx-page, .tcx-main { --tcx-gold: #ffc24a; }
+.tcx-mainnote { color: var(--tcx-gold); font-size: 13px; font-weight: 600; }
+.tcx-tools a.kb-btn.is-disabled { opacity: .45; cursor: not-allowed; }
 
 .tcx-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
 .tcx-search { flex: 1 1 220px; min-width: 160px; }
@@ -44,6 +57,7 @@
 .tcx-more { display: flex; justify-content: center; padding: 18px 0; }
 
 @media (max-width: 760px) {
+  .tcx-chiprow { flex-direction: column; gap: 4px; }
   .tcx-page { grid-template-columns: 1fr; }
   .tcx-nav { position: static; flex-direction: row; max-height: none; overflow-x: auto; }
   .tcx-cat { flex: 0 0 auto; }

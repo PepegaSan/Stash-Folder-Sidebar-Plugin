@@ -454,6 +454,7 @@
   --tc-pink: #ff3e8a;
   --tc-violet: #b48cff;
   --tc-ink: #1a0a16;
+  --tc-gold: #ffc24a;
 }
 
 .tc-filter {
@@ -626,6 +627,11 @@
   white-space: nowrap;
 }
 
+.tag-categories-open-stash.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .tag-categories-settings-subtags {
   margin-bottom: 1rem;
 }
@@ -653,4 +659,68 @@
 
 .tag-categories-sort select option {
   color: #000;
+}
+
+/* ---------- 1.8.0: main chip (★) and performer chips ---------- */
+
+.tc-chip-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.tc-chip-row .tc-chips {
+  flex: 1;
+  min-width: 0;
+}
+
+.tc-chip-label {
+  flex: 0 0 auto;
+  min-width: 5rem;
+  font-size: 0.78rem;
+  opacity: 0.6;
+}
+
+/* ★ = main chip: every scene has it, the other chips count only what goes with it */
+.tc-star {
+  margin: 0 -2px 0 -3px;
+  font-size: 0.7rem;
+  opacity: 0.3;
+  transition: opacity 0.12s;
+}
+
+.tc-chip:hover .tc-star {
+  opacity: 0.6;
+}
+
+.tc-chip .tc-star:hover {
+  opacity: 1;
+}
+
+.tc-chip.is-main {
+  color: var(--tc-ink);
+  background: var(--tc-gold);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.tc-chip.is-main .tc-star {
+  opacity: 1;
+}
+
+.tc-chip.is-main small {
+  opacity: 0.75;
+}
+
+.tc-main-note {
+  color: var(--tc-gold);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .tc-chip-row {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
 }

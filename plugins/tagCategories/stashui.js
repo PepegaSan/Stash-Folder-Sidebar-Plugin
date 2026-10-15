@@ -23,12 +23,24 @@ const STRINGS_DE = {
   "Add some in the settings of Tag Categories.": "Anlegen in den Einstellungen von Tag Categories.",
   "Open settings": "Einstellungen öffnen",
   "Tags:": "Tags:",
+  "Performers:": "Performer:",
+  Tags: "Tags",
+  Performers: "Performer",
   "+ sub-tags": "+ Unter-Tags",
   "These tags were not found in Stash and were skipped:": "Diese Tags gibt es in Stash nicht und wurden übersprungen:",
   "None of the category tags exist in Stash yet.": "Keiner der Kategorie-Tags existiert bisher in Stash.",
+  "These performers were not found in Stash and were skipped:": "Diese Performer gibt es in Stash nicht und wurden übersprungen:",
+  "None of the category's tags or performers exist in Stash yet.": "Keiner der Tags oder Performer der Kategorie existiert bisher in Stash.",
   "Any of them": "Eines davon",
   All: "Alle",
   "Click: select · Right-click: exclude": "Klick: auswählen · Rechtsklick: ausschließen",
+  "Click: select · Right-click: exclude · ★: main tag": "Klick: auswählen · Rechtsklick: ausschließen · ★: Haupt-Tag",
+  "Main tag: every scene has it, the other chips count only scenes with it – click to remove":
+    "Haupt-Tag: jede Szene hat ihn, die anderen Chips zählen nur Szenen mit ihm – Klick hebt es auf",
+  "Make this the main tag: every scene has it, the other chips show what goes with it":
+    "Zum Haupt-Tag machen: jede Szene hat ihn, die anderen Chips zeigen, was es dazu gibt",
+  "Main: {names}": "Haupt-Tag: {names}",
+  "Classic Stash can't show this selection as one scene list": "Klassisches Stash kann diese Auswahl nicht als eine Szenenliste zeigen",
   "Excluded – click to remove": "Ausgeschlossen – Klick hebt es auf",
   Reset: "Zurücksetzen",
   "+{n} more": "+{n} weitere",
@@ -92,7 +104,7 @@ function parseCategoriesJson(text) {
       const name = String(raw.name || raw.label || "").trim();
       if (!name) return;
       const id = String(raw.id || "").trim() || slugId(name) + "-" + index;
-      categories.push({ id, name, tags: parseTagsList(raw.tags), subTags: !!raw.subTags });
+      categories.push({ id, name, tags: parseTagsList(raw.tags), performers: parseTagsList(raw.performers), subTags: !!raw.subTags });
     });
     return categories;
   } catch (e) {
@@ -111,11 +123,13 @@ export default function setup(stashui) {
   let configPromise = null;
   const tagCache = new Map(); // lower-case tag name → Stash tag
   const childCache = new Map(); // sorted parent ids → all sub-tags (any depth)
+  const perfCache = new Map(); // lower-case performer name → Stash performer
 
   stashui.on("plugins-changed", () => {
     configPromise = null;
     tagCache.clear();
     childCache.clear();
+    perfCache.clear();
   });
 
   function loadStyles() {
@@ -150,7 +164,7 @@ export default function setup(stashui) {
     return configPromise;
   }
 
-  const TAG_FIELDS = "id name scene_count all: scene_count(depth: -1)";
+  const TAG_FIELDS = "id name scene_count all: scene_count(depth: -1) parents { id }";
   const tagCount = (tag, withSub) => (withSub && tag.all != null ? tag.all : tag.scene_count) || 0;
 
   // Tag names → Stash tags (exact name, case-insensitive). withSub: also every sub-tag, any depth.
@@ -192,14 +206,105 @@ export default function setup(stashui) {
     return { tags, missing, children };
   }
 
-  // Tag criterion for the scene list: the whole category, or narrowed by the chips (sel.on / sel.not)
-  function sceneCriterion(category, baseIds, sel) {
+  // Performer names → Stash performers (exact name, else an exact alias; case-insensitive)
+  async function resolvePerformers(names) {
+    const performers = [];
+    const missing = [];
+    const q = `query($f: FindFilterType, $pf: PerformerFilterType) { findPerformers(filter: $f, performer_filter: $pf) { performers { id name alias_list scene_count } } }`;
+    for (const name of names) {
+      const key = name.toLowerCase();
+      let found = perfCache.get(key) || null;
+      if (!found) {
+        let d = await stashui.gql(q, { f: { per_page: 25 }, pf: { name: { value: name, modifier: "EQUALS" } } });
+        found = ((d && d.findPerformers && d.findPerformers.performers) || []).find((p) => p.name.toLowerCase() === key) || null;
+        if (!found) {
+          d = await stashui.gql(q, { f: { per_page: 25, q: name } });
+          found = ((d && d.findPerformers && d.findPerformers.performers) || []).find((p) => (p.alias_list || []).some((a) => a.toLowerCase() === key)) || null;
+        }
+        if (found) perfCache.set(key, found);
+      }
+      if (!found) missing.push(name);
+      else if (!performers.some((p) => p.id === found.id)) performers.push(found);
+    }
+    return { performers, missing };
+  }
+
+  // Chips, the selection and the names use keys "t:<tag id>" and "p:<performer id>"
+  const idsOf = (keys, kind) => keys.filter((k) => k[0] === kind).map((k) => k.slice(2));
+  const NO_SEL = { main: [], on: [], not: [], mode: "any" };
+
+  // What Stash is asked for the list: every main chip (sel.main), any / all of the selected chips (sel.on), none of
+  // the excluded ones (sel.not); with nothing selected, any tag or performer of the category (base).
+  // Stash joins the tags only twice per query (one join for "has", one for "has none of") and the performers once
+  // (their "none of" is a subquery) – a second criterion on a join that is taken breaks both. So "all of" is
+  // INCLUDES_ALL, "any of" one kind is INCLUDES while that join is free, otherwise "not none of" (NOT + EXCLUDES),
+  // and excluded tags go where there is room. Main tags + "any of" tags + excluded tags would need three tag joins:
+  // then the excluded tags come back as dropTags (chip keys) and the caller drops those scenes itself.
+  function sceneQuery(category, base, sel) {
     const depth = category.subTags ? -1 : 0;
-    const crit = sel.on.length
-      ? { value: sel.on, modifier: sel.mode === "all" ? "INCLUDES_ALL" : "INCLUDES", depth }
-      : { value: baseIds, modifier: "INCLUDES", depth };
-    if (sel.not.length) crit.excludes = sel.not;
-    return crit;
+    const tagCrit = (value, modifier) => ({ value, modifier, depth });
+    const perfCrit = (value, modifier) => ({ value, modifier });
+    const uniq = (l) => [...new Set(l)];
+    const nothing = !sel.main.length && !sel.on.length;
+    const any = sel.mode !== "all";
+    let allT = uniq(idsOf(sel.main, "t").concat(any ? [] : idsOf(sel.on, "t")));
+    let allP = uniq(idsOf(sel.main, "p").concat(any ? [] : idsOf(sel.on, "p")));
+    let anyT = nothing ? base.tags : any ? idsOf(sel.on, "t") : [];
+    let anyP = nothing ? base.perfs : any ? idsOf(sel.on, "p") : [];
+    if (!nothing && anyT.length + anyP.length === 1) {
+      // "any of" one chip is "all of" it
+      allT = uniq(allT.concat(anyT));
+      allP = uniq(allP.concat(anyP));
+      anyT = anyP = [];
+    }
+    const notT = idsOf(sel.not, "t");
+    const notP = idsOf(sel.not, "p");
+    const filter = {};
+    const noneOf = {}; // goes in as NOT: "none of these" negated = any of them
+    const plainT = anyT.length && !anyP.length && !allT.length;
+    const plainP = anyP.length && !anyT.length && !allP.length;
+    if (allT.length) filter.tags = tagCrit(allT, "INCLUDES_ALL");
+    else if (plainT) filter.tags = tagCrit(anyT, "INCLUDES");
+    if (anyT.length && !plainT) noneOf.tags = tagCrit(anyT, "EXCLUDES");
+    if (allP.length) filter.performers = perfCrit(allP, "INCLUDES_ALL");
+    else if (plainP) filter.performers = perfCrit(anyP, "INCLUDES");
+    if (anyP.length && !plainP) noneOf.performers = perfCrit(anyP, "EXCLUDES");
+    if (notP.length) {
+      if (filter.performers) filter.performers.excludes = notP;
+      else filter.performers = perfCrit(notP, "EXCLUDES");
+    }
+    let orHas = null;
+    let dropTags = [];
+    if (notT.length) {
+      if (!noneOf.tags) {
+        if (filter.tags) filter.tags.excludes = notT;
+        else filter.tags = tagCrit(notT, "EXCLUDES");
+      } else if (!filter.tags) orHas = { tags: tagCrit(notT, "INCLUDES") }; // NOT (none of the chips OR one of these)
+      else dropTags = notT.map((id) => "t:" + id);
+    }
+    if (Object.keys(noneOf).length) filter.NOT = orHas ? { ...noneOf, OR: orHas } : noneOf;
+    return { filter, dropTags };
+  }
+
+  // The same selection as classic Stash criteria (one tags and one performers criterion, both apply).
+  // null = classic Stash can't express it: "any of" tags or performers, or a main chip plus "any of" more of its kind.
+  function classicCriteria(category, base, sel) {
+    const any = sel.mode !== "all" && sel.on.length > 1; // ("any of" one chip is "all of" it)
+    const nothing = !sel.main.length && !sel.on.length;
+    const across = nothing ? base.tags.length && base.perfs.length : any && idsOf(sel.on, "t").length && idsOf(sel.on, "p").length;
+    if (across) return null;
+    const crits = [];
+    for (const [kind, type, baseIds] of [["t", "tags", base.tags], ["p", "performers", base.perfs]]) {
+      const mainIds = idsOf(sel.main, kind);
+      const onIds = idsOf(sel.on, kind);
+      if (any && mainIds.length && onIds.length) return null;
+      const ids = nothing ? baseIds : mainIds.concat(onIds);
+      const excluded = idsOf(sel.not, kind);
+      if (!ids.length && !excluded.length) continue;
+      const modifier = nothing || (any && !mainIds.length) ? "INCLUDES" : "INCLUDES_ALL";
+      crits.push({ type, kind, modifier, ids, excluded, depth: category.subTags ? -1 : 0 });
+    }
+    return crits;
   }
 
   // Classic Stash puts a criterion into the URL as JSON with { } replaced by ( ) outside of strings
@@ -223,12 +328,16 @@ export default function setup(stashui) {
   }
 
   // The same selection as a regular scene list in classic Stash (embedded in Stash UI)
-  function classicScenesHref(crit, names, query, sortKey) {
+  function classicScenesHref(crits, names, query, sortKey) {
     const sort = SORTS.find((s) => s[0] === sortKey) || SORTS[0];
-    const item = (id) => ({ id: String(id), label: names[id] || String(id) });
     const parts = [];
     if (query) parts.push("q=" + encodeURIComponent(query));
-    parts.push("c=" + encodeCriterion({ type: "tags", modifier: crit.modifier, value: { items: crit.value.map(item), excluded: (crit.excludes || []).map(item), depth: crit.depth || 0 } }));
+    for (const c of crits) {
+      const item = (id) => ({ id: String(id), label: names[c.kind + ":" + id] || String(id) });
+      const value = { items: c.ids.map(item), excluded: c.excluded.map(item) };
+      if (c.type === "tags") value.depth = c.depth;
+      parts.push("c=" + encodeCriterion({ type: c.type, modifier: c.modifier, value }));
+    }
     parts.push("sortby=" + sort[2]);
     const isDefault = sort[2] === "date" ? sort[3] === "DESC" : sort[3] === "ASC"; // Stash's defaults
     if (!isDefault) parts.push("sortdir=" + sort[3].toLowerCase());
@@ -236,6 +345,7 @@ export default function setup(stashui) {
   }
 
   const sceneTitle = (s) => (s.title && s.title.trim()) || String((s.files[0] || {}).path || "").split(/[/\\]/).pop() || "Scene " + s.id;
+  const categoryLine = (c) => c.tags.concat(c.performers).join(", ");
 
   // ---------- The page: #/p/tagCategories/<category id> ----------
 
@@ -254,9 +364,9 @@ export default function setup(stashui) {
       el.innerHTML = `<div class="tcx-page">
           <nav class="tcx-nav" aria-label="${esc(t("Categories"))}">${categories
             .map(
-              (c) => `<a class="tcx-cat${c.id === category.id ? " is-on" : ""}" href="#/p/${PLUGIN_ID}/${encodeURIComponent(c.id)}" title="${esc(c.tags.join(", "))}">
+              (c) => `<a class="tcx-cat${c.id === category.id ? " is-on" : ""}" href="#/p/${PLUGIN_ID}/${encodeURIComponent(c.id)}" title="${esc(categoryLine(c))}">
                 <span class="tcx-cat-name"><span>${esc(c.name)}</span><small data-catcount="${esc(c.id)}"></small></span>
-                <span class="tcx-cat-tags">${esc(c.tags.join(", "))}${c.subTags ? " " + esc(t("+ sub-tags")) : ""}</span></a>`
+                <span class="tcx-cat-tags">${esc(categoryLine(c))}${c.subTags ? " " + esc(t("+ sub-tags")) : ""}</span></a>`
             )
             .join("")}</nav>
           <section class="tcx-main" data-main></section>
@@ -280,15 +390,16 @@ export default function setup(stashui) {
     for (const c of categories) {
       if (signal.aborted) return;
       try {
-        const r = await resolveTags(c.tags, false);
+        const [r, rp] = await Promise.all([resolveTags(c.tags, false), resolvePerformers(c.performers)]);
         const box = el.querySelector(`[data-catcount="${CSS.escape(c.id)}"]`);
         if (!box) continue;
-        if (!r.tags.length) {
+        if (!r.tags.length && !rp.performers.length) {
           box.textContent = "–";
           continue;
         }
+        const base = { tags: r.tags.map((tg) => tg.id), perfs: rp.performers.map((p) => p.id) };
         const d = await stashui.gql(`query($x: SceneFilterType) { findScenes(scene_filter: $x, filter: { per_page: 0 }) { count } }`, {
-          x: { tags: { value: r.tags.map((tg) => tg.id), modifier: "INCLUDES", depth: c.subTags ? -1 : 0 } },
+          x: sceneQuery(c, base, NO_SEL).filter,
         });
         box.textContent = ui.fmtNum(d.findScenes.count);
       } catch (e) {
@@ -299,15 +410,20 @@ export default function setup(stashui) {
 
   function mountCategory(main, category, signal) {
     const S = {
-      sel: { on: [], not: [], mode: "any" },
+      sel: NO_SEL,
       showAll: false,
       q: "",
       sort: SORTS.some((s) => s[0] === stashui.store.get("sort")) ? stashui.store.get("sort") : SORTS[0][0],
       view: stashui.store.get("view") === "preview" ? "preview" : "list",
-      chips: [],
-      names: {},
-      baseIds: [],
+      chips: [], // { key, kind: "t" | "p", name, count }
+      names: {}, // chip key → name
+      base: { tags: [], perfs: [] },
+      parents: new Map(), // tag id → its parent tag ids (a sub-tag counts for its parents too)
+      mainCounts: null, // chip key → scenes with the main chips and this one; null = no main chip
+      counting: false,
+      mainSeq: 0,
       scenes: [],
+      all: null, // every scene of the list, when it had to be filtered here (see sceneQuery)
       total: null,
       duration: null,
       page: 0,
@@ -316,22 +432,24 @@ export default function setup(stashui) {
     };
     let observer = null;
 
-    const tagsLine = `${t("Tags:")} ${category.tags.join(", ")}${category.subTags ? " " + t("+ sub-tags") : ""}`;
-    main.innerHTML = `<header class="tcx-head"><h2 class="kb-h2">${esc(category.name)}</h2><p class="kb-hint">${esc(tagsLine)}</p><p class="tcx-warn" data-missing hidden></p></header>
+    const lines = [];
+    if (category.tags.length) lines.push(`${t("Tags:")} ${category.tags.join(", ")}${category.subTags ? " " + t("+ sub-tags") : ""}`);
+    if (category.performers.length) lines.push(`${t("Performers:")} ${category.performers.join(", ")}`);
+    main.innerHTML = `<header class="tcx-head"><h2 class="kb-h2">${esc(category.name)}</h2><p class="kb-hint">${esc(lines.join(" · "))}</p><p class="tcx-warn" data-missing hidden></p></header>
       <div data-chipbox></div>
       <div class="tcx-tools" data-tools hidden>
         <input class="kb-field tcx-search" type="search" data-q placeholder="${esc(t("Search in this category …"))}" aria-label="${esc(t("Search in this category …"))}">
         <select class="kb-field tcx-sort" data-sort aria-label="${esc(t("Sort"))}" title="${esc(t("Sort"))}">${SORTS.map((s) => `<option value="${s[0]}"${s[0] === S.sort ? " selected" : ""}>${esc(t(s[1]))}</option>`).join("")}</select>
         <div class="kb-seg" data-view><button type="button" data-v="list">${t("List")}</button><button type="button" data-v="preview">${t("Preview")}</button></div>
         <button type="button" class="kb-btn" data-refresh>${ui.icon("repeat")}${t("Refresh")}</button>
-        <a class="kb-btn" data-classic title="${esc(t("Same selection as a regular Stash scene list: pages, bulk edit, queue"))}">${t("Open in classic Stash")}</a>
+        <a class="kb-btn" data-classic>${t("Open in classic Stash")}</a>
       </div>
       <h3 class="tcx-count" data-count></h3>
       <div data-list></div>
       <div class="tcx-more" data-more hidden><button type="button" class="kb-btn" data-loadmore></button></div>`;
     const $ = (s) => main.querySelector(s);
 
-    const crit = () => sceneCriterion(category, S.baseIds, S.sel);
+    const query = () => sceneQuery(category, S.base, S.sel);
 
     function paintChips() {
       const box = $("[data-chipbox]");
@@ -339,29 +457,61 @@ export default function setup(stashui) {
         box.innerHTML = "";
         return;
       }
-      const marked = (tg) => S.sel.on.includes(tg.id) || S.sel.not.includes(tg.id);
-      const visible = S.showAll || S.chips.length <= CHIPS_COLLAPSED ? S.chips : S.chips.filter((tg, i) => i < CHIPS_COLLAPSED || marked(tg));
-      const hidden = S.chips.length - visible.length;
-      const active = S.sel.on.length || S.sel.not.length;
+      const sel = S.sel;
+      const isMain = (c) => sel.main.includes(c.key);
+      const marked = (c) => isMain(c) || sel.on.includes(c.key) || sel.not.includes(c.key);
+      // with a main chip: only what goes with it, counted within its scenes, most first
+      const withMain = S.mainCounts && !S.counting;
+      const count = (c) => (withMain ? S.mainCounts.get(c.key) || 0 : c.count);
+      let hidden = 0;
+      let long = false;
+      const group = (kind) => {
+        let list = S.chips.filter((c) => c.kind === kind);
+        if (withMain) list = list.filter((c) => marked(c) || count(c) > 0).sort((a, b) => isMain(b) - isMain(a) || count(b) - count(a) || a.name.localeCompare(b.name));
+        const visible = S.showAll || list.length <= CHIPS_COLLAPSED ? list : list.filter((c, i) => i < CHIPS_COLLAPSED || marked(c));
+        hidden += list.length - visible.length;
+        long = long || list.length > CHIPS_COLLAPSED;
+        return visible;
+      };
+      const hint = t("Click: select · Right-click: exclude · ★: main tag");
+      const chip = (c) => {
+        const main = isMain(c);
+        const on = sel.on.includes(c.key);
+        const not = sel.not.includes(c.key);
+        const title = main ? t("Main tag: every scene has it, the other chips count only scenes with it – click to remove") : not ? t("Excluded – click to remove") : hint;
+        return `<button type="button" class="kb-chip tcx-chip${main ? " is-main" : on ? " is-on" : not ? " is-not" : ""}" data-chip="${esc(c.key)}" aria-pressed="${main || on}" title="${esc(title)}"><span class="tcx-star" data-star title="${esc(t("Make this the main tag: every scene has it, the other chips show what goes with it"))}">★</span>${esc(c.name)}<small>${S.counting && !main ? "…" : ui.fmtNum(count(c))}</small></button>`;
+      };
+      const tags = group("t");
+      const perfs = group("p");
+      const labelled = S.chips.some((c) => c.kind === "p") && S.chips.some((c) => c.kind === "t");
+      const row = (label, list) => (list.length ? `<div class="tcx-chiprow">${labelled ? `<span class="tcx-chiplabel">${esc(t(label))}</span>` : ""}<div class="kb-chips">${list.map(chip).join("")}</div></div>` : "");
+      const active = sel.main.length || sel.on.length || sel.not.length;
+      const mainNames = sel.main.map((k) => S.names[k] || k).join(", ");
       box.innerHTML = `<div class="tcx-filter">
           <div class="tcx-filter-head">
-            <div class="kb-seg" data-mode><button type="button" data-v="any" class="${S.sel.mode === "any" ? "is-on" : ""}">${t("Any of them")}</button><button type="button" data-v="all" class="${S.sel.mode === "all" ? "is-on" : ""}">${t("All")}</button></div>
-            <span class="kb-hint">${t("Click: select · Right-click: exclude")}</span>
+            <div class="kb-seg" data-mode><button type="button" data-v="any" class="${sel.mode === "any" ? "is-on" : ""}">${t("Any of them")}</button><button type="button" data-v="all" class="${sel.mode === "all" ? "is-on" : ""}">${t("All")}</button></div>
+            ${sel.main.length ? `<span class="tcx-mainnote">★ ${esc(t("Main: {names}", { names: mainNames }))}</span>` : `<span class="kb-hint">${esc(hint)}</span>`}
             ${active ? `<button type="button" class="kb-btn is-ghost" data-reset>${t("Reset")}</button>` : ""}
           </div>
-          <div class="kb-chips">${visible
-            .map((tg) => {
-              const on = S.sel.on.includes(tg.id);
-              const not = S.sel.not.includes(tg.id);
-              return `<button type="button" class="kb-chip tcx-chip${on ? " is-on" : not ? " is-not" : ""}" data-chip="${esc(tg.id)}" aria-pressed="${on}" title="${esc(not ? t("Excluded – click to remove") : t("Click: select · Right-click: exclude"))}">${esc(tg.name)}<small>${ui.fmtNum(tagCount(tg, category.subTags))}</small></button>`;
-            })
-            .join("")}${hidden > 0 || (S.showAll && S.chips.length > CHIPS_COLLAPSED) ? `<button type="button" class="kb-chip tcx-chip-more" data-allchips>${S.showAll ? t("Show less") : t("+{n} more", { n: hidden })}</button>` : ""}</div>
+          ${row("Tags", tags)}${row("Performers", perfs)}
+          ${hidden > 0 || (S.showAll && long) ? `<div class="kb-chips"><button type="button" class="kb-chip tcx-chip-more" data-allchips>${S.showAll ? t("Show less") : t("+{n} more", { n: hidden })}</button></div>` : ""}
         </div>`;
     }
 
     function paintTools() {
       main.querySelectorAll("[data-view] [data-v]").forEach((b) => b.classList.toggle("is-on", b.dataset.v === S.view));
-      $("[data-classic]").href = classicScenesHref(crit(), S.names, S.q, S.sort);
+      const a = $("[data-classic]");
+      const crits = classicCriteria(category, S.base, S.sel);
+      a.classList.toggle("is-disabled", !crits);
+      if (crits) {
+        a.href = classicScenesHref(crits, S.names, S.q, S.sort);
+        a.title = t("Same selection as a regular Stash scene list: pages, bulk edit, queue");
+        a.removeAttribute("aria-disabled");
+      } else {
+        a.removeAttribute("href");
+        a.title = t("Classic Stash can't show this selection as one scene list");
+        a.setAttribute("aria-disabled", "true");
+      }
     }
 
     function cardHtml(s) {
@@ -382,14 +532,14 @@ export default function setup(stashui) {
       const i = S.scenes.findIndex((s) => String(s.id) === id);
       if (i < 0 || !stashui.has("play")) return false;
       const piece = (s) => ({ id: s.id, title: sceneTitle(s), thumb: s.paths.screenshot });
-      const queue = stashui.play(S.scenes.map(piece), i);
+      const queue = stashui.play((S.all || S.scenes).map(piece), i);
       if (!queue) return false;
-      if (S.total != null && S.scenes.length < S.total) {
+      if (!S.all && S.total != null && S.scenes.length < S.total) {
         const sort = SORTS.find((s) => s[0] === S.sort) || SORTS[0];
         stashui
           .gql(
             `query($f: FindFilterType, $x: SceneFilterType) { findScenes(filter: $f, scene_filter: $x) { scenes { id title paths { screenshot } files { path } } } }`,
-            { f: { per_page: -1, sort: sort[2], direction: sort[3], q: S.q || undefined }, x: { tags: crit() } },
+            { f: { per_page: -1, sort: sort[2], direction: sort[3], q: S.q || undefined }, x: query().filter },
             { heavy: true }
           )
           .then((d) => queue.add(d.findScenes.scenes.map(piece)))
@@ -401,7 +551,7 @@ export default function setup(stashui) {
     function paintList() {
       const box = $("[data-list]");
       const count = $("[data-count]");
-      const selecting = S.sel.on.length || S.sel.not.length;
+      const selecting = S.sel.main.length || S.sel.on.length || S.sel.not.length;
       if (S.total == null) {
         count.textContent = "";
         box.innerHTML = `<p class="kb-hint">${t("Loading …")}</p>`;
@@ -420,20 +570,44 @@ export default function setup(stashui) {
     // page 1 of a new selection, or the next page
     async function load(next) {
       if (next && (S.busy || S.total == null || S.scenes.length >= S.total)) return;
+      if (next && S.all) {
+        S.scenes = S.all.slice(0, S.scenes.length + PAGE_SIZE);
+        return paintList();
+      }
       const seq = next ? S.seq : ++S.seq;
       if (!next) {
         S.page = 0;
         S.scenes = [];
+        S.all = null;
         S.total = null;
         S.duration = null;
         paintList();
       }
       S.busy = true;
       const sort = SORTS.find((s) => s[0] === S.sort) || SORTS[0];
+      const { filter, dropTags } = query();
       try {
+        if (dropTags.length) {
+          // all scenes at once; the ones with an excluded tag are dropped here, pages are cut from the rest
+          const d = await stashui.gql(
+            `query($f: FindFilterType, $x: SceneFilterType) { findScenes(filter: $f, scene_filter: $x) { scenes { id title paths { screenshot preview } files { path duration } tags { id } } } }`,
+            { f: { per_page: -1, sort: sort[2], direction: sort[3], q: S.q || undefined }, x: filter },
+            { heavy: true }
+          );
+          if (seq !== S.seq || signal.aborted) return;
+          S.all =d.findScenes.scenes.filter((s) => {
+            const keys = new Set();
+            s.tags.forEach((tg) => addTag(keys, tg.id));
+            return !dropTags.some((k) => keys.has(k));
+          });
+          S.scenes = S.all.slice(0, PAGE_SIZE);
+          S.total = S.all.length;
+          S.duration = S.all.reduce((sum, s) => sum + ((s.files[0] || {}).duration || 0), 0);
+          return paintList();
+        }
         const d = await stashui.gql(
           `query($f: FindFilterType, $x: SceneFilterType) { findScenes(filter: $f, scene_filter: $x) { count duration scenes { id title paths { screenshot preview } files { path duration } } } }`,
-          { f: { page: S.page + 1, per_page: PAGE_SIZE, sort: sort[2], direction: sort[3], q: S.q || undefined }, x: { tags: crit() } }
+          { f: { page: S.page + 1, per_page: PAGE_SIZE, sort: sort[2], direction: sort[3], q: S.q || undefined }, x: filter }
         );
         if (seq !== S.seq || signal.aborted) return;
         S.page += 1;
@@ -448,6 +622,48 @@ export default function setup(stashui) {
       }
     }
 
+    // A scene with a sub-tag counts for every parent of it in the category too (like depth -1 in the filter)
+    function addTag(keys, id) {
+      const key = "t:" + id;
+      if (keys.has(key)) return;
+      keys.add(key);
+      if (category.subTags) (S.parents.get(String(id)) || []).forEach((p) => addTag(keys, p));
+    }
+
+    // Chip numbers under the main chips: the tags and performers of all their scenes, counted here
+    async function countWithMain() {
+      const seq = ++S.mainSeq;
+      if (!S.sel.main.length) {
+        S.mainCounts = null;
+        S.counting = false;
+        return paintChips();
+      }
+      S.counting = true;
+      paintChips();
+      try {
+        const d = await stashui.gql(
+          `query($x: SceneFilterType) { findScenes(scene_filter: $x, filter: { per_page: -1 }) { scenes { tags { id } performers { id } } } }`,
+          { x: sceneQuery(category, S.base, { ...NO_SEL, main: S.sel.main }).filter },
+          { heavy: true }
+        );
+        if (seq !== S.mainSeq || signal.aborted) return;
+        const counts = new Map();
+        for (const s of d.findScenes.scenes) {
+          const keys = new Set();
+          s.tags.forEach((tg) => addTag(keys, tg.id));
+          s.performers.forEach((p) => keys.add("p:" + p.id));
+          keys.forEach((k) => counts.set(k, (counts.get(k) || 0) + 1));
+        }
+        S.mainCounts = counts;
+      } catch (e) {
+        if (seq !== S.mainSeq || signal.aborted) return;
+        S.mainCounts = null; // (the chips keep their numbers for the whole category)
+        ui.errorToast(e, "Tag Categories");
+      }
+      S.counting = false;
+      paintChips();
+    }
+
     const reload = () => {
       paintTools();
       load(false);
@@ -457,15 +673,28 @@ export default function setup(stashui) {
       reload();
     }, SEARCH_DEBOUNCE_MS);
 
-    function toggleChip(id, exclude) {
-      const s = S.sel;
-      const drop = (l) => l.filter((x) => x !== id);
-      if (exclude) S.sel = s.not.includes(id) ? { ...s, not: drop(s.not) } : { ...s, on: drop(s.on), not: s.not.concat(id) };
-      else if (s.on.includes(id)) S.sel = { ...s, on: drop(s.on) };
-      else if (s.not.includes(id)) S.sel = { ...s, not: drop(s.not) };
-      else S.sel = { ...s, on: s.on.concat(id) };
+    function select(sel, mainChanged) {
+      S.sel = sel;
       paintChips();
       reload();
+      if (mainChanged) countWithMain();
+    }
+
+    function toggleChip(key, exclude) {
+      const s = S.sel;
+      const drop = (l) => l.filter((x) => x !== key);
+      // a main chip: click takes it back, right-click excludes it instead
+      if (s.main.includes(key)) return select({ ...s, main: drop(s.main), not: exclude ? s.not.concat(key) : s.not }, true);
+      if (exclude) select(s.not.includes(key) ? { ...s, not: drop(s.not) } : { ...s, on: drop(s.on), not: s.not.concat(key) });
+      else if (s.on.includes(key)) select({ ...s, on: drop(s.on) });
+      else if (s.not.includes(key)) select({ ...s, not: drop(s.not) });
+      else select({ ...s, on: s.on.concat(key) });
+    }
+
+    function toggleMain(key) {
+      const s = S.sel;
+      const drop = (l) => l.filter((x) => x !== key);
+      select(s.main.includes(key) ? { ...s, main: drop(s.main) } : { ...s, main: s.main.concat(key), on: drop(s.on), not: drop(s.not) }, true);
     }
 
     main.addEventListener("click", (e) => {
@@ -476,19 +705,16 @@ export default function setup(stashui) {
         return;
       }
       const chip = e.target.closest("[data-chip]");
-      if (chip) return toggleChip(chip.dataset.chip, false);
+      if (chip) return e.target.closest("[data-star]") || e.shiftKey ? toggleMain(chip.dataset.chip) : toggleChip(chip.dataset.chip, false);
       const mode = e.target.closest("[data-mode] [data-v]");
       if (mode) {
         S.sel = { ...S.sel, mode: mode.dataset.v };
         paintChips();
         if (S.sel.on.length > 1) reload();
+        else paintTools();
         return;
       }
-      if (e.target.closest("[data-reset]")) {
-        S.sel = { on: [], not: [], mode: S.sel.mode };
-        paintChips();
-        return reload();
-      }
+      if (e.target.closest("[data-reset]")) return select({ ...NO_SEL, mode: S.sel.mode }, S.sel.main.length > 0);
       if (e.target.closest("[data-allchips]")) {
         S.showAll = !S.showAll;
         return paintChips();
@@ -500,7 +726,11 @@ export default function setup(stashui) {
         paintTools();
         return paintList();
       }
-      if (e.target.closest("[data-refresh]")) return reload();
+      if (e.target.closest("[data-refresh]")) {
+        reload();
+        if (S.sel.main.length) countWithMain();
+        return;
+      }
       if (e.target.closest("[data-loadmore]")) return load(true);
     });
     main.addEventListener("contextmenu", (e) => {
@@ -538,21 +768,32 @@ export default function setup(stashui) {
 
     (async () => {
       try {
-        const r = await resolveTags(category.tags, category.subTags);
+        const [r, rp] = await Promise.all([resolveTags(category.tags, category.subTags), resolvePerformers(category.performers)]);
         if (signal.aborted) return;
-        if (r.missing.length) {
-          const warn = $("[data-missing]");
-          warn.hidden = false;
-          warn.textContent = t("These tags were not found in Stash and were skipped:") + " " + r.missing.join(", ");
+        const warn = [];
+        if (r.missing.length) warn.push(t("These tags were not found in Stash and were skipped:") + " " + r.missing.join(", "));
+        if (rp.missing.length) warn.push(t("These performers were not found in Stash and were skipped:") + " " + rp.missing.join(", "));
+        if (warn.length) {
+          $("[data-missing]").hidden = false;
+          $("[data-missing]").textContent = warn.join(" ");
         }
-        if (!r.tags.length) {
-          $("[data-list]").innerHTML = `<div class="kb-empty"><b>${t("None of the category tags exist in Stash yet.")}</b></div>`;
+        if (!r.tags.length && !rp.performers.length) {
+          const none = category.performers.length ? "None of the category's tags or performers exist in Stash yet." : "None of the category tags exist in Stash yet.";
+          $("[data-list]").innerHTML = `<div class="kb-empty"><b>${t(none)}</b></div>`;
           return;
         }
-        S.baseIds = r.tags.map((tg) => tg.id);
-        const list = category.subTags && r.children.length ? r.children : r.tags;
-        S.chips = list.slice().sort((a, b) => tagCount(b, category.subTags) - tagCount(a, category.subTags) || a.name.localeCompare(b.name));
-        r.tags.concat(r.children).forEach((tg) => (S.names[tg.id] = tg.name));
+        S.base = { tags: r.tags.map((tg) => tg.id), perfs: rp.performers.map((p) => p.id) };
+        const byCount = (a, b) => b.count - a.count || a.name.localeCompare(b.name);
+        const tagList = category.subTags && r.children.length ? r.children : r.tags;
+        S.chips = tagList
+          .map((tg) => ({ key: "t:" + tg.id, kind: "t", name: tg.name, count: tagCount(tg, category.subTags) }))
+          .sort(byCount)
+          .concat(rp.performers.map((p) => ({ key: "p:" + p.id, kind: "p", name: p.name, count: p.scene_count || 0 })).sort(byCount));
+        r.tags.concat(r.children).forEach((tg) => {
+          S.names["t:" + tg.id] = tg.name;
+          S.parents.set(String(tg.id), (tg.parents || []).map((p) => String(p.id)));
+        });
+        rp.performers.forEach((p) => (S.names["p:" + p.id] = p.name));
         $("[data-tools]").hidden = false;
         paintChips();
         reload();
@@ -563,6 +804,7 @@ export default function setup(stashui) {
 
     return () => {
       S.seq++;
+      S.mainSeq++;
       if (observer) observer.disconnect();
       main.querySelectorAll("video").forEach((v) => v.removeAttribute("src"));
     };
