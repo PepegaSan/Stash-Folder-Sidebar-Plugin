@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.9.0";
+  const PLUGIN_VERSION = "1.10.0";
   const SEARCH_DEBOUNCE_MS = 250;
   const PAGE_SIZE = 60; // scenes per request; more are loaded while scrolling
   const CHIPS_COLLAPSED = 24; // tag chips shown before "+N more"
@@ -2005,10 +2005,11 @@
       PluginApi.hooks && typeof PluginApi.hooks.useToast === "function"
         ? PluginApi.hooks.useToast()
         : null;
+    const navigate = usePluginNavigate();
     const ref = React.useRef(null);
-    // The module keeps running across renders; it reads the newest settings and toast from here
+    // The module keeps running across renders; it reads the newest settings, toast and router from here
     const latest = React.useRef(null);
-    latest.current = { settings: settingsApi, toast: toastApi };
+    latest.current = { settings: settingsApi, toast: toastApi, navigate: navigate };
     const loading = settingsApi.loading;
 
     React.useEffect(
@@ -2047,6 +2048,17 @@
               },
               parseJson: parseCategoriesJson,
               toJson: categoriesToJson,
+              // The number of scenes in the list opens the category page (Stash UI's own page inside its host)
+              categoryHref: function (id) {
+                return isStashUiHost()
+                  ? "#/p/" + PLUGIN_ID + "/" + encodeURIComponent(id)
+                  : ROUTE_PATH + "?category=" + encodeURIComponent(id);
+              },
+              openCategory: isStashUiHost()
+                ? undefined
+                : function (id) {
+                    latest.current.navigate(ROUTE_PATH + "?category=" + encodeURIComponent(id));
+                  },
             });
           })
           .catch(function (e) {

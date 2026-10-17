@@ -145,7 +145,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.12.0-informational)
+![Version](https://img.shields.io/badge/version-1.13.0-informational)
 
 ## Requirements
 
@@ -208,9 +208,14 @@ The classic panel and touch bar also pick up the Stash UI colours when Stash UI 
 
 One page for classic Stash and Stash UI (`settings.js`), in English or German:
 
-- **General** — default preset; classic Stash also: **panel position** (corner or hidden, drag the panel header to place it freely), **start collapsed**, **touch controls** (auto / on / off)
-- **Presets** — every preset with its select key, tags as chips (primary tag highlighted, tags missing in Stash in red) and its In / Out / Instant keys. **Drag the handle** (or ↑ / ↓ on it) to change the order — it is the order of the preset chips on the scene page
-- **Edit / New preset** — opens right under the row: name, **primary tag** and **more tags** with suggestions from Stash (number of scenes each), **select key** Shift+1–9 as buttons (taken ones struck through; taking one moves it), **key fields** that record the combination you press, with warnings for clashes (same key twice, Shift+1–9, plain keys)
+- **General** (classic Stash only) — **panel position** (corner or hidden, drag the panel header to place it freely), **start collapsed**, **touch controls** (auto / on / off)
+- **Presets** — every preset with its select key, tags as chips (primary tag highlighted) and its In / Out / Instant keys
+  - **★** marks the **default preset** (active when a scene opens) — click another star to change it
+  - Tags missing in Stash are red; the **+** on such a chip creates the tag (**Create all** in the warning above the list)
+  - **Duplicate** a preset to use it as a template (the copy opens right away, without a select key)
+  - **Drag the handle** (or ↑ / ↓ on it) to change the order — it is the order of the preset chips on the scene page; at the top or bottom edge the page scrolls along
+  - From 8 presets on, a **search field** filters by name and tag
+- **Edit / New preset** — opens right under the row: name, **primary tag** and **more tags** with suggestions from Stash (number of scenes each), **select key** Shift+1–9 as buttons (taken ones struck through; taking one moves it), **key fields** that record the combination you press, with warnings for clashes (same key twice, Shift+1–9, plain keys). Duplicate and Delete are here too (on phones only here)
 - **Advanced** — help and the full config as JSON
 
 JSON example:
@@ -258,8 +263,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.12.0`.
-6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.12.0** next to Quick Markers.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.13.0`.
+6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.13.0** next to Quick Markers.
 
 If an old version number appears, the old plugin files are still active.
 
@@ -434,7 +439,7 @@ Named **categories**, each with a list of Stash **tags** and optionally **perfor
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.9.0-informational)
+![Version](https://img.shields.io/badge/version-1.10.0-informational)
 
 ## Features
 
@@ -456,7 +461,7 @@ The same tag can appear in multiple categories; categories do not block or claim
 - **Open in Stash** — the same selection (tags, excluded tags, search, sort) as a regular Stash scene list, with
   paging, bulk edit and queue
 - **List / Preview** view toggle (thumbnails in Preview; preference kept in the browser)
-- Settings page (classic Stash and Stash UI): categories with their number of scenes, drag to reorder, editor right under the row with tag and performer suggestions from Stash, **Include sub-tags** switch and a live preview of the matching scenes
+- Settings page (classic Stash and Stash UI): categories with their number of scenes (opens the category page), drag to reorder, duplicate, search, missing tags / performers created with one click, editor right under the row with tag and performer suggestions from Stash, **Include sub-tags** switch and a live preview of the matching scenes
 - **Advanced**: help and the full config as JSON
 - UI language follows Stash (**English** / **German**; otherwise English)
 
@@ -486,8 +491,8 @@ One page for classic Stash and Stash UI (`settings.js`):
 
 | Part | Description |
 |------|-------------|
-| **Categories** | Each category with its number of scenes and its tags / performers as chips (missing in Stash: red). Drag the handle (or ↑ / ↓ on it) to change the order of the category menu |
-| **Edit / New category** | Opens under the row: name, tags and performers with suggestions from Stash, **Include sub-tags**, live preview of how many scenes match |
+| **Categories** | Each category with its number of scenes (a click opens the category page) and its tags / performers as chips. Missing in Stash: red, the **+** on the chip creates the tag or performer (**Create all** in the warning). **Duplicate** a category as a template. Drag the handle (or ↑ / ↓ on it) to change the order of the category menu; the page scrolls along at the edge. From 8 categories on, a **search field** filters by name, tag and performer |
+| **Edit / New category** | Opens under the row: name, tags and performers with suggestions from Stash, **Include sub-tags**, live preview of how many scenes match; Duplicate and Delete (on phones only here) |
 | **Advanced** | Help and the full config as JSON |
 
 ### JSON shape
@@ -556,7 +561,7 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.9.0`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.10.0`.
 
 ---
 

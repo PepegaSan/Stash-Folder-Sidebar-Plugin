@@ -30,6 +30,8 @@ const TOUCH = [
   ["off", "Off"],
 ];
 const SUGGEST_DEBOUNCE_MS = 180;
+const SEARCH_FROM = 8; // presets from which on the list gets a search field
+const SCROLL_ZONE = 56; // px at the top / bottom edge where dragging a row scrolls the page
 
 // Key names in the Mousetrap spelling of quickMarkers.js ("shift+i", "shift+]", "shift+3")
 const NAMED_KEYS = { arrowleft: "left", arrowright: "right", arrowup: "up", arrowdown: "down", escape: "esc", " ": "space", enter: "enter" };
@@ -44,8 +46,9 @@ export const STRINGS_DE = {
     "Marker per Tastenkürzel setzen. Jedes Preset legt fest, welche Tags der Marker bekommt.",
   Help: "Hilfe",
   General: "Allgemein",
-  "Default preset": "Standard-Preset",
-  "Active when a scene opens.": "Aktiv, wenn eine Szene öffnet.",
+  "Default preset – active when a scene opens": "Standard-Preset – aktiv, wenn eine Szene öffnet",
+  "Make {label} the default preset": "{label} zum Standard-Preset machen",
+  "Default preset saved": "Standard-Preset gespeichert",
   "Panel position": "Panel-Position",
   "Drag the panel header to move it; double-click resets it.": "Ziehbar am Panel-Kopf; Doppelklick setzt zurück.",
   "Top left": "Oben links",
@@ -64,11 +67,20 @@ export const STRINGS_DE = {
   Key: "Taste",
   "Preset and tags": "Preset und Tags",
   "In · Out · Instant": "In · Out · Sofort",
-  Default: "Standard",
   "A tag is missing in Stash": "Ein Tag fehlt in Stash",
   "Tag doesn't exist in Stash": "Tag existiert in Stash nicht",
+  "Create “{name}” in Stash": "„{name}“ in Stash anlegen",
+  "Created in Stash: {names}": "In Stash angelegt: {names}",
+  "Create all": "Alle anlegen",
   "Edit {label}": "{label} bearbeiten",
   "Delete {label}": "{label} löschen",
+  Duplicate: "Duplizieren",
+  "Duplicate {label}": "{label} duplizieren",
+  "{label} (copy)": "{label} (Kopie)",
+  "Preset duplicated": "Preset dupliziert",
+  "Search presets …": "Presets durchsuchen …",
+  "{n} of {total}": "{n} von {total}",
+  "No preset matches “{q}”.": "Kein Preset passt zu „{q}“.",
   "Move {label}": "{label} verschieben",
   "Drag to change the order (or ↑ / ↓)": "Ziehen ändert die Reihenfolge (oder ↑ / ↓)",
   "Close editor": "Editor schließen",
@@ -124,8 +136,8 @@ export const STRINGS_DE = {
     "Aus presets.json geladen – Speichern hier legt die Presets in Stash ab.",
   "Built-in defaults — saving here stores the presets in Stash.":
     "Eingebaute Standardwerte – Speichern hier legt die Presets in Stash ab.",
-  "These tags don't exist in Stash, so their presets can't create markers: {names}. Create the tags or fix the presets.":
-    "Diese Tags gibt es in Stash nicht, die zugehörigen Presets können keine Marker anlegen: {names}. Tags anlegen oder Presets korrigieren.",
+  "These tags don't exist in Stash, so their presets can't create markers: {names}.":
+    "Diese Tags gibt es in Stash nicht, die zugehörigen Presets können keine Marker anlegen: {names}.",
   "In the player": "Im Player",
   "select preset": "Preset wählen",
   "previous / next": "voriges / nächstes",
@@ -134,8 +146,8 @@ export const STRINGS_DE = {
   "Replaces all presets. Fields: id, label, primaryTag, tags, rangeInKey, rangeOutKey, instantKey, selectSlot (1–9 or null), plus defaultPresetIndex.":
     "Ersetzt alle Presets. Felder: id, label, primaryTag, tags, rangeInKey, rangeOutKey, instantKey, selectSlot (1–9 oder null), dazu defaultPresetIndex.",
   "How presets work": "So funktionieren Presets",
-  "A preset is one kind of marker: its primary tag becomes the marker's primary tag, the more tags are added to the marker. Every tag must exist in Stash (Tags page) — missing ones are shown in red.":
-    "Ein Preset ist eine Art von Marker: Sein Haupt-Tag wird zum Haupt-Tag des Markers, die weiteren Tags kommen dazu. Jeder Tag muss in Stash existieren (Seite Tags) – fehlende werden rot angezeigt.",
+  "A preset is one kind of marker: its primary tag becomes the marker's primary tag, the more tags are added to the marker. Every tag must exist in Stash — missing ones are shown in red, + on the chip creates them.":
+    "Ein Preset ist eine Art von Marker: Sein Haupt-Tag wird zum Haupt-Tag des Markers, die weiteren Tags kommen dazu. Jeder Tag muss in Stash existieren – fehlende werden rot angezeigt, + am Chip legt sie an.",
   "While watching, Shift+1–9 (the select key) or Shift+[ / ] pick the active preset. In, Out and Instant always work for the active preset, so usually every preset keeps Shift+I / O / M.":
     "Beim Schauen wählen Shift+1–9 (die Auswahl-Taste) oder Shift+[ / ] das aktive Preset. In, Out und Sofort gelten immer für das aktive Preset, daher behalten meist alle Presets Shift+I / O / M.",
   "The order here is the order of the preset chips on the scene page. Drag the handle on the left to change it.":
@@ -154,7 +166,11 @@ export function mountSettings(el, env) {
   const ac = new AbortController();
   const on = (type, fn, opts) => el.addEventListener(type, fn, Object.assign({ signal: ac.signal }, opts));
   const timers = new Map();
-  const tagCache = new Map(); // lower-case name → Promise<boolean> (exists in Stash)
+  const tagCache = new Map(); // lower-case name → Promise<name in Stash | null>
+  let painting = false; // (the focused field is replaced while drawing – its focusout is not the user's)
+  let dragging = false; // a row is being dragged: drawing waits until it is dropped
+  let paintLater = false;
+  let saveChain = Promise.resolve();
 
   const S = {
     config: null,
@@ -166,6 +182,7 @@ export function mountSettings(el, env) {
     suggest: null, // { field, items, index }
     recording: null, // key field waiting for a key press
     missing: new Set(), // lower-case tag names that don't exist in Stash
+    filter: "", // text in the search field above the list
     advanced: false,
     json: null, // text in the JSON editor (null = from the config)
   };
@@ -177,6 +194,10 @@ export function mountSettings(el, env) {
   const scenesText = (n) => (n === 1 ? t("1 scene") : t("{n} scenes", { n: fmtNum(n) }));
   const lower = (s) => String(s || "").trim().toLowerCase();
   const presets = () => S.config.presets;
+  const tagNames = (p) => [p.primaryTag].concat(p.tags || []);
+  const fitsFilter = (p, q) => !q || lower(p.label).includes(q) || tagNames(p).some((n) => lower(n).includes(q));
+  // Tag names of the presets that don't exist in Stash, each once
+  const missingTags = () => [...new Map(presets().flatMap(tagNames).filter((n) => S.missing.has(lower(n))).map((n) => [lower(n), n])).values()];
 
   function keyParts(combo) {
     return String(combo || "")
@@ -231,17 +252,39 @@ export function mountSettings(el, env) {
     return out;
   }
 
-  // Exact name (Stash compares case-insensitively), else an exact alias – like the marker code itself
-  function tagExists(name) {
+  // Lookups in the background a few at a time, so a long list doesn't send all its requests at once
+  const waiting = [];
+  let running = 0;
+  function quietGql(query, vars) {
+    return new Promise((resolve, reject) => {
+      const run = () => {
+        running++;
+        Promise.resolve()
+          .then(() => env.gql(query, vars))
+          .then(resolve, reject)
+          .finally(() => {
+            running--;
+            if (waiting.length) waiting.shift()();
+          });
+      };
+      if (running < 4) run();
+      else waiting.push(run);
+    });
+  }
+
+  // The tag's name in Stash, or null: exact name (Stash compares case-insensitively), else an exact alias – like
+  // the marker code itself
+  function resolveTag(name) {
     const key = lower(name);
     if (!tagCache.has(key)) {
-      const q = "query($f: FindFilterType, $tf: TagFilterType) { findTags(filter: $f, tag_filter: $tf) { tags { id } } }";
+      const q = "query($f: FindFilterType, $tf: TagFilterType) { findTags(filter: $f, tag_filter: $tf) { tags { id name } } }";
       const p = (async () => {
         for (const field of ["name", "aliases"]) {
-          const d = await env.gql(q, { f: { per_page: 1 }, tf: { [field]: { value: name, modifier: "EQUALS" } } });
-          if (d && d.findTags && d.findTags.tags.length) return true;
+          const d = await quietGql(q, { f: { per_page: 1 }, tf: { [field]: { value: name, modifier: "EQUALS" } } });
+          const tag = d && d.findTags && d.findTags.tags[0];
+          if (tag) return tag.name;
         }
-        return false;
+        return null;
       })();
       p.catch(() => tagCache.delete(key));
       tagCache.set(key, p);
@@ -257,7 +300,7 @@ export function mountSettings(el, env) {
     await Promise.all(
       [...names].map(async ([key, name]) => {
         try {
-          if (!(await tagExists(name))) missing.add(key);
+          if (!(await resolveTag(name))) missing.add(key);
         } catch (e) {
           /* unknown – not marked */
         }
@@ -276,7 +319,7 @@ export function mountSettings(el, env) {
       return paintSuggest(field);
     }
     const d = await env.gql("query($f: FindFilterType) { findTags(filter: $f) { tags { id name scene_count aliases } } }", { f: { q, per_page: 30 } });
-    if (ac.signal.aborted || S.typing[field].trim() !== q) return;
+    if (ac.signal.aborted || !S.draft || S.typing[field].trim() !== q) return;
     const ql = q.toLowerCase();
     const taken = new Set(S.draft.primaryTag.concat(S.draft.tags).map(lower));
     const rank = (tg) => {
@@ -288,11 +331,27 @@ export function mountSettings(el, env) {
       .sort((a, b) => rank(a) - rank(b) || (b.scene_count || 0) - (a.scene_count || 0) || a.name.localeCompare(b.name))
       .slice(0, 8)
       .map((tg) => {
-        tagCache.set(tg.name.toLowerCase(), Promise.resolve(true));
+        tagCache.set(tg.name.toLowerCase(), Promise.resolve(tg.name));
         const alias = rank(tg) === 3 ? (tg.aliases || []).find((a) => a.toLowerCase().includes(ql)) : null;
         return { name: tg.name, count: tg.scene_count || 0, alias };
       });
     S.suggest = { field, items, index: 0, q };
+    paintSuggest(field);
+  }
+
+  // While typing, the open list keeps only what still fits, until the new suggestions are there – so Enter never
+  // takes a suggestion for an older text
+  function refilter(field, text) {
+    const sg = S.suggest;
+    if (!sg || sg.field !== field) return;
+    const q = text.trim();
+    if (!q) S.suggest = null;
+    else {
+      const ql = q.toLowerCase();
+      sg.items = sg.items.filter((it) => it.name.toLowerCase().includes(ql) || (it.alias && it.alias.toLowerCase().includes(ql)));
+      sg.q = q;
+      sg.index = 0;
+    }
     paintSuggest(field);
   }
 
@@ -350,13 +409,23 @@ export function mountSettings(el, env) {
     paint();
   }
 
-  function addName(field, raw) {
+  // Folding the editor away (row, arrow) asks first when something was changed; Cancel doesn't
+  async function collapse() {
+    if (dirty() && !(await ask({ title: "Quick Markers", text: t("Discard the changes to this preset?"), ok: t("Discard"), danger: true }))) return;
+    closeEditor();
+  }
+
+  // Adds typed or picked names; rest = what stays in the input (the part after the last comma)
+  function addName(field, raw, rest = "") {
     const d = S.draft;
+    const known = S.suggest && S.suggest.field === field ? S.suggest.items : [];
     raw
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean)
-      .forEach((name) => {
+      .forEach((typed) => {
+        const hit = known.find((it) => it.name.toLowerCase() === typed.toLowerCase());
+        const name = hit ? hit.name : typed;
         const key = lower(name);
         if (field === "primaryTag") {
           d.primaryTag = [name];
@@ -364,18 +433,22 @@ export function mountSettings(el, env) {
         } else if (!d.tags.concat(d.primaryTag).some((n) => lower(n) === key)) {
           d.tags.push(name);
         }
-        tagExists(name)
-          .then((ok) => {
-            if (ac.signal.aborted || ok === !S.missing.has(key)) return;
-            if (ok) S.missing.delete(key);
+        resolveTag(name)
+          .then((found) => {
+            if (ac.signal.aborted || S.draft !== d) return;
+            // the name as Stash spells it ("outdoor" → "Outdoor", an alias → its tag)
+            const i = d[field].findIndex((n) => lower(n) === key);
+            if (found && i >= 0 && found !== d[field][i] && !d.primaryTag.concat(d.tags).some((n) => n === found)) d[field][i] = found;
+            if (found) S.missing.delete(key);
             else S.missing.add(key);
             paint();
           })
           .catch(() => {});
       });
-    S.typing[field] = "";
+    S.typing[field] = rest;
     S.suggest = null;
     paint();
+    if (rest.trim()) later("sg:" + field, SUGGEST_DEBOUNCE_MS, () => suggest(field, rest).catch(() => {}));
   }
 
   async function saveDraft() {
@@ -407,39 +480,61 @@ export function mountSettings(el, env) {
     };
     // A select slot belongs to one preset: taking it clears it on the others
     const freeSlot = (p) => (fields.selectSlot && p.selectSlot === fields.selectSlot ? Object.assign({}, p, { selectSlot: null }) : p);
-    const editing = S.open !== "new" ? S.open : null;
+    const open = S.open;
+    const editing = open !== "new" ? open : null;
     const list = editing
       ? presets().map((p) => (p.id === editing ? Object.assign({}, p, fields) : freeSlot(p)))
       : presets().map(freeSlot).concat([Object.assign({ id: uniqueId(label) }, fields)]);
-    if (await persist(Object.assign({}, S.config, { presets: list }), editing ? t("Preset updated") : t("Preset added"))) {
-      S.open = null;
-      S.draft = null;
+    // The editor closes at once (so a second click can't add the preset twice) and comes back if saving fails
+    const base = S.base;
+    S.open = null;
+    S.draft = null;
+    S.suggest = null;
+    S.recording = null;
+    if (!(await persist(Object.assign({}, S.config, { presets: list }), editing ? t("Preset updated") : t("Preset added"))) && S.open == null) {
+      S.open = open;
+      S.draft = d;
+      S.base = base;
       paint();
     }
   }
 
   function uniqueId(label) {
-    const base = label.toLowerCase().replace(/\s+/g, "-") || "preset";
+    const base =
+      label
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, "-")
+        .replace(/[^\p{L}\p{N}_-]/gu, "") || "preset";
     const taken = new Set(presets().map((p) => p.id));
     let id = base;
     for (let n = 2; taken.has(id); n++) id = base + "-" + n;
     return id;
   }
 
+  // Shows the change at once; the saves run one after another, so a quick second change is never overwritten by
+  // an older one. A failed save brings the old state back (unless something newer came after it).
   async function persist(next, message) {
+    const prev = { config: S.config, source: S.source };
+    S.config = next;
+    S.source = "settings";
+    S.json = null;
+    paint();
+    const run = saveChain.then(() => env.save(next));
+    saveChain = run.catch(() => {});
     try {
-      await env.save(next);
-      S.config = next;
-      S.source = "settings";
-      S.json = null;
+      await run;
       if (message) env.toast(message, "ok");
       checkTags();
       return true;
     } catch (e) {
+      if (S.config === next) {
+        S.config = prev.config;
+        S.source = prev.source;
+        paint();
+      }
       env.toast(err(e), "error");
       return false;
-    } finally {
-      paint();
     }
   }
 
@@ -466,6 +561,47 @@ export function mountSettings(el, env) {
       S.draft = null;
     }
     persist(Object.assign({}, S.config, { presets: list, defaultPresetIndex }), t("Preset removed"));
+  }
+
+  function setDefault(id) {
+    const index = presets().findIndex((p) => p.id === id);
+    if (index < 0 || index === S.config.defaultPresetIndex) return;
+    persist(Object.assign({}, S.config, { defaultPresetIndex: index }), t("Default preset saved"));
+  }
+
+  // A copy right under the original (without its select key, that belongs to one preset), opened for renaming
+  async function duplicate(id) {
+    if (dirty() && !(await ask({ title: "Quick Markers", text: t("Discard the changes to this preset?"), ok: t("Discard"), danger: true }))) return;
+    const index = presets().findIndex((p) => p.id === id);
+    const src = presets()[index];
+    if (!src) return;
+    const label = t("{label} (copy)", { label: src.label });
+    const copy = Object.assign({}, src, { id: uniqueId(label), label, title: label, tags: (src.tags || []).slice(), selectSlot: null });
+    const list = presets().slice();
+    list.splice(index + 1, 0, copy);
+    const cur = S.config.defaultPresetIndex;
+    S.open = null;
+    S.draft = null;
+    if (await persist(Object.assign({}, S.config, { presets: list, defaultPresetIndex: cur > index ? cur + 1 : cur }), t("Preset duplicated"))) openEditor(copy.id);
+  }
+
+  // Creates missing tags in Stash (the + on a red chip, "Create all" in the warning)
+  async function createTags(names) {
+    const created = [];
+    for (const name of names) {
+      try {
+        const d = await env.gql("mutation($i: TagCreateInput!) { tagCreate(input: $i) { id name } }", { i: { name } });
+        const real = (d && d.tagCreate && d.tagCreate.name) || name;
+        tagCache.set(lower(name), Promise.resolve(real));
+        S.missing.delete(lower(name));
+        created.push(real);
+      } catch (e) {
+        env.toast(name + ": " + err(e), "error");
+      }
+    }
+    if (ac.signal.aborted) return;
+    if (created.length) env.toast(t("Created in Stash: {names}", { names: created.join(", ") }), "ok");
+    paint();
   }
 
   function ask(opts) {
@@ -503,8 +639,11 @@ export function mountSettings(el, env) {
   function chip(name, main, removeField, index) {
     const miss = S.missing.has(lower(name));
     const cls = "qms-chip" + (main ? " is-main" : "") + (miss ? " is-miss" : "");
-    return `<span class="${cls}"${miss ? ` title="${esc(t("Tag doesn't exist in Stash"))}"` : ""}>${main ? ICON.star : ""}${esc(name)}${
-      removeField ? `<button type="button" class="qms-chip-x" data-unchip="${removeField}" data-i="${index}" aria-label="${esc(t("Remove {name}", { name }))}">${ICON.x}</button>` : ""
+    const create = t("Create “{name}” in Stash", { name });
+    return `<span class="${cls}"${miss ? ` title="${esc(t("Tag doesn't exist in Stash"))}"` : ""}>${esc(name)}${
+      miss ? `<button type="button" class="qms-chip-btn qms-chip-add" data-create="${esc(name)}" aria-label="${esc(create)}" title="${esc(create)}">${ICON.add}</button>` : ""
+    }${
+      removeField ? `<button type="button" class="qms-chip-btn" data-unchip="${removeField}" data-i="${index}" aria-label="${esc(t("Remove {name}", { name }))}">${ICON.x}</button>` : ""
     }</span>`;
   }
 
@@ -567,7 +706,7 @@ export function mountSettings(el, env) {
     const slotBtn = (n) => {
       const taken = presets().find((p) => p.selectSlot === n && (!preset || p.id !== preset.id));
       const on = d.selectSlot === n;
-      return `<button type="button" class="qms-slotbtn${on ? " is-on" : ""}${taken && !on ? " is-taken" : ""}" data-slot="${n}" aria-pressed="${on}"${
+      return `<button type="button" class="qms-slotbtn${on ? " is-on" : ""}${taken && !on ? " is-taken" : ""}" data-slot="${n}" data-focus="slot:${n}" aria-pressed="${on}"${
         taken ? ` title="${esc(t("taken: {label}", { label: taken.label }))}"` : ""
       }>${n}</button>`;
     };
@@ -584,7 +723,7 @@ export function mountSettings(el, env) {
           </div>
           <div class="qms-ed-col">
             <div class="qms-field"><span class="qms-label">${esc(t("Select key"))}</span>
-              <div class="qms-slots" role="group" aria-label="${esc(t("Select key"))}">${SLOTS.map(slotBtn).join("")}<button type="button" class="qms-slotbtn qms-slotnone${d.selectSlot ? "" : " is-on"}" data-slot="" aria-pressed="${!d.selectSlot}">${esc(t("None"))}</button></div>
+              <div class="qms-slots" role="group" aria-label="${esc(t("Select key"))}">${SLOTS.map(slotBtn).join("")}<button type="button" class="qms-slotbtn qms-slotnone${d.selectSlot ? "" : " is-on"}" data-slot="" data-focus="slot:none" aria-pressed="${!d.selectSlot}">${esc(t("None"))}</button></div>
               <small class="qms-hint${owner ? " is-note" : ""}">${esc(owner ? t("Takes ⇧{n} over from “{label}”.", { n: d.selectSlot, label: owner.label }) : t("With Shift. Struck through = taken by another preset."))}</small></div>
             <div class="qms-field"><span class="qms-label">${esc(t("Keys of this preset"))}</span>
               <div class="qms-keyboxes">${KEY_FIELDS.map(([f, label]) => keyBox(f, label)).join("")}</div>
@@ -593,8 +732,18 @@ export function mountSettings(el, env) {
           </div>
         </div>
         <div class="qms-ed-foot">
-          <button type="button" class="${C.btn}" data-act="cancel">${esc(t("Cancel"))}</button>
-          <button type="button" class="${C.primary}" data-act="save">${preset ? ICON.check + esc(t("Save")) : ICON.plus + esc(t("Add"))}</button>
+          ${
+            preset
+              ? `<div class="qms-ed-foot-side">
+                  <button type="button" class="${C.ghost} qms-footbtn" data-dup="${esc(preset.id)}">${ICON.copy}${esc(t("Duplicate"))}</button>
+                  <button type="button" class="${C.ghost} qms-footbtn qms-footdel" data-del="${esc(preset.id)}"${presets().length < 2 ? " disabled" : ""}>${ICON.trash}${esc(t("Delete"))}</button>
+                </div>`
+              : ""
+          }
+          <div class="qms-ed-foot-main">
+            <button type="button" class="${C.btn}" data-act="cancel">${esc(t("Cancel"))}</button>
+            <button type="button" class="${C.primary}" data-act="save">${preset ? ICON.check + esc(t("Save")) : ICON.plus + esc(t("Add"))}</button>
+          </div>
         </div>
       </div>`;
   }
@@ -602,47 +751,47 @@ export function mountSettings(el, env) {
   function rowHtml(p, i) {
     const open = S.open === p.id;
     const isDefault = i === S.config.defaultPresetIndex;
-    const names = [p.primaryTag].concat(p.tags || []);
+    const names = tagNames(p);
     const miss = names.some((n) => S.missing.has(lower(n)));
+    const star = isDefault ? t("Default preset – active when a scene opens") : t("Make {label} the default preset", { label: p.label });
+    // (while searching the order can't be changed: the handle is left out)
+    const grip = S.filter.trim()
+      ? "<span></span>"
+      : `<button type="button" class="qms-grip" data-grip="${esc(p.id)}" data-focus="grip:${esc(p.id)}" aria-label="${esc(t("Move {label}", { label: p.label }))}" title="${esc(t("Drag to change the order (or ↑ / ↓)"))}">${ICON.grip}</button>`;
     return `<div class="qms-row${open ? " is-open" : ""}" data-row="${esc(p.id)}">
-        <button type="button" class="qms-grip" data-grip="${esc(p.id)}" data-focus="grip:${esc(p.id)}" aria-label="${esc(t("Move {label}", { label: p.label }))}" title="${esc(t("Drag to change the order (or ↑ / ↓)"))}">${ICON.grip}</button>
+        ${grip}
         <span class="qms-slot${p.selectSlot ? "" : " is-none"}">${p.selectSlot ? "⇧" + p.selectSlot : "–"}</span>
         <div class="qms-main" data-toggle="${esc(p.id)}">
-          <div class="qms-name"><b>${esc(p.label)}</b>${isDefault ? `<span class="qms-badge">${esc(t("Default"))}</span>` : ""}${
-            miss ? `<span class="qms-warnline">${ICON.warn}${esc(t("A tag is missing in Stash"))}</span>` : ""
-          }</div>
+          <div class="qms-name"><b>${esc(p.label)}</b>${miss ? `<span class="qms-warnline">${ICON.warn}${esc(t("A tag is missing in Stash"))}</span>` : ""}</div>
           <div class="qms-chips">${names.map((n, j) => chip(n, j === 0)).join("")}</div>
         </div>
         <div class="qms-rowkeys">${KEY_FIELDS.map(([f, label]) => `<kbd class="qms-kbd" title="${esc(t(label))}">${esc(keyShort(p[f] || DEFAULT_KEYS[f]))}</kbd>`).join("")}</div>
-        <div class="qms-actions">${
+        <div class="qms-actions">
+          <button type="button" class="qms-ib qms-star${isDefault ? " is-on" : ""}" data-default="${esc(p.id)}" data-focus="default:${esc(p.id)}" aria-pressed="${isDefault}" aria-label="${esc(star)}" title="${esc(star)}">${isDefault ? ICON.starFill : ICON.star}</button>${
           open
-            ? `<button type="button" class="qms-ib is-on" data-act="cancel" aria-label="${esc(t("Close editor"))}" title="${esc(t("Close editor"))}">${ICON.up}</button>`
+            ? `<button type="button" class="qms-ib is-on" data-act="collapse" aria-label="${esc(t("Close editor"))}" title="${esc(t("Close editor"))}">${ICON.up}</button>`
             : `<button type="button" class="qms-ib" data-edit="${esc(p.id)}" aria-label="${esc(t("Edit {label}", { label: p.label }))}" title="${esc(t("Edit {label}", { label: p.label }))}">${ICON.edit}</button>
-               <button type="button" class="qms-ib is-danger" data-del="${esc(p.id)}" aria-label="${esc(t("Delete {label}", { label: p.label }))}" title="${esc(t("Delete {label}", { label: p.label }))}"${presets().length < 2 ? " disabled" : ""}>${ICON.trash}</button>`
+               <button type="button" class="qms-ib qms-wide" data-dup="${esc(p.id)}" aria-label="${esc(t("Duplicate {label}", { label: p.label }))}" title="${esc(t("Duplicate {label}", { label: p.label }))}">${ICON.copy}</button>
+               <button type="button" class="qms-ib qms-wide is-danger" data-del="${esc(p.id)}" aria-label="${esc(t("Delete {label}", { label: p.label }))}" title="${esc(t("Delete {label}", { label: p.label }))}"${presets().length < 2 ? " disabled" : ""}>${ICON.trash}</button>`
         }</div>
       </div>${open ? editorHtml(p) : ""}`;
   }
 
+  // Only classic Stash has panel and touch settings; the default preset is the ★ in the list
   function generalHtml() {
+    if (stashui) return "";
     const c = S.config;
-    const fields = [
-      `<label class="qms-field"><span class="qms-label">${esc(t("Default preset"))}</span>
-        <select class="${C.field}" data-set="defaultPresetIndex">${presets().map((p, i) => `<option value="${i}"${i === c.defaultPresetIndex ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select>
-        <small class="qms-hint">${esc(t("Active when a scene opens."))}</small></label>`,
-    ];
-    if (!stashui) {
-      const pos = c.panelPosition || "top-left";
-      const touch = c.touchControls || "auto";
-      fields.push(
-        `<div class="qms-field"><label class="qms-label" for="qms-pos">${esc(t("Panel position"))}</label>
-          <select id="qms-pos" class="${C.field}" data-set="panelPosition">${POSITIONS.map(([v, l]) => `<option value="${v}"${v === pos ? " selected" : ""}>${esc(t(l))}</option>`).join("")}</select>
-          <label class="qms-check"><input type="checkbox" data-set="panelCollapsed"${c.panelCollapsed !== false ? " checked" : ""}> ${esc(t("Start collapsed"))}</label></div>`,
-        `<div class="qms-field"><span class="qms-label">${esc(t("Touch controls"))}</span>
-          <div class="qms-seg" role="group" aria-label="${esc(t("Touch controls"))}">${TOUCH.map(([v, l]) => `<button type="button" data-touch="${v}" class="${v === touch ? "is-on" : ""}" aria-pressed="${v === touch}">${esc(t(l))}</button>`).join("")}</div>
-          <small class="qms-hint">${esc(t("IN / OUT / INSTANT under the video. Auto: on touch devices."))}</small></div>`
-      );
-    }
-    return `<section class="qms-card qms-general${stashui ? " is-single" : ""}" aria-label="${esc(t("General"))}">${fields.join("")}</section>`;
+    const pos = c.panelPosition || "top-left";
+    const touch = c.touchControls || "auto";
+    return `<section class="qms-card qms-general" aria-label="${esc(t("General"))}">
+        <div class="qms-field"><label class="qms-label" for="qms-pos">${esc(t("Panel position"))}</label>
+          <select id="qms-pos" class="${C.field}" data-set="panelPosition" data-focus="set:pos">${POSITIONS.map(([v, l]) => `<option value="${v}"${v === pos ? " selected" : ""}>${esc(t(l))}</option>`).join("")}</select>
+          <label class="qms-check"><input type="checkbox" data-set="panelCollapsed" data-focus="set:collapsed"${c.panelCollapsed !== false ? " checked" : ""}> ${esc(t("Start collapsed"))}</label>
+          <small class="qms-hint">${esc(t("Drag the panel header to move it; double-click resets it."))}</small></div>
+        <div class="qms-field"><span class="qms-label">${esc(t("Touch controls"))}</span>
+          <div class="qms-seg" role="group" aria-label="${esc(t("Touch controls"))}">${TOUCH.map(([v, l]) => `<button type="button" data-touch="${v}" data-focus="touch:${v}" class="${v === touch ? "is-on" : ""}" aria-pressed="${v === touch}">${esc(t(l))}</button>`).join("")}</div>
+          <small class="qms-hint">${esc(t("IN / OUT / INSTANT under the video. Auto: on touch devices."))}</small></div>
+      </section>`;
   }
 
   function html() {
@@ -651,13 +800,16 @@ export function mountSettings(el, env) {
       S.source === "file" ? t("Loaded from presets.json — saving here stores the presets in Stash.")
       : S.source === "defaults" ? t("Built-in defaults — saving here stores the presets in Stash.")
       : "";
-    const missingNames = [...new Set(presets().flatMap((p) => [p.primaryTag].concat(p.tags || [])).filter((n) => S.missing.has(lower(n))))];
+    const missingNames = missingTags();
     const isNew = S.open === "new";
     const json = S.json != null ? S.json : env.toJson(S.config);
+    const q = lower(S.filter);
+    const shown = presets().filter((p) => fitsFilter(p, q) || p.id === S.open);
+    const search = presets().length >= SEARCH_FROM || q;
     return `<div class="qms qms-page is-${env.theme}">
         <header class="qms-head">
           <div>
-            <div class="qms-title"><h2>Quick Markers</h2><span class="qms-ver">v${esc(env.version)}</span></div>
+            <div class="qms-title"><h2>Quick Markers</h2>${env.version && env.version !== "0" ? `<span class="qms-ver">v${esc(env.version)}</span>` : ""}</div>
             <p class="qms-sub">${esc(t("Set markers with hotkeys. Each preset decides which tags the marker gets."))}</p>
           </div>
           <div class="qms-head-actions">
@@ -666,27 +818,41 @@ export function mountSettings(el, env) {
           </div>
         </header>
         ${note ? `<p class="qms-note">${esc(note)}</p>` : ""}
-        ${missingNames.length ? `<p class="qms-note is-bad">${ICON.warn}<span>${esc(t("These tags don't exist in Stash, so their presets can't create markers: {names}. Create the tags or fix the presets.", { names: missingNames.join(", ") }))}</span></p>` : ""}
+        ${
+          missingNames.length
+            ? `<div class="qms-note is-bad">${ICON.warn}<span>${esc(t("These tags don't exist in Stash, so their presets can't create markers: {names}.", { names: missingNames.join(", ") }))}</span>
+                <button type="button" class="${C.btn} qms-note-btn" data-act="createall">${ICON.plus}${esc(t("Create all"))}</button></div>`
+            : ""
+        }
         ${generalHtml()}
         <section class="qms-presets">
           <div class="qms-sechead">
             <h3>${esc(t("Presets"))} <span>${presets().length}</span></h3>
             <button type="button" class="${C.primary}" data-act="new"${isNew ? " disabled" : ""}>${ICON.plus}${esc(t("New preset"))}</button>
           </div>
+          ${
+            search
+              ? `<div class="qms-search">${ICON.search}
+                  <input class="${C.field} qms-search-input" type="search" data-filter data-focus="filter" value="${esc(S.filter)}" placeholder="${esc(t("Search presets …"))}" aria-label="${esc(t("Search presets …"))}" autocomplete="off" spellcheck="false">
+                  ${q ? `<span class="qms-search-count">${esc(t("{n} of {total}", { n: shown.length, total: presets().length }))}</span>` : ""}
+                </div>`
+              : ""
+          }
           <div class="qms-list" data-list>
             <div class="qms-row qms-row-head" aria-hidden="true"><span></span><span>${esc(t("Key"))}</span><span>${esc(t("Preset and tags"))}</span><span class="qms-rowkeys">${esc(t("In · Out · Instant"))}</span><span></span></div>
-            ${presets().map(rowHtml).join("")}
+            ${presets().map((p, i) => (shown.includes(p) ? rowHtml(p, i) : "")).join("")}
+            ${q && !shown.length ? `<p class="qms-nohit">${esc(t("No preset matches “{q}”.", { q: S.filter.trim() }))}</p>` : ""}
             ${isNew ? `<div class="qms-row is-open qms-row-new"><span></span><span class="qms-slot">${S.draft.selectSlot ? "⇧" + S.draft.selectSlot : "–"}</span><div class="qms-main"><div class="qms-name"><b>${esc(S.draft.label.trim() || t("New preset"))}</b></div></div><span class="qms-rowkeys"></span>
-                <div class="qms-actions"><button type="button" class="qms-ib is-on" data-act="cancel" aria-label="${esc(t("Close editor"))}">${ICON.up}</button></div></div>${editorHtml(null)}` : ""}
+                <div class="qms-actions"><button type="button" class="qms-ib is-on" data-act="collapse" aria-label="${esc(t("Close editor"))}" title="${esc(t("Close editor"))}">${ICON.up}</button></div></div>${editorHtml(null)}` : ""}
           </div>
-          <p class="qms-hint qms-hotkeys">${esc(t("In the player"))}: <kbd class="qms-kbd">⇧1</kbd>–<kbd class="qms-kbd">⇧9</kbd> ${esc(t("select preset"))} · <kbd class="qms-kbd">⇧[</kbd> <kbd class="qms-kbd">⇧]</kbd> ${esc(t("previous / next"))}</p>
+          <p class="qms-hint qms-hotkeys"><span class="qms-hint-star">${ICON.starFill}</span> ${esc(t("Default preset – active when a scene opens"))} · ${esc(t("In the player"))}: <kbd class="qms-kbd">⇧1</kbd>–<kbd class="qms-kbd">⇧9</kbd> ${esc(t("select preset"))} · <kbd class="qms-kbd">⇧[</kbd> <kbd class="qms-kbd">⇧]</kbd> ${esc(t("previous / next"))}</p>
         </section>
         <details class="qms-adv" data-adv${S.advanced ? " open" : ""}>
           <summary>${ICON.right}<b>${esc(t("Advanced"))}</b><span>${esc(t("JSON, help"))}</span><small>${esc(t("Saved in Stash"))}</small></summary>
           <div class="qms-adv-body">
             <div class="qms-help" data-help>
               <h4>${esc(t("How presets work"))}</h4>
-              <p>${esc(t("A preset is one kind of marker: its primary tag becomes the marker's primary tag, the more tags are added to the marker. Every tag must exist in Stash (Tags page) — missing ones are shown in red."))}</p>
+              <p>${esc(t("A preset is one kind of marker: its primary tag becomes the marker's primary tag, the more tags are added to the marker. Every tag must exist in Stash — missing ones are shown in red, + on the chip creates them."))}</p>
               <p>${esc(t("While watching, Shift+1–9 (the select key) or Shift+[ / ] pick the active preset. In, Out and Instant always work for the active preset, so usually every preset keeps Shift+I / O / M."))}</p>
               <p>${esc(t("The order here is the order of the preset chips on the scene page. Drag the handle on the left to change it."))}</p>
               <p>${esc(t("Changes apply to markers created afterwards; existing markers keep their tags (edit them in Stash under Markers)."))}</p>
@@ -705,20 +871,31 @@ export function mountSettings(el, env) {
   // Draws everything again; the focused field keeps its focus and cursor
   function paint() {
     if (ac.signal.aborted) return;
+    if (dragging) {
+      paintLater = true;
+      return;
+    }
     const a = document.activeElement;
     const focus = a && el.contains(a) && a.dataset ? a.dataset.focus : null;
     const range = focus && typeof a.selectionStart === "number" ? [a.selectionStart, a.selectionEnd] : null;
-    el.innerHTML = html();
-    if (!focus) return;
-    const n = el.querySelector(`[data-focus="${CSS.escape(focus)}"]`);
-    if (!n) return;
-    n.focus({ preventScroll: true });
-    if (range) {
-      try {
-        n.setSelectionRange(range[0], range[1]);
-      } catch (e) {
-        /* (not a text field) */
+    const scroll = focus ? a.scrollTop : 0;
+    painting = true;
+    try {
+      el.innerHTML = html();
+      if (!focus) return;
+      const n = el.querySelector(`[data-focus="${CSS.escape(focus)}"]`);
+      if (!n) return;
+      n.focus({ preventScroll: true });
+      if (scroll) n.scrollTop = scroll;
+      if (range) {
+        try {
+          n.setSelectionRange(range[0], range[1]);
+        } catch (e) {
+          /* (not a text field) */
+        }
       }
+    } finally {
+      painting = false;
     }
   }
 
@@ -758,7 +935,7 @@ export function mountSettings(el, env) {
     const keyrec = e.target.closest("[data-keyrec]");
     if (keyrec) return setRecording(keyrec.dataset.keyrec);
     const toggle = e.target.closest("[data-toggle]");
-    if (toggle && !e.target.closest("button")) return S.open === toggle.dataset.toggle ? closeEditor() : openEditor(toggle.dataset.toggle);
+    if (toggle && !e.target.closest("button")) return S.open === toggle.dataset.toggle ? collapse() : openEditor(toggle.dataset.toggle);
     const b = e.target.closest("button");
     if (!b || !el.contains(b)) return;
     if (b.dataset.unchip) {
@@ -770,11 +947,16 @@ export function mountSettings(el, env) {
       return paint();
     }
     if (b.dataset.touch) return persist(Object.assign({}, S.config, { touchControls: b.dataset.touch }), t("Saved"));
+    if (b.dataset.create != null) return createTags([b.dataset.create]);
+    if (b.dataset.default) return setDefault(b.dataset.default);
     if (b.dataset.edit) return openEditor(b.dataset.edit);
+    if (b.dataset.dup) return duplicate(b.dataset.dup);
     if (b.dataset.del) return remove(b.dataset.del);
     const act = b.dataset.act;
     if (act === "new") openEditor("new");
+    else if (act === "createall") createTags(missingTags());
     else if (act === "cancel") closeEditor();
+    else if (act === "collapse") collapse();
     else if (act === "save") saveDraft();
     else if (act === "json" || act === "help") openAdvanced(act);
     else if (act === "savejson") {
@@ -806,12 +988,16 @@ export function mountSettings(el, env) {
       const field = n.dataset.chipinput;
       if (n.value.includes(",")) {
         const parts = n.value.split(",");
-        S.typing[field] = parts.pop();
-        addName(field, parts.join(","));
+        const rest = parts.pop().trimStart();
+        addName(field, parts.join(","), rest);
         return;
       }
       S.typing[field] = n.value;
+      refilter(field, n.value);
       later("sg:" + field, SUGGEST_DEBOUNCE_MS, () => suggest(field, n.value).catch(() => {}));
+    } else if (n.dataset.filter != null) {
+      S.filter = n.value;
+      paint();
     } else if (n.dataset.json != null) S.json = n.value;
   });
 
@@ -862,6 +1048,9 @@ export function mountSettings(el, env) {
         const item = sg && sg.items[sg.index];
         if (item) addName(field, item.name);
         else if (n.value.trim()) addName(field, n.value);
+      } else if (e.key === "Tab" && sg && sg.items[sg.index] && n.value.trim()) {
+        // Tab takes the highlighted suggestion and moves on as usual
+        addName(field, sg.items[sg.index].name);
       } else if (e.key === "Escape" && sg) {
         e.preventDefault();
         e.stopPropagation();
@@ -878,6 +1067,12 @@ export function mountSettings(el, env) {
       saveDraft();
       return;
     }
+    if (n.dataset.filter != null && e.key === "Escape" && S.filter) {
+      e.preventDefault();
+      S.filter = "";
+      paint();
+      return;
+    }
     if (n.dataset.grip && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
       e.preventDefault();
       const from = presets().findIndex((p) => p.id === n.dataset.grip);
@@ -887,6 +1082,7 @@ export function mountSettings(el, env) {
 
   on("focusout", (e) => {
     const n = e.target;
+    if (painting) return;
     if (n.dataset.keyrec && S.recording === n.dataset.keyrec) setRecording(null);
     if (n.dataset.chipinput) {
       const field = n.dataset.chipinput;
@@ -906,7 +1102,7 @@ export function mountSettings(el, env) {
     if (e.target.matches("[data-adv]")) S.advanced = e.target.open;
   }, { capture: true });
 
-  // Dragging a row by its handle (mouse and touch)
+  // Dragging a row by its handle (mouse and touch). Near the top or bottom edge the page scrolls along.
   on("pointerdown", (e) => {
     const grip = e.target.closest("[data-grip]");
     if (!grip || e.button !== 0) return;
@@ -915,20 +1111,27 @@ export function mountSettings(el, env) {
     const row = grip.closest("[data-row]");
     const from = rows.indexOf(row);
     const startY = e.clientY;
+    const box = scroller();
+    const scrollPos = () => (box ? box.scrollTop : window.scrollY);
+    const startScroll = scrollPos();
+    let y = e.clientY;
     let to = from;
+    let raf = 0;
     try {
       grip.setPointerCapture(e.pointerId);
     } catch (x) {
       /* (pointer already gone) */
     }
     row.classList.add("is-dragging");
+    dragging = true;
+    paintLater = false;
     const mid = (r) => {
       const b = r.getBoundingClientRect();
       return b.top + b.height / 2;
     };
-    const onMove = (ev) => {
-      row.style.transform = `translateY(${ev.clientY - startY}px)`;
-      to = rows.filter((r) => r !== row && mid(r) < ev.clientY).length;
+    const place = () => {
+      row.style.transform = `translateY(${y - startY + scrollPos() - startScroll}px)`;
+      to = rows.filter((r) => r !== row && mid(r) < y).length;
       rows.forEach((r) => r.classList.remove("drop-before", "drop-after"));
       const others = rows.filter((r) => r !== row);
       if (to !== from) {
@@ -936,19 +1139,50 @@ export function mountSettings(el, env) {
         else others[others.length - 1].classList.add("drop-after");
       }
     };
+    // faster the closer the pointer gets to the edge
+    const autoScroll = () => {
+      const r = box ? box.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+      const top = Math.max(r.top, 0) + SCROLL_ZONE;
+      const bottom = Math.min(r.bottom, window.innerHeight) - SCROLL_ZONE;
+      const step = y < top ? -Math.min(20, Math.ceil((top - y) / 3)) : y > bottom ? Math.min(20, Math.ceil((y - bottom) / 3)) : 0;
+      if (step) {
+        const before = scrollPos();
+        if (box) box.scrollTop += step;
+        else window.scrollBy(0, step);
+        if (scrollPos() !== before) place();
+      }
+      raf = requestAnimationFrame(autoScroll);
+    };
+    const onMove = (ev) => {
+      y = ev.clientY;
+      place();
+    };
     const onUp = () => {
+      cancelAnimationFrame(raf);
       grip.removeEventListener("pointermove", onMove);
       grip.removeEventListener("pointerup", onUp);
       grip.removeEventListener("pointercancel", onUp);
       row.classList.remove("is-dragging");
       row.style.transform = "";
       rows.forEach((r) => r.classList.remove("drop-before", "drop-after"));
+      dragging = false;
       if (to !== from) move(from, to);
+      else if (paintLater) paint();
     };
     grip.addEventListener("pointermove", onMove);
     grip.addEventListener("pointerup", onUp);
     grip.addEventListener("pointercancel", onUp);
+    raf = requestAnimationFrame(autoScroll);
   });
+
+  // The element that scrolls the page: Stash UI scrolls its main area, classic Stash the window (null)
+  function scroller() {
+    for (let n = el.parentElement; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+      const o = getComputedStyle(n).overflowY;
+      if ((o === "auto" || o === "scroll" || o === "overlay") && n.scrollHeight > n.clientHeight) return n;
+    }
+    return null;
+  }
 
   loadStyles();
   paint();
@@ -1007,5 +1241,9 @@ const ICON = {
   help: svg('<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>'),
   warn: svg('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>', 14, 14),
   x: svg('<path d="M18 6 6 18M6 6l12 12"/>', 12, 12),
-  star: `<svg class="qms-ic" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2 3 6.6 7 .8-5.2 4.8 1.5 7L12 17.8 5.7 21.2l1.5-7L2 9.4l7-.8Z"/></svg>`,
+  add: svg('<path d="M12 5v14M5 12h14"/>', 12, 12),
+  copy: svg('<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>'),
+  search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+  star: svg('<path d="m12 3 2.7 5.8 6.3.7-4.7 4.3 1.3 6.2L12 16.9 6.4 20l1.3-6.2L3 9.5l6.3-.7Z"/>'),
+  starFill: `<svg class="qms-ic" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.7 5.8 6.3.7-4.7 4.3 1.3 6.2L12 16.9 6.4 20l1.3-6.2L3 9.5l6.3-.7Z"/></svg>`,
 };

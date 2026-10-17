@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.12.0";
+  const PLUGIN_VERSION = "1.13.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -2885,12 +2885,14 @@
         const el = ref.current;
         let handle = null;
         let cancelled = false;
+        const iface = settingsApi.interface;
         import(SETTINGS_URL)
           .then(function (mod) {
             if (cancelled) return;
             handle = mod.mountSettings(el, {
               theme: isStashUiHost() ? "stashui" : "classic",
-              lang: browserLang(),
+              // Stash's interface language, else the browser's (Stash UI's plugin host has no interface settings)
+              lang: iface && iface.language ? (String(iface.language).toLowerCase().startsWith("de") ? "de" : "en") : browserLang(),
               version: PLUGIN_VERSION,
               gql: gqlFetch,
               toast: function (text, kind) {

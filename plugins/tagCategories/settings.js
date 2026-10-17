@@ -7,10 +7,13 @@
 //     gql(query, vars) → data, toast(text, "ok" | "error"), confirm?({ title, text, ok, danger }) → bool,
 //     load() → { config: { categories }, source: "settings" | "file" | "defaults" }, save(config),
 //     parseJson(text) → config, toJson(config) → text,
+//     categoryHref?(id) → address of the category page, openCategory?(id) (opens it without reloading the page),
 //   }) → { destroy() }
 
 const SUGGEST_DEBOUNCE_MS = 180;
 const PREVIEW_DEBOUNCE_MS = 400;
+const SEARCH_FROM = 8; // categories from which on the list gets a search field
+const SCROLL_ZONE = 56; // px at the top / bottom edge where dragging a row scrolls the page
 
 export const STRINGS_DE = {
   "Browse scenes by your own categories. A category combines tags and performers.":
@@ -27,8 +30,20 @@ export const STRINGS_DE = {
   "Tag doesn't exist in Stash": "Tag existiert in Stash nicht",
   "Performer doesn't exist in Stash": "Darsteller existiert in Stash nicht",
   "Something is missing in Stash": "Etwas fehlt in Stash",
+  "Create tag “{name}” in Stash": "Tag „{name}“ in Stash anlegen",
+  "Create performer “{name}” in Stash": "Darsteller „{name}“ in Stash anlegen",
+  "Created in Stash: {names}": "In Stash angelegt: {names}",
+  "Create all": "Alle anlegen",
+  "Open the category page": "Kategorie-Seite öffnen",
   "Edit {name}": "{name} bearbeiten",
   "Delete {name}": "{name} löschen",
+  Duplicate: "Duplizieren",
+  "Duplicate {name}": "{name} duplizieren",
+  "{name} (copy)": "{name} (Kopie)",
+  "Category duplicated": "Kategorie dupliziert",
+  "Search categories …": "Kategorien durchsuchen …",
+  "{n} of {total}": "{n} von {total}",
+  "No category matches “{q}”.": "Keine Kategorie passt zu „{q}“.",
   "Move {name}": "{name} verschieben",
   "Drag to change the order (or ↑ / ↓)": "Ziehen ändert die Reihenfolge (oder ↑ / ↓)",
   "Close editor": "Editor schließen",
@@ -84,8 +99,8 @@ export const STRINGS_DE = {
   "Replaces all categories. Fields per category: name, tags, optional performers, subTags (true = include sub-tags) and id (fixed address of its page).":
     "Ersetzt alle Kategorien. Felder je Kategorie: name, tags, optional performers, subTags (true = Unter-Tags einbeziehen) und id (feste Adresse ihrer Seite).",
   "How categories work": "So funktionieren Kategorien",
-  "Open Categories in the main menu and pick one: it lists every scene that has at least one of its tags or performers. Names must match Stash (case doesn't matter) — missing ones are shown in red.":
-    "Im Hauptmenü Kategorien öffnen und eine wählen: Sie zeigt jede Szene, die mindestens einen ihrer Tags oder Darsteller hat. Die Namen müssen zu Stash passen (Groß-/Kleinschreibung egal) – fehlende werden rot angezeigt.",
+  "Open Categories in the main menu and pick one (or click the number of scenes here): it lists every scene that has at least one of its tags or performers. Names must match Stash — missing ones are shown in red, + on the chip creates them.":
+    "Im Hauptmenü Kategorien öffnen und eine wählen (oder hier auf die Szenenzahl klicken): Sie zeigt jede Szene, die mindestens einen ihrer Tags oder Darsteller hat. Die Namen müssen zu Stash passen – fehlende werden rot angezeigt, + am Chip legt sie an.",
   "On the category page, the chips narrow the list down; ★ makes a chip the main one: every scene has it, and the other chips show only what goes with it.":
     "Auf der Kategorie-Seite grenzen die Chips die Liste ein; ★ macht einen Chip zum Haupt-Chip: Jede Szene hat ihn, und die anderen Chips zeigen nur, was dazu passt.",
   "The order here is the order in the menu of the category page. Drag the handle on the left to change it.":
@@ -102,8 +117,12 @@ export function mountSettings(el, env) {
   const ac = new AbortController();
   const on = (type, fn, opts) => el.addEventListener(type, fn, Object.assign({ signal: ac.signal }, opts));
   const timers = new Map();
-  const found = { t: new Map(), p: new Map() }; // lower-case name → Promise<id | null>
+  const found = { t: new Map(), p: new Map() }; // lower-case name → Promise<{ id, name } | null>
   const counts = new Map(); // category signature → number of scenes (null = nothing exists)
+  let painting = false; // (the focused field is replaced while drawing – its focusout is not the user's)
+  let dragging = false; // a row is being dragged: drawing waits until it is dropped
+  let paintLater = false;
+  let saveChain = Promise.resolve();
 
   const S = {
     config: null,
@@ -115,6 +134,7 @@ export function mountSettings(el, env) {
     suggest: null, // { field, items, index, q }
     missing: { t: new Set(), p: new Set() }, // lower-case names that don't exist in Stash
     preview: undefined, // scenes of the draft: undefined = counting, null = nothing exists
+    filter: "", // text in the search field above the list
     advanced: false,
     json: null, // text in the JSON editor (null = from the config)
   };
@@ -128,8 +148,39 @@ export function mountSettings(el, env) {
   const cats = () => S.config.categories;
   const kindOf = (field) => (field === "tags" ? "t" : "p");
   const signature = (c) => JSON.stringify([c.tags.map(lower).sort(), c.performers.map(lower).sort(), !!c.subTags]);
+  const fitsFilter = (c, q) => !q || lower(c.name).includes(q) || c.tags.concat(c.performers).some((n) => lower(n).includes(q));
+  // Names of the categories that don't exist in Stash, each once: [{ kind, name }]
+  const missingNames = () => {
+    const out = new Map();
+    cats().forEach((c) => {
+      c.tags.forEach((n) => S.missing.t.has(lower(n)) && out.set("t:" + lower(n), { kind: "t", name: n }));
+      c.performers.forEach((n) => S.missing.p.has(lower(n)) && out.set("p:" + lower(n), { kind: "p", name: n }));
+    });
+    return [...out.values()];
+  };
 
-  // Name → Stash id, the same way the category page finds them: exact tag name; performer name, else an alias
+  // Lookups in the background a few at a time, so a long list doesn't send all its requests at once
+  const waiting = [];
+  let running = 0;
+  function quietGql(query, vars) {
+    return new Promise((resolve, reject) => {
+      const run = () => {
+        running++;
+        Promise.resolve()
+          .then(() => env.gql(query, vars))
+          .then(resolve, reject)
+          .finally(() => {
+            running--;
+            if (waiting.length) waiting.shift()();
+          });
+      };
+      if (running < 4) run();
+      else waiting.push(run);
+    });
+  }
+
+  // Name → { id, name } in Stash, the same way the category page finds them: exact tag name; performer name, else
+  // an alias. null = not in Stash.
   function findId(kind, name) {
     const key = lower(name);
     const cache = found[kind];
@@ -138,20 +189,20 @@ export function mountSettings(el, env) {
         if (kind === "t") {
           const q = "query($f: FindFilterType, $tf: TagFilterType) { findTags(filter: $f, tag_filter: $tf) { tags { id name } } }";
           for (const modifier of ["EQUALS", "INCLUDES"]) {
-            const d = await env.gql(q, { f: { per_page: 25, q: name }, tf: { name: { value: name, modifier } } });
+            const d = await quietGql(q, { f: { per_page: 25, q: name }, tf: { name: { value: name, modifier } } });
             const hit = ((d && d.findTags && d.findTags.tags) || []).find((tg) => lower(tg.name) === key);
-            if (hit) return hit.id;
+            if (hit) return { id: hit.id, name: hit.name };
           }
           return null;
         }
         const q = "query($f: FindFilterType, $pf: PerformerFilterType) { findPerformers(filter: $f, performer_filter: $pf) { performers { id name alias_list } } }";
-        let d = await env.gql(q, { f: { per_page: 25 }, pf: { name: { value: name, modifier: "EQUALS" } } });
+        let d = await quietGql(q, { f: { per_page: 25 }, pf: { name: { value: name, modifier: "EQUALS" } } });
         let hit = ((d && d.findPerformers && d.findPerformers.performers) || []).find((p) => lower(p.name) === key);
         if (!hit) {
-          d = await env.gql(q, { f: { per_page: 25, q: name } });
+          d = await quietGql(q, { f: { per_page: 25, q: name } });
           hit = ((d && d.findPerformers && d.findPerformers.performers) || []).find((p) => (p.alias_list || []).some((a) => lower(a) === key));
         }
-        return hit ? hit.id : null;
+        return hit ? { id: hit.id, name: hit.name } : null;
       })();
       p.catch(() => cache.delete(key));
       cache.set(key, p);
@@ -161,8 +212,9 @@ export function mountSettings(el, env) {
 
   // Scenes with any of the tags or performers (like the category page without a selection); null = none exists
   async function countScenes(c) {
-    const tagIds = (await Promise.all(c.tags.map((n) => findId("t", n)))).filter(Boolean);
-    const perfIds = (await Promise.all(c.performers.map((n) => findId("p", n)))).filter(Boolean);
+    const ids = (hits) => hits.filter(Boolean).map((h) => h.id);
+    const tagIds = ids(await Promise.all(c.tags.map((n) => findId("t", n))));
+    const perfIds = ids(await Promise.all(c.performers.map((n) => findId("p", n))));
     if (!tagIds.length && !perfIds.length) return null;
     const depth = c.subTags ? -1 : 0;
     const filter = !perfIds.length
@@ -171,7 +223,7 @@ export function mountSettings(el, env) {
         ? { performers: { value: perfIds, modifier: "INCLUDES" } }
         : // "none of the tags and none of the performers", negated (one OR across both kinds)
           { NOT: { tags: { value: tagIds, modifier: "EXCLUDES", depth }, performers: { value: perfIds, modifier: "EXCLUDES" } } };
-    const d = await env.gql("query($x: SceneFilterType) { findScenes(scene_filter: $x, filter: { per_page: 0 }) { count } }", { x: filter });
+    const d = await quietGql("query($x: SceneFilterType) { findScenes(scene_filter: $x, filter: { per_page: 0 }) { count } }", { x: filter });
     return d.findScenes.count;
   }
 
@@ -267,12 +319,28 @@ export function mountSettings(el, env) {
       .sort((a, b) => rank(a) - rank(b) || (b.scene_count || 0) - (a.scene_count || 0) || a.name.localeCompare(b.name))
       .slice(0, 8)
       .map((x) => {
-        found[kindOf(field)].set(x.name.toLowerCase(), Promise.resolve(x.id));
+        found[kindOf(field)].set(x.name.toLowerCase(), Promise.resolve({ id: x.id, name: x.name }));
         const aliases = (tags ? x.aliases : x.alias_list) || [];
         const alias = rank(x) === 3 ? aliases.find((a) => a.toLowerCase().includes(ql)) : x.disambiguation || null;
         return { name: x.name, count: x.scene_count || 0, alias };
       });
     S.suggest = { field, items, index: 0, q };
+    paintSuggest(field);
+  }
+
+  // While typing, the open list keeps only what still fits, until the new suggestions are there – so Enter never
+  // takes a suggestion for an older text
+  function refilter(field, text) {
+    const sg = S.suggest;
+    if (!sg || sg.field !== field) return;
+    const q = text.trim();
+    if (!q) S.suggest = null;
+    else {
+      const ql = q.toLowerCase();
+      sg.items = sg.items.filter((it) => it.name.toLowerCase().includes(ql) || (it.alias && it.alias.toLowerCase().includes(ql)));
+      sg.q = q;
+      sg.index = 0;
+    }
     paintSuggest(field);
   }
 
@@ -315,30 +383,44 @@ export function mountSettings(el, env) {
     paint();
   }
 
-  function addName(field, raw) {
+  // Folding the editor away (row, arrow) asks first when something was changed; Cancel doesn't
+  async function collapse() {
+    if (dirty() && !(await ask({ title: "Tag Categories", text: t("Discard the changes to this category?"), ok: t("Discard"), danger: true }))) return;
+    closeEditor();
+  }
+
+  // Adds typed or picked names; rest = what stays in the input (the part after the last comma)
+  function addName(field, raw, rest = "") {
     const d = S.draft;
     const kind = kindOf(field);
+    const known = S.suggest && S.suggest.field === field ? S.suggest.items : [];
     raw
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean)
-      .forEach((name) => {
+      .forEach((typed) => {
+        const hit = known.find((it) => it.name.toLowerCase() === typed.toLowerCase());
+        const name = hit ? hit.name : typed;
         const key = lower(name);
         if (d[field].some((n) => lower(n) === key)) return;
         d[field].push(name);
         findId(kind, name)
-          .then((id) => {
-            if (ac.signal.aborted || !!id === !S.missing[kind].has(key)) return;
-            if (id) S.missing[kind].delete(key);
+          .then((res) => {
+            if (ac.signal.aborted || S.draft !== d) return;
+            // the name as Stash spells it ("jane doe" → "Jane Doe", a performer's alias → the performer)
+            const i = d[field].findIndex((n) => lower(n) === key);
+            if (res && i >= 0 && res.name !== d[field][i] && !d[field].includes(res.name)) d[field][i] = res.name;
+            if (res) S.missing[kind].delete(key);
             else S.missing[kind].add(key);
             paint();
           })
           .catch(() => {});
       });
-    S.typing[field] = "";
+    S.typing[field] = rest;
     S.suggest = null;
     paint();
     previewLater();
+    if (rest.trim()) later("sg:" + field, SUGGEST_DEBOUNCE_MS, () => suggest(field, rest).catch(() => {}));
   }
 
   async function saveDraft() {
@@ -357,14 +439,23 @@ export function mountSettings(el, env) {
       return;
     }
     const fields = { name, tags: d.tags.slice(), performers: d.performers.slice(), subTags: !!d.subTags };
-    const editing = S.open !== "new" ? S.open : null;
+    const open = S.open;
+    const editing = open !== "new" ? open : null;
     const categories = editing
       ? cats().map((c) => (c.id === editing ? Object.assign({ id: c.id }, fields) : c))
       : cats().concat([Object.assign({ id: uniqueId(name) }, fields)]);
     if (typeof S.preview === "number") counts.set(signature(fields), S.preview);
-    if (await persist(Object.assign({}, S.config, { categories }), editing ? t("Category updated") : t("Category added"))) {
-      S.open = null;
-      S.draft = null;
+    // The editor closes at once (so a second click can't add the category twice) and comes back if saving fails
+    const base = S.base;
+    const preview = S.preview;
+    S.open = null;
+    S.draft = null;
+    S.suggest = null;
+    if (!(await persist(Object.assign({}, S.config, { categories }), editing ? t("Category updated") : t("Category added"))) && S.open == null) {
+      S.open = open;
+      S.draft = d;
+      S.base = base;
+      S.preview = preview;
       paint();
     }
   }
@@ -382,21 +473,31 @@ export function mountSettings(el, env) {
     return id;
   }
 
+  // Shows the change at once; the saves run one after another, so a quick second change is never overwritten by
+  // an older one. A failed save brings the old state back (unless something newer came after it).
   async function persist(next, message) {
+    const prev = { config: S.config, source: S.source };
+    S.config = next;
+    S.source = "settings";
+    S.json = null;
+    paint();
+    countAll();
+    const run = saveChain.then(() => env.save(next));
+    saveChain = run.catch(() => {});
     try {
-      await env.save(next);
-      S.config = next;
-      S.source = "settings";
-      S.json = null;
+      await run;
       if (message) env.toast(message, "ok");
       checkNames();
       return true;
     } catch (e) {
+      if (S.config === next) {
+        S.config = prev.config;
+        S.source = prev.source;
+        paint();
+        countAll();
+      }
       env.toast(err(e), "error");
       return false;
-    } finally {
-      paint();
-      countAll();
     }
   }
 
@@ -416,6 +517,46 @@ export function mountSettings(el, env) {
       S.draft = null;
     }
     persist(Object.assign({}, S.config, { categories: cats().filter((c) => c.id !== id) }), t("Category removed"));
+  }
+
+  // A copy right under the original, opened for renaming
+  async function duplicate(id) {
+    if (dirty() && !(await ask({ title: "Tag Categories", text: t("Discard the changes to this category?"), ok: t("Discard"), danger: true }))) return;
+    const index = cats().findIndex((c) => c.id === id);
+    const src = cats()[index];
+    if (!src) return;
+    const name = t("{name} (copy)", { name: src.name });
+    const copy = { id: uniqueId(name), name, tags: src.tags.slice(), performers: src.performers.slice(), subTags: !!src.subTags };
+    const list = cats().slice();
+    list.splice(index + 1, 0, copy);
+    S.open = null;
+    S.draft = null;
+    if (await persist(Object.assign({}, S.config, { categories: list }), t("Category duplicated"))) openEditor(copy.id);
+  }
+
+  // Creates missing tags / performers in Stash (the + on a red chip, "Create all" in the warning)
+  async function createNames(list) {
+    const created = [];
+    for (const { kind, name } of list) {
+      try {
+        const d = await env.gql(
+          kind === "t"
+            ? "mutation($i: TagCreateInput!) { tagCreate(input: $i) { id name } }"
+            : "mutation($i: PerformerCreateInput!) { performerCreate(input: $i) { id name } }",
+          { i: { name } }
+        );
+        const hit = d && (kind === "t" ? d.tagCreate : d.performerCreate);
+        found[kind].set(lower(name), Promise.resolve(hit ? { id: hit.id, name: hit.name } : null));
+        S.missing[kind].delete(lower(name));
+        created.push(hit ? hit.name : name);
+      } catch (e) {
+        env.toast(name + ": " + err(e), "error");
+      }
+    }
+    if (ac.signal.aborted) return;
+    if (created.length) env.toast(t("Created in Stash: {names}", { names: created.join(", ") }), "ok");
+    paint();
+    if (S.draft) previewLater();
   }
 
   function ask(opts) {
@@ -454,8 +595,11 @@ export function mountSettings(el, env) {
     const miss = S.missing[kind].has(lower(name));
     const cls = "tcs-chip" + (kind === "p" ? " is-perf" : "") + (miss ? " is-miss" : "");
     const title = miss ? t(kind === "p" ? "Performer doesn't exist in Stash" : "Tag doesn't exist in Stash") : "";
+    const create = t(kind === "p" ? "Create performer “{name}” in Stash" : "Create tag “{name}” in Stash", { name });
     return `<span class="${cls}"${title ? ` title="${esc(title)}"` : ""}>${kind === "p" ? ICON.person : ""}${esc(name)}${
-      removeField ? `<button type="button" class="tcs-chip-x" data-unchip="${removeField}" data-i="${index}" aria-label="${esc(t("Remove {name}", { name }))}">${ICON.x}</button>` : ""
+      miss ? `<button type="button" class="tcs-chip-btn tcs-chip-add" data-create="${esc(name)}" data-kind="${kind}" aria-label="${esc(create)}" title="${esc(create)}">${ICON.add}</button>` : ""
+    }${
+      removeField ? `<button type="button" class="tcs-chip-btn" data-unchip="${removeField}" data-i="${index}" aria-label="${esc(t("Remove {name}", { name }))}">${ICON.x}</button>` : ""
     }</span>`;
   }
 
@@ -538,8 +682,18 @@ export function mountSettings(el, env) {
           </div>
         </div>
         <div class="tcs-ed-foot">
-          <button type="button" class="${C.btn}" data-act="cancel">${esc(t("Cancel"))}</button>
-          <button type="button" class="${C.primary}" data-act="save">${cat ? ICON.check + esc(t("Save")) : ICON.plus + esc(t("Add"))}</button>
+          ${
+            cat
+              ? `<div class="tcs-ed-foot-side">
+                  <button type="button" class="${C.ghost} tcs-footbtn" data-dup="${esc(cat.id)}">${ICON.copy}${esc(t("Duplicate"))}</button>
+                  <button type="button" class="${C.ghost} tcs-footbtn tcs-footdel" data-del="${esc(cat.id)}">${ICON.trash}${esc(t("Delete"))}</button>
+                </div>`
+              : ""
+          }
+          <div class="tcs-ed-foot-main">
+            <button type="button" class="${C.btn}" data-act="cancel">${esc(t("Cancel"))}</button>
+            <button type="button" class="${C.primary}" data-act="save">${cat ? ICON.check + esc(t("Save")) : ICON.plus + esc(t("Add"))}</button>
+          </div>
         </div>
       </div>`;
   }
@@ -547,9 +701,18 @@ export function mountSettings(el, env) {
   function rowHtml(c) {
     const open = S.open === c.id;
     const miss = c.tags.some((n) => S.missing.t.has(lower(n))) || c.performers.some((n) => S.missing.p.has(lower(n)));
+    const count = esc(countText(counts.get(signature(c))));
+    // the number of scenes opens the category page
+    const countEl = env.categoryHref
+      ? `<a class="tcs-count" data-count="${esc(c.id)}" data-open="${esc(c.id)}" href="${esc(env.categoryHref(c.id))}" title="${esc(t("Open the category page"))}">${count}</a>`
+      : `<small data-count="${esc(c.id)}">${count}</small>`;
+    // (while searching the order can't be changed: the handle is left out)
+    const grip = S.filter.trim()
+      ? "<span></span>"
+      : `<button type="button" class="tcs-grip" data-grip="${esc(c.id)}" data-focus="grip:${esc(c.id)}" aria-label="${esc(t("Move {name}", { name: c.name }))}" title="${esc(t("Drag to change the order (or ↑ / ↓)"))}">${ICON.grip}</button>`;
     return `<div class="tcs-row${open ? " is-open" : ""}" data-row="${esc(c.id)}">
-        <button type="button" class="tcs-grip" data-grip="${esc(c.id)}" data-focus="grip:${esc(c.id)}" aria-label="${esc(t("Move {name}", { name: c.name }))}" title="${esc(t("Drag to change the order (or ↑ / ↓)"))}">${ICON.grip}</button>
-        <div class="tcs-name" data-toggle="${esc(c.id)}"><b>${esc(c.name)}</b><small data-count="${esc(c.id)}">${esc(countText(counts.get(signature(c))))}</small></div>
+        ${grip}
+        <div class="tcs-name" data-toggle="${esc(c.id)}"><b>${esc(c.name)}</b>${countEl}</div>
         <div class="tcs-main" data-toggle="${esc(c.id)}">
           <div class="tcs-chips">${c.tags.map((n) => chip(n, "t")).join("")}${c.performers.map((n) => chip(n, "p")).join("")}${
             c.subTags ? `<span class="tcs-badge">${esc(t("+ sub-tags"))}</span>` : ""
@@ -558,9 +721,10 @@ export function mountSettings(el, env) {
         </div>
         <div class="tcs-actions">${
           open
-            ? `<button type="button" class="tcs-ib is-on" data-act="cancel" aria-label="${esc(t("Close editor"))}" title="${esc(t("Close editor"))}">${ICON.up}</button>`
+            ? `<button type="button" class="tcs-ib is-on" data-act="collapse" aria-label="${esc(t("Close editor"))}" title="${esc(t("Close editor"))}">${ICON.up}</button>`
             : `<button type="button" class="tcs-ib" data-edit="${esc(c.id)}" aria-label="${esc(t("Edit {name}", { name: c.name }))}" title="${esc(t("Edit {name}", { name: c.name }))}">${ICON.edit}</button>
-               <button type="button" class="tcs-ib is-danger" data-del="${esc(c.id)}" aria-label="${esc(t("Delete {name}", { name: c.name }))}" title="${esc(t("Delete {name}", { name: c.name }))}">${ICON.trash}</button>`
+               <button type="button" class="tcs-ib tcs-wide" data-dup="${esc(c.id)}" aria-label="${esc(t("Duplicate {name}", { name: c.name }))}" title="${esc(t("Duplicate {name}", { name: c.name }))}">${ICON.copy}</button>
+               <button type="button" class="tcs-ib tcs-wide is-danger" data-del="${esc(c.id)}" aria-label="${esc(t("Delete {name}", { name: c.name }))}" title="${esc(t("Delete {name}", { name: c.name }))}">${ICON.trash}</button>`
         }</div>
       </div>${open ? editorHtml(c) : ""}`;
   }
@@ -571,16 +735,17 @@ export function mountSettings(el, env) {
       S.source === "file" ? t("Loaded from categories.json — saving here stores the categories in Stash.")
       : S.source === "defaults" && !cats().length ? t("No categories saved yet — the first one you add is stored in Stash.")
       : "";
-    const missingNames = [
-      ...new Set(cats().flatMap((c) => c.tags.filter((n) => S.missing.t.has(lower(n))).concat(c.performers.filter((n) => S.missing.p.has(lower(n)))))),
-    ];
+    const missing = missingNames();
     const isNew = S.open === "new";
     const empty = !cats().length && !isNew;
     const json = S.json != null ? S.json : env.toJson(S.config);
+    const q = lower(S.filter);
+    const shown = cats().filter((c) => fitsFilter(c, q) || c.id === S.open);
+    const search = cats().length >= SEARCH_FROM || q;
     return `<div class="tcs tcs-page is-${env.theme}">
         <header class="tcs-head">
           <div>
-            <div class="tcs-title"><h2>Tag Categories</h2><span class="tcs-ver">v${esc(env.version)}</span></div>
+            <div class="tcs-title"><h2>Tag Categories</h2>${env.version && env.version !== "0" ? `<span class="tcs-ver">v${esc(env.version)}</span>` : ""}</div>
             <p class="tcs-sub">${esc(t("Browse scenes by your own categories. A category combines tags and performers."))}</p>
           </div>
           <div class="tcs-head-actions">
@@ -589,7 +754,12 @@ export function mountSettings(el, env) {
           </div>
         </header>
         ${note ? `<p class="tcs-note">${esc(note)}</p>` : ""}
-        ${missingNames.length ? `<p class="tcs-note is-bad">${ICON.warn}<span>${esc(t("These don't exist in Stash and are skipped on the category pages: {names}.", { names: missingNames.join(", ") }))}</span></p>` : ""}
+        ${
+          missing.length
+            ? `<div class="tcs-note is-bad">${ICON.warn}<span>${esc(t("These don't exist in Stash and are skipped on the category pages: {names}.", { names: missing.map((m) => m.name).join(", ") }))}</span>
+                <button type="button" class="${C.btn} tcs-note-btn" data-act="createall">${ICON.plus}${esc(t("Create all"))}</button></div>`
+            : ""
+        }
         <section class="tcs-cats">
           <div class="tcs-sechead">
             <h3>${esc(t("Categories"))} <span>${cats().length}</span></h3>
@@ -599,11 +769,19 @@ export function mountSettings(el, env) {
             empty
               ? `<div class="tcs-empty"><b>${esc(t("No categories yet"))}</b><p>${esc(t("A category is a list of tags and performers. Its page shows every scene that has any of them."))}</p>
                   <button type="button" class="${C.primary}" data-act="new">${ICON.plus}${esc(t("New category"))}</button></div>`
-              : `<div class="tcs-list" data-list>
+              : `${
+                  search
+                    ? `<div class="tcs-search">${ICON.search}
+                        <input class="${C.field} tcs-search-input" type="search" data-filter data-focus="filter" value="${esc(S.filter)}" placeholder="${esc(t("Search categories …"))}" aria-label="${esc(t("Search categories …"))}" autocomplete="off" spellcheck="false">
+                        ${q ? `<span class="tcs-search-count">${esc(t("{n} of {total}", { n: shown.length, total: cats().length }))}</span>` : ""}
+                      </div>`
+                    : ""
+                }<div class="tcs-list" data-list>
                   <div class="tcs-row tcs-row-head" aria-hidden="true"><span></span><span>${esc(t("Category"))}</span><span>${esc(t("Tags and performers"))}</span><span></span></div>
-                  ${cats().map(rowHtml).join("")}
+                  ${shown.map(rowHtml).join("")}
+                  ${q && !shown.length ? `<p class="tcs-nohit">${esc(t("No category matches “{q}”.", { q: S.filter.trim() }))}</p>` : ""}
                   ${isNew ? `<div class="tcs-row is-open tcs-row-new"><span></span><div class="tcs-name"><b>${esc(S.draft.name.trim() || t("New category"))}</b></div><span class="tcs-main"></span>
-                      <div class="tcs-actions"><button type="button" class="tcs-ib is-on" data-act="cancel" aria-label="${esc(t("Close editor"))}">${ICON.up}</button></div></div>${editorHtml(null)}` : ""}
+                      <div class="tcs-actions"><button type="button" class="tcs-ib is-on" data-act="collapse" aria-label="${esc(t("Close editor"))}" title="${esc(t("Close editor"))}">${ICON.up}</button></div></div>${editorHtml(null)}` : ""}
                 </div>`
           }
         </section>
@@ -612,7 +790,7 @@ export function mountSettings(el, env) {
           <div class="tcs-adv-body">
             <div class="tcs-help" data-help>
               <h4>${esc(t("How categories work"))}</h4>
-              <p>${esc(t("Open Categories in the main menu and pick one: it lists every scene that has at least one of its tags or performers. Names must match Stash (case doesn't matter) — missing ones are shown in red."))}</p>
+              <p>${esc(t("Open Categories in the main menu and pick one (or click the number of scenes here): it lists every scene that has at least one of its tags or performers. Names must match Stash — missing ones are shown in red, + on the chip creates them."))}</p>
               <p>${esc(t("On the category page, the chips narrow the list down; ★ makes a chip the main one: every scene has it, and the other chips show only what goes with it."))}</p>
               <p>${esc(t("The order here is the order in the menu of the category page. Drag the handle on the left to change it."))}</p>
             </div>
@@ -630,20 +808,31 @@ export function mountSettings(el, env) {
   // Draws everything again; the focused field keeps its focus and cursor
   function paint() {
     if (ac.signal.aborted) return;
+    if (dragging) {
+      paintLater = true;
+      return;
+    }
     const a = document.activeElement;
     const focus = a && el.contains(a) && a.dataset ? a.dataset.focus : null;
     const range = focus && typeof a.selectionStart === "number" ? [a.selectionStart, a.selectionEnd] : null;
-    el.innerHTML = html();
-    if (!focus) return;
-    const n = el.querySelector(`[data-focus="${CSS.escape(focus)}"]`);
-    if (!n) return;
-    n.focus({ preventScroll: true });
-    if (range) {
-      try {
-        n.setSelectionRange(range[0], range[1]);
-      } catch (e) {
-        /* (not a text field) */
+    const scroll = focus ? a.scrollTop : 0;
+    painting = true;
+    try {
+      el.innerHTML = html();
+      if (!focus) return;
+      const n = el.querySelector(`[data-focus="${CSS.escape(focus)}"]`);
+      if (!n) return;
+      n.focus({ preventScroll: true });
+      if (scroll) n.scrollTop = scroll;
+      if (range) {
+        try {
+          n.setSelectionRange(range[0], range[1]);
+        } catch (e) {
+          /* (not a text field) */
+        }
       }
+    } finally {
+      painting = false;
     }
   }
 
@@ -667,8 +856,17 @@ export function mountSettings(el, env) {
       if (input && e.target !== input) input.focus();
       return;
     }
+    // the number of scenes: a plain click opens the category page in place (new tab etc. as usual)
+    const link = e.target.closest("[data-open]");
+    if (link) {
+      if (env.openCategory && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        env.openCategory(link.dataset.open);
+      }
+      return;
+    }
     const toggle = e.target.closest("[data-toggle]");
-    if (toggle && !e.target.closest("button")) return S.open === toggle.dataset.toggle ? closeEditor() : openEditor(toggle.dataset.toggle);
+    if (toggle && !e.target.closest("button")) return S.open === toggle.dataset.toggle ? collapse() : openEditor(toggle.dataset.toggle);
     const b = e.target.closest("button");
     if (!b || !el.contains(b)) return;
     if (b.dataset.unchip) {
@@ -676,11 +874,15 @@ export function mountSettings(el, env) {
       paint();
       return previewLater();
     }
+    if (b.dataset.create != null) return createNames([{ kind: b.dataset.kind, name: b.dataset.create }]);
     if (b.dataset.edit) return openEditor(b.dataset.edit);
+    if (b.dataset.dup) return duplicate(b.dataset.dup);
     if (b.dataset.del) return remove(b.dataset.del);
     const act = b.dataset.act;
     if (act === "new") openEditor("new");
+    else if (act === "createall") createNames(missingNames());
     else if (act === "cancel") closeEditor();
+    else if (act === "collapse") collapse();
     else if (act === "save") saveDraft();
     else if (act === "json" || act === "help") openAdvanced(act);
     else if (act === "savejson") {
@@ -708,12 +910,16 @@ export function mountSettings(el, env) {
       const field = n.dataset.chipinput;
       if (n.value.includes(",")) {
         const parts = n.value.split(",");
-        S.typing[field] = parts.pop();
-        addName(field, parts.join(","));
+        const rest = parts.pop().trimStart();
+        addName(field, parts.join(","), rest);
         return;
       }
       S.typing[field] = n.value;
+      refilter(field, n.value);
       later("sg:" + field, SUGGEST_DEBOUNCE_MS, () => suggest(field, n.value).catch(() => {}));
+    } else if (n.dataset.filter != null) {
+      S.filter = n.value;
+      paint();
     } else if (n.dataset.json != null) S.json = n.value;
   });
 
@@ -739,6 +945,9 @@ export function mountSettings(el, env) {
         const item = sg && sg.items[sg.index];
         if (item) addName(field, item.name);
         else if (n.value.trim()) addName(field, n.value);
+      } else if (e.key === "Tab" && sg && sg.items[sg.index] && n.value.trim()) {
+        // Tab takes the highlighted suggestion and moves on as usual
+        addName(field, sg.items[sg.index].name);
       } else if (e.key === "Escape" && sg) {
         e.preventDefault();
         e.stopPropagation();
@@ -756,6 +965,12 @@ export function mountSettings(el, env) {
       saveDraft();
       return;
     }
+    if (n.dataset.filter != null && e.key === "Escape" && S.filter) {
+      e.preventDefault();
+      S.filter = "";
+      paint();
+      return;
+    }
     if (n.dataset.grip && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
       e.preventDefault();
       const from = cats().findIndex((c) => c.id === n.dataset.grip);
@@ -765,7 +980,7 @@ export function mountSettings(el, env) {
 
   on("focusout", (e) => {
     const n = e.target;
-    if (!n.dataset.chipinput) return;
+    if (painting || !n.dataset.chipinput) return;
     const field = n.dataset.chipinput;
     // (after the click that moved the focus, so a button in the editor still gets it)
     setTimeout(() => {
@@ -782,7 +997,7 @@ export function mountSettings(el, env) {
     if (e.target.matches("[data-adv]")) S.advanced = e.target.open;
   }, { capture: true });
 
-  // Dragging a row by its handle (mouse and touch)
+  // Dragging a row by its handle (mouse and touch). Near the top or bottom edge the page scrolls along.
   on("pointerdown", (e) => {
     const grip = e.target.closest("[data-grip]");
     if (!grip || e.button !== 0) return;
@@ -791,20 +1006,27 @@ export function mountSettings(el, env) {
     const row = grip.closest("[data-row]");
     const from = rows.indexOf(row);
     const startY = e.clientY;
+    const box = scroller();
+    const scrollPos = () => (box ? box.scrollTop : window.scrollY);
+    const startScroll = scrollPos();
+    let y = e.clientY;
     let to = from;
+    let raf = 0;
     try {
       grip.setPointerCapture(e.pointerId);
     } catch (x) {
       /* (pointer already gone) */
     }
     row.classList.add("is-dragging");
+    dragging = true;
+    paintLater = false;
     const mid = (r) => {
       const b = r.getBoundingClientRect();
       return b.top + b.height / 2;
     };
-    const onMove = (ev) => {
-      row.style.transform = `translateY(${ev.clientY - startY}px)`;
-      to = rows.filter((r) => r !== row && mid(r) < ev.clientY).length;
+    const place = () => {
+      row.style.transform = `translateY(${y - startY + scrollPos() - startScroll}px)`;
+      to = rows.filter((r) => r !== row && mid(r) < y).length;
       rows.forEach((r) => r.classList.remove("drop-before", "drop-after"));
       const others = rows.filter((r) => r !== row);
       if (to !== from) {
@@ -812,19 +1034,50 @@ export function mountSettings(el, env) {
         else others[others.length - 1].classList.add("drop-after");
       }
     };
+    // faster the closer the pointer gets to the edge
+    const autoScroll = () => {
+      const r = box ? box.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+      const top = Math.max(r.top, 0) + SCROLL_ZONE;
+      const bottom = Math.min(r.bottom, window.innerHeight) - SCROLL_ZONE;
+      const step = y < top ? -Math.min(20, Math.ceil((top - y) / 3)) : y > bottom ? Math.min(20, Math.ceil((y - bottom) / 3)) : 0;
+      if (step) {
+        const before = scrollPos();
+        if (box) box.scrollTop += step;
+        else window.scrollBy(0, step);
+        if (scrollPos() !== before) place();
+      }
+      raf = requestAnimationFrame(autoScroll);
+    };
+    const onMove = (ev) => {
+      y = ev.clientY;
+      place();
+    };
     const onUp = () => {
+      cancelAnimationFrame(raf);
       grip.removeEventListener("pointermove", onMove);
       grip.removeEventListener("pointerup", onUp);
       grip.removeEventListener("pointercancel", onUp);
       row.classList.remove("is-dragging");
       row.style.transform = "";
       rows.forEach((r) => r.classList.remove("drop-before", "drop-after"));
+      dragging = false;
       if (to !== from) move(from, to);
+      else if (paintLater) paint();
     };
     grip.addEventListener("pointermove", onMove);
     grip.addEventListener("pointerup", onUp);
     grip.addEventListener("pointercancel", onUp);
+    raf = requestAnimationFrame(autoScroll);
   });
+
+  // The element that scrolls the page: Stash UI scrolls its main area, classic Stash the window (null)
+  function scroller() {
+    for (let n = el.parentElement; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+      const o = getComputedStyle(n).overflowY;
+      if ((o === "auto" || o === "scroll" || o === "overlay") && n.scrollHeight > n.clientHeight) return n;
+    }
+    return null;
+  }
 
   loadStyles();
   paint();
@@ -885,5 +1138,8 @@ const ICON = {
   warn: svg('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>', 14, 14),
   eye: svg('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'),
   x: svg('<path d="M18 6 6 18M6 6l12 12"/>', 12, 12),
+  add: svg('<path d="M12 5v14M5 12h14"/>', 12, 12),
   person: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>', 12, 12),
+  copy: svg('<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>'),
+  search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
 };

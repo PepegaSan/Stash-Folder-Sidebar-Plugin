@@ -1377,7 +1377,15 @@ export default function setup(stashui) {
               const answer = await ui.confirmDialog({ title: o.title, text: o.text, ok: o.ok, danger: o.danger });
               return !!(answer && answer.ok);
             },
-            load: async () => ({ config: await loadConfig(), source: configSource }),
+            load: async () => {
+              try {
+                return { config: await loadConfig(), source: configSource };
+              } catch (e) {
+                // broken presetsJson: show the defaults, so the page (and its JSON editor) still works
+                ui.errorToast(e, "Quick Markers");
+                return { config: defaultConfig(), source: "defaults" };
+              }
+            },
             save: saveConfig,
             parseJson: parsePresetsJson,
             toJson: presetsToJson,

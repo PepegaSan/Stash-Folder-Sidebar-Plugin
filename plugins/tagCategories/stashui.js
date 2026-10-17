@@ -446,6 +446,7 @@ export default function setup(stashui) {
                 return { categories };
               },
               toJson: categoriesToJson,
+              categoryHref: (id) => `#/p/${PLUGIN_ID}/${encodeURIComponent(id)}`,
             });
           })
           .catch((e) => ui.errorToast(e, "Tag Categories"));
