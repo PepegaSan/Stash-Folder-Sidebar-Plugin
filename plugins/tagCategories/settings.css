@@ -52,6 +52,8 @@
   flex-direction: column;
   gap: 1.25rem;
   max-width: 62rem;
+  /* narrow layout follows the page's own width: Stash UI puts it in a column next to its settings menu */
+  container: tcs / inline-size;
   color: var(--s-text);
   font-family: var(--s-font);
 }
@@ -519,9 +521,9 @@
 .tcs-modal p { margin: 0 0 1.1rem; color: var(--s-muted); }
 .tcs-modal-foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
 
-/* ── Narrow screens ── */
+/* ── Narrow space (page width, not window width) ── */
 
-@media (max-width: 760px) {
+@container tcs (max-width: 700px) {
   .tcs-row { grid-template-columns: 1.4rem minmax(0, 1fr) auto; gap: 0.6rem; padding-inline: 0.6rem; }
   .tcs-row .tcs-main { grid-column: 2 / -1; grid-row: 2; }
   .tcs-row .tcs-wide { display: none; }

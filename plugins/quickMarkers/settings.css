@@ -52,6 +52,8 @@
   flex-direction: column;
   gap: 1.25rem;
   max-width: 62rem;
+  /* narrow layout follows the page's own width: Stash UI puts it in a column next to its settings menu */
+  container: qms / inline-size;
   color: var(--s-text);
   font-family: var(--s-font);
 }
@@ -559,9 +561,9 @@
 .qms-modal p { margin: 0 0 1.1rem; color: var(--s-muted); }
 .qms-modal-foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
 
-/* ── Narrow screens ── */
+/* ── Narrow space (page width, not window width) ── */
 
-@media (max-width: 760px) {
+@container qms (max-width: 700px) {
   .qms-card { grid-template-columns: minmax(0, 1fr); }
   .qms-row { grid-template-columns: 1.4rem 2.4rem minmax(0, 1fr) auto; gap: 0.6rem; padding-inline: 0.6rem; }
   .qms-row .qms-rowkeys { display: none; }

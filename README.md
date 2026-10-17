@@ -145,7 +145,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.13.0-informational)
+![Version](https://img.shields.io/badge/version-1.13.1-informational)
 
 ## Requirements
 
@@ -263,8 +263,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.13.0`.
-6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.13.0** next to Quick Markers.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.13.1`.
+6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.13.1** next to Quick Markers.
 
 If an old version number appears, the old plugin files are still active.
 
@@ -439,7 +439,7 @@ Named **categories**, each with a list of Stash **tags** and optionally **perfor
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.10.0-informational)
+![Version](https://img.shields.io/badge/version-1.10.1-informational)
 
 ## Features
 
@@ -561,7 +561,7 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.10.0`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.10.1`.
 
 ---
 
