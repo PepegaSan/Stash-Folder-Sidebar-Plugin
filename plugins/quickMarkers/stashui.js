@@ -43,17 +43,6 @@ const STRINGS_DE = {
   "Create tag": "Tag anlegen",
   'Tag "{name}" created': "Tag „{name}“ angelegt",
   "Presets": "Presets",
-  "Default preset": "Standard-Preset",
-  "Used when a scene opens. Shift+1–9 and Shift+[ / ] switch while watching.":
-    "Ist beim Öffnen einer Szene aktiv. Shift+1–9 und Shift+[ / ] wechseln beim Schauen.",
-  "Add preset": "Preset hinzufügen",
-  Label: "Name",
-  "Primary tag": "Primärtag",
-  "Additional tags (comma-separated)": "Zusätzliche Tags (mit Komma getrennt)",
-  "Select hotkey": "Auswahl-Hotkey",
-  None: "Keiner",
-  Add: "Hinzufügen",
-  Edit: "Bearbeiten",
   Copy: "Kopieren",
   Paste: "Einfügen",
   "Same videos": "Gleiche Videos",
@@ -102,9 +91,6 @@ const STRINGS_DE = {
   "Open in a new tab": "In neuem Tab öffnen",
   Undo: "Rückgängig",
   "Marker sync": "Marker-Abgleich",
-  "These tags don't exist in Stash, so their presets can't create markers: {names}. Create the tags or fix the presets.":
-    "Diese Tags gibt es in Stash nicht, die zugehörigen Presets können keine Marker anlegen: {names}. Tags anlegen oder Presets korrigieren.",
-  "Tag doesn't exist in Stash": "Tag existiert in Stash nicht",
   "{n} videos": "{n} Videos",
   "+{n} markers missing": "+{n} fehlende Marker",
   "all have the same markers": "alle haben dieselben Marker",
@@ -183,36 +169,8 @@ const STRINGS_DE = {
   "Copy markers to {scenes}": "Marker auf {scenes} übertragen",
   "{n} markers copied to {scenes}": "{n} Marker auf {scenes} übertragen",
   "{n} markers copied to {scenes}, {r} deleted": "{n} Marker auf {scenes} übertragen, {r} gelöscht",
-  'Edit preset "{label}"': "Preset „{label}“ bearbeiten",
-  "Save changes": "Änderungen speichern",
   Cancel: "Abbrechen",
-  "Preset added": "Preset hinzugefügt",
-  "Preset updated": "Preset aktualisiert",
-  "Hotkeys of this preset": "Hotkeys dieses Presets",
-  "In point": "In-Punkt",
-  "Out point + save": "Out-Punkt + speichern",
-  "Instant marker": "Sofort-Marker",
-  "Written like shift+i or shift+]. In / Out / Instant work for the active preset; Shift+1–9 are only for selecting.":
-    "Schreibweise wie shift+i oder shift+]. In / Out / Sofort gelten für das aktive Preset; Shift+1–9 sind nur zum Auswählen.",
   Delete: "Löschen",
-  'Remove preset "{label}"?': "Preset „{label}“ entfernen?",
-  "Label and primary tag are required.": "Name und Primärtag sind Pflicht.",
-  "Edit JSON (advanced)": "JSON bearbeiten (erweitert)",
-  "Save JSON": "JSON speichern",
-  Saved: "Gespeichert",
-  "Hotkeys in the player": "Hotkeys im Player",
-  "select preset": "Preset wählen",
-  "previous / next preset": "voriges / nächstes Preset",
-  "in point": "In-Punkt",
-  "out point + save": "Out-Punkt + speichern",
-  "instant marker": "Sofort-Marker",
-  "They replace the plain I / O / M of the player only together with Shift.":
-    "Sie überschreiben I / O / M des Players nur zusammen mit Shift.",
-  "Loaded from presets.json — saving here stores the presets in Stash.":
-    "Aus presets.json geladen – Speichern hier legt die Presets in Stash ab.",
-  "Built-in defaults — saving here stores the presets in Stash.":
-    "Eingebaute Standardwerte – Speichern hier legt die Presets in Stash ab.",
-  "Tags must exist in Stash (exact name).": "Tags müssen in Stash existieren (exakter Name).",
 };
 
 // ---------- Presets (same rules as quickMarkers.js) ----------
@@ -1394,6 +1352,7 @@ export default function setup(stashui) {
   });
 
   // ---------- Settings → Plugins → Quick Markers ----------
+  // settings.js draws the page (the same module as in classic Stash).
 
   if (!stashui.has("slot:settings.section")) return;
 
@@ -1401,284 +1360,31 @@ export default function setup(stashui) {
     id: "settings",
     title: "Quick Markers",
     mount(el, ctx) {
-      const signal = ctx.signal;
-      let config = null;
-      let showJson = false;
-      let editingId = null; // id of the preset in the form, null = adding a new one
-      let draft = null; // what is typed in the form, kept when the page is redrawn
-
-      const SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-
-      function emptyDraft() {
-        const used = new Set(config.presets.map((p) => p.selectSlot).filter(Boolean));
-        return {
-          label: "",
-          primaryTag: "",
-          tags: "",
-          selectSlot: String(SLOTS.find((n) => !used.has(n)) || ""),
-          rangeInKey: "shift+i",
-          rangeOutKey: "shift+o",
-          instantKey: DEFAULT_INSTANT_KEY,
-        };
-      }
-
-      function presetDraft(p) {
-        return {
-          label: p.label,
-          primaryTag: p.primaryTag,
-          tags: (p.tags || []).join(", "),
-          selectSlot: p.selectSlot ? String(p.selectSlot) : "",
-          rangeInKey: p.rangeInKey || "shift+i",
-          rangeOutKey: p.rangeOutKey || "shift+o",
-          instantKey: p.instantKey || DEFAULT_INSTANT_KEY,
-        };
-      }
-
-      function startEdit(id) {
-        const preset = config.presets.find((p) => p.id === id);
-        if (!preset) return;
-        editingId = id;
-        draft = presetDraft(preset);
-        paint();
-        const form = el.querySelector("[data-qm-form]");
-        if (form) {
-          form.scrollIntoView({ behavior: "smooth", block: "start" });
-          form.label.focus({ preventScroll: true });
-        }
-      }
-
-      function stopEdit() {
-        editingId = null;
-        draft = emptyDraft();
-        paint();
-      }
-
-      function uniqueId(label) {
-        const base = label.toLowerCase().replace(/\s+/g, "-") || "preset";
-        const taken = new Set(config.presets.map((p) => p.id));
-        let id = base;
-        for (let n = 2; taken.has(id); n++) id = base + "-" + n;
-        return id;
-      }
-
-      // Tag names of the presets that don't exist in Stash (lower case): shown in red, so a preset
-      // that can't create markers is noticed here and not only when it's used.
-      let missingTags = new Set();
-      async function checkTags() {
-        const names = new Set();
-        config.presets.forEach((p) => [p.primaryTag].concat(p.tags || []).forEach((n) => names.add(n)));
-        const missing = new Set();
-        for (const name of names) {
-          try {
-            if (!(await findTagId(name))) missing.add(name.toLowerCase());
-          } catch (e) {
-            /* unknown — not marked */
-          }
-        }
-        missingTags = missing;
-        paint();
-      }
-
-      async function persist(next, message) {
-        try {
-          await saveConfig(next);
-          config = next;
-          ui.toast(message || t("Saved"), "ok");
-          checkTags();
-          return true;
-        } catch (e) {
-          ui.errorToast(e, "Quick Markers");
-          return false;
-        } finally {
-          paint();
-        }
-      }
-
-      function slotOptions(selected) {
-        return `<option value="">${esc(t("None"))}</option>` + SLOTS
-          .map((n) => `<option value="${n}"${String(n) === selected ? " selected" : ""}>Shift+${n}</option>`)
-          .join("");
-      }
-
-      function field(name, label, attrs) {
-        return `<label class="qm-set-field"><span>${esc(label)}</span><input class="kb-field" name="${name}" value="${esc(draft[name])}" autocomplete="off" ${attrs || ""}></label>`;
-      }
-
-      function paint() {
-        if (signal.aborted) return;
-        if (!config) {
-          el.innerHTML = `<div class="kb-loading">…</div>`;
-          return;
-        }
-        if (editingId != null && !config.presets.some((p) => p.id === editingId)) editingId = null;
-        if (!draft) draft = emptyDraft();
-        const editing = editingId != null ? config.presets.find((p) => p.id === editingId) : null;
-        const note =
-          configSource === "file" ? t("Loaded from presets.json — saving here stores the presets in Stash.")
-          : configSource === "defaults" ? t("Built-in defaults — saving here stores the presets in Stash.")
-          : "";
-        el.innerHTML = `
-          <div class="qm-set">
-            ${note ? `<p class="kb-hint qm-set-note">${esc(note)}</p>` : ""}
-            ${missingTags.size ? `<p class="qm-set-note qm-set-warn">${esc(t("These tags don't exist in Stash, so their presets can't create markers: {names}. Create the tags or fix the presets.", { names: config.presets.flatMap((p) => [p.primaryTag].concat(p.tags || [])).filter((n, i, all) => missingTags.has(n.toLowerCase()) && all.indexOf(n) === i).join(", ") }))}</p>` : ""}
-            <section class="qm-set-keys">
-              <h2 class="kb-h2">${esc(t("Hotkeys in the player"))}</h2>
-              <dl>
-                <dt><kbd>⇧1</kbd>–<kbd>⇧9</kbd></dt><dd>${esc(t("select preset"))}</dd>
-                <dt><kbd>⇧[</kbd> <kbd>⇧]</kbd></dt><dd>${esc(t("previous / next preset"))}</dd>
-                <dt><kbd>⇧I</kbd></dt><dd>${esc(t("in point"))}</dd>
-                <dt><kbd>⇧O</kbd></dt><dd>${esc(t("out point + save"))}</dd>
-                <dt><kbd>⇧M</kbd></dt><dd>${esc(t("instant marker"))}</dd>
-              </dl>
-              <p class="kb-hint">${esc(t("They replace the plain I / O / M of the player only together with Shift."))}</p>
-            </section>
-
-            <section>
-              <h2 class="kb-h2">${esc(t("Presets"))} <small>${config.presets.length}</small></h2>
-              <div class="qm-set-list">
-                ${config.presets
-                  .map((p, i) => `
-                  <div class="qm-set-row${p === editing ? " is-editing" : ""}">
-                    <span class="qm-set-label">${esc(p.label)}${p.selectSlot ? ` <kbd>⇧${p.selectSlot}</kbd>` : ""}</span>
-                    <span class="qm-set-tags">${[p.primaryTag].concat(p.tags || []).map((tag, j) => missingTags.has(tag.toLowerCase()) ? `<span class="kb-chip is-not" title="${esc(t("Tag doesn't exist in Stash"))}">${esc(tag)}</span>` : `<span class="kb-chip${j ? "" : " is-on"}">${esc(tag)}</span>`).join("")}</span>
-                    <span class="qm-set-actions">
-                      <button type="button" class="kb-btn is-icon is-ghost" data-qm-edit="${esc(p.id)}" title="${esc(t("Edit"))}" aria-label="${esc(t("Edit"))} ${esc(p.label)}">${ui.icon("edit")}</button>
-                      <button type="button" class="kb-btn is-icon is-ghost" data-qm-del="${i}" title="${esc(t("Delete"))}" aria-label="${esc(t("Delete"))} ${esc(p.label)}"${config.presets.length < 2 ? " disabled" : ""}>${ui.icon("trash")}</button>
-                    </span>
-                  </div>`)
-                  .join("")}
-              </div>
-              <label class="qm-set-field">
-                <span>${esc(t("Default preset"))}</span>
-                <select class="kb-field" data-qm-default>
-                  ${config.presets.map((p, i) => `<option value="${i}"${i === config.defaultPresetIndex ? " selected" : ""}>${esc(p.label)}</option>`).join("")}
-                </select>
-                <small class="kb-hint">${esc(t("Used when a scene opens. Shift+1–9 and Shift+[ / ] switch while watching."))}</small>
-              </label>
-            </section>
-
-            <form class="qm-set-form${editing ? " is-editing" : ""}" data-qm-form>
-              <h2 class="kb-h2">${editing ? esc(t('Edit preset "{label}"', { label: editing.label })) : esc(t("Add preset"))}</h2>
-              <div class="qm-set-grid">
-                ${field("label", t("Label"), 'placeholder="Compilation" required')}
-                ${field("primaryTag", t("Primary tag"), 'placeholder="Compilation"')}
-                ${field("tags", t("Additional tags (comma-separated)"), 'placeholder="Favorite, Outdoor"')}
-                <label class="qm-set-field"><span>${esc(t("Select hotkey"))}</span><select class="kb-field" name="selectSlot">${slotOptions(draft.selectSlot)}</select></label>
-              </div>
-              <p class="kb-hint">${esc(t("Tags must exist in Stash (exact name)."))}</p>
-              <fieldset class="qm-set-keyset">
-                <legend>${esc(t("Hotkeys of this preset"))}</legend>
-                <div class="qm-set-grid">
-                  ${field("rangeInKey", t("In point"), 'placeholder="shift+i" spellcheck="false"')}
-                  ${field("rangeOutKey", t("Out point + save"), 'placeholder="shift+o" spellcheck="false"')}
-                  ${field("instantKey", t("Instant marker"), `placeholder="${DEFAULT_INSTANT_KEY}" spellcheck="false"`)}
-                </div>
-                <p class="kb-hint">${esc(t("Written like shift+i or shift+]. In / Out / Instant work for the active preset; Shift+1–9 are only for selecting."))}</p>
-              </fieldset>
-              <div class="qm-set-form-actions">
-                <button type="submit" class="kb-btn is-primary">${editing ? ui.icon("check") + esc(t("Save changes")) : ui.icon("plus") + esc(t("Add"))}</button>
-                ${editing ? `<button type="button" class="kb-btn" data-qm-cancel>${esc(t("Cancel"))}</button>` : ""}
-              </div>
-            </form>
-
-            <section>
-              <button type="button" class="kb-btn" data-qm-json aria-expanded="${showJson}">${ui.icon("edit")}${esc(t("Edit JSON (advanced)"))}</button>
-              ${showJson ? `
-                <textarea class="kb-field qm-set-json" rows="16" spellcheck="false" data-qm-json-text>${esc(presetsToJson(config))}</textarea>
-                <button type="button" class="kb-btn is-primary" data-qm-json-save>${esc(t("Save JSON"))}</button>` : ""}
-            </section>
-          </div>`;
-      }
-
-      const inForm = (target) => !!(draft && target.form && target.form.matches("[data-qm-form]") && target.name in draft);
-
-      el.addEventListener("input", (e) => {
-        if (inForm(e.target)) draft[e.target.name] = e.target.value;
-      }, { signal });
-
-      el.addEventListener("change", (e) => {
-        if (inForm(e.target)) {
-          draft[e.target.name] = e.target.value;
-          return;
-        }
-        if (!e.target.matches("[data-qm-default]")) return;
-        persist(Object.assign({}, config, { defaultPresetIndex: Number(e.target.value) }));
-      }, { signal });
-
-      el.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const label = draft.label.trim();
-        const primaryTag = (draft.primaryTag || label).trim();
-        if (!label || !primaryTag) {
-          ui.toast(t("Label and primary tag are required."), "error");
-          return;
-        }
-        const fields = {
-          label,
-          primaryTag,
-          tags: normalizePresetTags(draft.tags, primaryTag),
-          title: label,
-          rangeInKey: (draft.rangeInKey.trim() || "shift+i").toLowerCase(),
-          rangeOutKey: (draft.rangeOutKey.trim() || "shift+o").toLowerCase(),
-          instantKey: normalizeInstantKey(draft.instantKey),
-          selectSlot: normalizeSelectSlot(draft.selectSlot || null, 99),
-        };
-        // A select slot belongs to one preset: taking it clears it on the others.
-        const freeSlot = (p) => (fields.selectSlot && p.selectSlot === fields.selectSlot ? Object.assign({}, p, { selectSlot: null }) : p);
-        const editing = editingId;
-        const presets = editing != null
-          ? config.presets.map((p) => (p.id === editing ? Object.assign({}, p, fields) : freeSlot(p)))
-          : config.presets.map(freeSlot).concat([Object.assign({ id: uniqueId(label) }, fields)]);
-        const ok = await persist(Object.assign({}, config, { presets }), editing != null ? t("Preset updated") : t("Preset added"));
-        if (ok) stopEdit();
-      }, { signal });
-
-      el.addEventListener("click", async (e) => {
-        const b = e.target.closest("button");
-        if (!b || !el.contains(b)) return;
-        if (b.dataset.qmEdit != null) {
-          startEdit(b.dataset.qmEdit);
-        } else if (b.dataset.qmCancel != null) {
-          stopEdit();
-        } else if (b.dataset.qmDel != null) {
-          const index = Number(b.dataset.qmDel);
-          const preset = config.presets[index];
-          if (!preset || config.presets.length < 2) return;
-          const answer = await ui.confirmDialog({ title: "Quick Markers", text: t('Remove preset "{label}"?', { label: preset.label }), ok: t("Delete"), danger: true });
-          if (!answer || !answer.ok) return;
-          const presets = config.presets.filter((p, i) => i !== index);
-          const defaultPresetIndex = Math.min(config.defaultPresetIndex, presets.length - 1);
-          if (preset.id === editingId) {
-            editingId = null;
-            draft = null;
-          }
-          persist(Object.assign({}, config, { presets, defaultPresetIndex }));
-        } else if (b.dataset.qmJson != null) {
-          showJson = !showJson;
-          paint();
-        } else if (b.dataset.qmJsonSave != null) {
-          try {
-            const parsed = parsePresetsJson(el.querySelector("[data-qm-json-text]").value);
-            if (!parsed) throw new Error("presets must be a non-empty array");
-            if (await persist(parsed)) {
-              editingId = null;
-              draft = null;
-              paint();
-            }
-          } catch (err) {
-            ui.errorToast(err, "JSON");
-          }
-        }
-      }, { signal });
-
-      paint();
-      loadConfig()
-        .then((c) => {
-          config = c;
-          paint();
-          checkTags();
+      const search = new URL(import.meta.url).search;
+      let handle = null;
+      el.innerHTML = `<div class="kb-loading">…</div>`;
+      import(new URL("settings.js" + search, import.meta.url).href)
+        .then((mod) => {
+          if (ctx.signal.aborted) return;
+          stashui.addStrings("de", mod.STRINGS_DE);
+          handle = mod.mountSettings(el, {
+            theme: "stashui",
+            t,
+            version: (new URLSearchParams(search).get("v") || "").split("-")[0],
+            gql: (q, v) => stashui.gql(q, v),
+            toast: (text, kind) => ui.toast(text, kind),
+            confirm: async (o) => {
+              const answer = await ui.confirmDialog({ title: o.title, text: o.text, ok: o.ok, danger: o.danger });
+              return !!(answer && answer.ok);
+            },
+            load: async () => ({ config: await loadConfig(), source: configSource }),
+            save: saveConfig,
+            parseJson: parsePresetsJson,
+            toJson: presetsToJson,
+          });
         })
         .catch((e) => ui.errorToast(e, "Quick Markers"));
+      return () => handle && handle.destroy();
     },
   });
 }

@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "tagCategories";
-  const PLUGIN_VERSION = "1.8.1";
+  const PLUGIN_VERSION = "1.9.0";
   const SEARCH_DEBOUNCE_MS = 250;
   const PAGE_SIZE = 60; // scenes per request; more are loaded while scrolling
   const CHIPS_COLLAPSED = 24; // tag chips shown before "+N more"
@@ -116,53 +116,6 @@
   const I18N = {
     en: {
       navLabel: "Categories",
-      versionLine:
-        "Tag Categories v" +
-        PLUGIN_VERSION +
-        " — if you do not see this version, Stash is still using old plugin files.",
-      intro:
-        "Define named categories with comma-separated tags (optionally with their sub-tags) and performers. Open Categories in the main menu, click a category, and see every scene that has any of those tags or performers. Narrow it down with the chips; ★ makes a chip the main tag.",
-      loadedFromFile: "Loaded from",
-      loadedFromFileSuffix: ". Saving here overrides the file.",
-      usingDefaultsPrefix: "Using built-in defaults (no",
-      usingDefaultsSuffix:
-        "yet). Add a category or save JSON to store settings in Stash. Optional: copy",
-      usingDefaultsArrow: "→",
-      usingDefaultsInFolder: "in the plugin folder.",
-      categories: "Categories",
-      emptyCategories: "No categories yet.",
-      colName: "Name",
-      colTags: "Tags",
-      edit: "Edit",
-      delete: "Delete",
-      addCategory: "Add category",
-      editCategory: "Edit category",
-      editing: "Editing:",
-      nameLabel: "Category name",
-      namePlaceholder: "e.g. Genre",
-      tagsLabel: "Tags (comma-separated)",
-      tagsPlaceholder: "Action, Comedy, Drama",
-      tagsHelp:
-        "Comma-separated tag names, exactly as in Stash under Tags. Scenes matching any of these tags are shown when you open the category.",
-      add: "Add",
-      saveChanges: "Save changes",
-      cancel: "Cancel",
-      editJson: "Edit JSON (advanced)…",
-      helpJson: "Help: categories JSON",
-      jsonModalTitle: "Edit categories (JSON)",
-      jsonModalHint:
-        "categories array: name, tags. Optional: performers, subTags: true = include sub-tags, id = fixed browser URL.",
-      close: "Close",
-      save: "Save",
-      nameRequired: "Category name is required.",
-      tagsRequired: "Enter at least one tag or performer (comma-separated).",
-      categoryNotFound: "Category not found.",
-      categoryAdded: "Category added.",
-      categoryUpdated: "Category updated.",
-      categoryRemoved: "Category removed.",
-      removeConfirm: 'Remove category "{name}"?',
-      jsonSaved: "JSON saved.",
-      jsonInvalid: "JSON must include a categories array.",
       pageNavTitle: "Categories",
       pageEmptyConfig:
         "No categories configured. Add some under Settings → Plugins → Tag Categories.",
@@ -190,27 +143,6 @@
       sortDurationAsc: "Duration (short → long)",
       sortDateDesc: "Date (newest)",
       sortDateAsc: "Date (oldest)",
-      helpTitle: "Categories in JSON",
-      helpIntro:
-        "How to define categories in the JSON editor. Settings are stored in the Stash database (plugin settings). Each category is a filter: scenes that have any of the listed tags.",
-      helpStep1:
-        "In these plugin settings, click Edit JSON (advanced) (button at the bottom of this page).",
-      helpStep2:
-        "Edit the categories array: each entry needs a name and a tags array of exact Stash tag names.",
-      helpStep3:
-        "Open Categories in the main menu and click a category to load matching scenes.",
-      helpId: "id — for a fixed URL in the browser (optional; otherwise made from the name).",
-      helpSave:
-        "Click Save in the JSON dialog, then Reload plugins / Reload UI if the menu page does not update.",
-      helpWarning:
-        "Matching is OR: a scene appears if it has at least one of the category tags or performers. Names must match Stash exactly (case-insensitive lookup).",
-      helpPerformers:
-        "performers — optional: performer names (or an alias). Scenes with any of them belong to the category too, and the performers get chips of their own.",
-      helpMain:
-        "On the Categories page, ★ on a chip makes it the main tag (or main performer): every scene has it, and the other chips only show what goes with it – e.g. a model and the actions there are with that model.",
-      subTagsLabel: "Include sub-tags",
-      subTagsHelp:
-        "Scenes with a child tag of these tags count too (Stash tag hierarchy, any depth). Handy for a parent tag: new child tags show up in the category automatically.",
       subTagsShort: "+ sub-tags",
       chipsHint: "Click: select · Right-click: exclude · ★: main tag",
       mainTitle:
@@ -220,10 +152,6 @@
       mainNote: "Main: {names}",
       chipsTags: "Tags",
       chipsPerformers: "Performers",
-      performersLabel: "Performers (comma-separated, optional)",
-      performersPlaceholder: "Jane Doe, John Doe",
-      performersHelp:
-        "Performer names exactly as in Stash (or an alias). Scenes with any of them belong to the category too; each performer gets a chip and can be the main one.",
       matchLabel: "Selected tags",
       matchAny: "Any of them",
       matchAll: "All",
@@ -238,57 +166,9 @@
       openInStashNo: "Stash can't show this selection as one scene list",
       noSelectionMatches: "No scenes match this tag selection.",
       totalDuration: "{d} in total",
-      helpOk: "OK",
     },
     de: {
       navLabel: "Kategorien",
-      versionLine:
-        "Tag Categories v" +
-        PLUGIN_VERSION +
-        " — wenn diese Version fehlt, nutzt Stash noch alte Plugin-Dateien.",
-      intro:
-        "Kategorien mit komma-getrennten Tags (auf Wunsch samt Unter-Tags) und Performern anlegen. Im Hauptmenü Kategorien öffnen, eine Kategorie anklicken — dann erscheinen alle Szenen, die eines dieser Tags oder einen dieser Performer haben. Mit den Chips weiter eingrenzen; ★ macht einen Chip zum Haupt-Tag.",
-      loadedFromFile: "Geladen aus",
-      loadedFromFileSuffix: ". Speichern hier überschreibt die Datei.",
-      usingDefaultsPrefix: "Eingebaute Defaults (keine",
-      usingDefaultsSuffix:
-        "vorhanden). Kategorie hinzufügen oder JSON speichern, um Einstellungen in Stash zu sichern. Optional:",
-      usingDefaultsArrow: "→",
-      usingDefaultsInFolder: "im Plugin-Ordner kopieren.",
-      categories: "Kategorien",
-      emptyCategories: "Noch keine Kategorien.",
-      colName: "Name",
-      colTags: "Tags",
-      edit: "Bearbeiten",
-      delete: "Löschen",
-      addCategory: "Kategorie hinzufügen",
-      editCategory: "Kategorie bearbeiten",
-      editing: "Bearbeitung:",
-      nameLabel: "Kategoriename",
-      namePlaceholder: "z. B. Genre",
-      tagsLabel: "Tags (komma-getrennt)",
-      tagsPlaceholder: "Action, Comedy, Drama",
-      tagsHelp:
-        "Komma-getrennte Tag-Namen, exakt wie unter Tags in Stash. Beim Öffnen der Kategorie erscheinen Szenen mit einem dieser Tags.",
-      add: "Hinzufügen",
-      saveChanges: "Änderungen speichern",
-      cancel: "Abbrechen",
-      editJson: "JSON bearbeiten (erweitert)…",
-      helpJson: "Hilfe: Kategorien-JSON",
-      jsonModalTitle: "Kategorien bearbeiten (JSON)",
-      jsonModalHint:
-        "categories-Array: name, tags. Optional: performers, subTags: true = Unter-Tags einbeziehen, id = feste URL im Browser.",
-      close: "Schließen",
-      save: "Speichern",
-      nameRequired: "Kategoriename ist erforderlich.",
-      tagsRequired: "Mindestens einen Tag oder Performer eintragen (komma-getrennt).",
-      categoryNotFound: "Kategorie nicht gefunden.",
-      categoryAdded: "Kategorie hinzugefügt.",
-      categoryUpdated: "Kategorie aktualisiert.",
-      categoryRemoved: "Kategorie entfernt.",
-      removeConfirm: 'Kategorie "{name}" entfernen?',
-      jsonSaved: "JSON gespeichert.",
-      jsonInvalid: "JSON muss ein categories-Array enthalten.",
       pageNavTitle: "Kategorien",
       pageEmptyConfig:
         "Keine Kategorien konfiguriert. Anlegen unter Settings → Plugins → Tag Categories.",
@@ -316,27 +196,6 @@
       sortDurationAsc: "Dauer (kurz → lang)",
       sortDateDesc: "Datum (neueste)",
       sortDateAsc: "Datum (älteste)",
-      helpTitle: "Kategorien im JSON",
-      helpIntro:
-        "So legst du Kategorien im JSON-Editor an. Gespeichert wird in der Stash-Datenbank. Jede Kategorie ist ein Filter: Szenen mit mindestens einem der genannten Tags.",
-      helpStep1:
-        "In diesen Plugin-Settings auf JSON bearbeiten (erweitert) klicken (Button unten).",
-      helpStep2:
-        "Im Array categories Einträge mit name und tags (exakte Stash-Tag-Namen) setzen.",
-      helpStep3:
-        "Im Hauptmenü Kategorien öffnen und eine Kategorie anklicken, um passende Szenen zu laden.",
-      helpId: "id — für eine feste URL im Browser (optional; sonst aus dem Namen).",
-      helpSave:
-        "Im JSON-Dialog Speichern — danach ggf. Reload plugins / Reload UI.",
-      helpWarning:
-        "ODER-Logik: Eine Szene erscheint, wenn sie mindestens eines der Tags oder einen der Performer hat. Namen müssen zu Stash passen (Suche ohne Groß-/Kleinschreibung).",
-      helpPerformers:
-        "performers — optional: Performer-Namen (oder ein Alias). Szenen mit einem davon gehören auch zur Kategorie, und die Performer bekommen eigene Chips.",
-      helpMain:
-        "Auf der Kategorien-Seite macht ★ einen Chip zum Haupt-Tag (bzw. Haupt-Performer): Jede Szene hat ihn, und die anderen Chips zeigen nur noch, was es dazu gibt – z. B. ein Model und die Handlungen, die es mit diesem Model gibt.",
-      subTagsLabel: "Unter-Tags einbeziehen",
-      subTagsHelp:
-        "Szenen mit einem Unter-Tag dieser Tags zählen mit (Tag-Hierarchie in Stash, beliebig tief). Praktisch für einen Eltern-Tag: neue Unter-Tags landen automatisch in der Kategorie.",
       subTagsShort: "+ Unter-Tags",
       chipsHint: "Klick: auswählen · Rechtsklick: ausschließen · ★: Haupt-Tag",
       mainTitle:
@@ -346,10 +205,6 @@
       mainNote: "Haupt-Tag: {names}",
       chipsTags: "Tags",
       chipsPerformers: "Performer",
-      performersLabel: "Performer (komma-getrennt, optional)",
-      performersPlaceholder: "Jane Doe, John Doe",
-      performersHelp:
-        "Performer-Namen exakt wie in Stash (oder ein Alias). Szenen mit einem davon gehören auch zur Kategorie; jeder Performer bekommt einen Chip und kann Haupt-Performer sein.",
       matchLabel: "Ausgewählte Tags",
       matchAny: "Eines davon",
       matchAll: "Alle",
@@ -364,7 +219,6 @@
       openInStashNo: "Stash kann diese Auswahl nicht als eine Szenenliste zeigen",
       noSelectionMatches: "Keine Szenen passen zu dieser Tag-Auswahl.",
       totalDuration: "{d} insgesamt",
-      helpOk: "OK",
     },
   };
 
@@ -2131,714 +1985,83 @@
     }
   });
 
-  function HelpModal(props) {
-    if (!props.open) return null;
-    const lang = props.lang;
-    return React.createElement(
-      "div",
-      {
-        className: "tag-categories-modal-backdrop",
-        role: "presentation",
-        onClick: props.onClose,
-      },
-      React.createElement(
-        "div",
-        {
-          className: "tag-categories-modal tag-categories-help-modal",
-          role: "dialog",
-          "aria-modal": true,
-          "aria-labelledby": "tc-help-title",
-          onClick: function (e) {
-            e.stopPropagation();
-          },
-        },
-        React.createElement(
-          "div",
-          { className: "tag-categories-modal-header" },
-          React.createElement(
-            "h3",
-            { id: "tc-help-title", className: "tag-categories-modal-title" },
-            t(lang, "helpTitle")
-          ),
-          React.createElement(
-            "button",
-            {
-              type: "button",
-              className: "tag-categories-modal-close",
-              "aria-label": t(lang, "close"),
-              onClick: props.onClose,
-            },
-            "×"
-          )
-        ),
-        React.createElement(
-          "div",
-          { className: "tag-categories-modal-body tag-categories-help-body" },
-          React.createElement("p", null, t(lang, "helpIntro")),
-          React.createElement(
-            "ol",
-            { className: "tag-categories-help-steps" },
-            React.createElement("li", null, t(lang, "helpStep1")),
-            React.createElement("li", null, t(lang, "helpStep2")),
-            React.createElement("li", null, t(lang, "helpStep3"))
-          ),
-          React.createElement(
-            "pre",
-            { className: "tag-categories-help-code" },
-            '{\n  "categories": [\n    {\n      "id": "genre",\n      "name": "Genre",\n      "tags": ["Action", "Comedy"]\n    },\n    {\n      "name": "Bracket Tags",\n      "tags": ["Bracket Tags"],\n      "subTags": true\n    },\n    {\n      "name": "Models",\n      "tags": ["Dance", "Outdoor"],\n      "performers": ["Jane Doe", "John Doe"]\n    }\n  ]\n}'
-          ),
-          React.createElement("p", null, t(lang, "helpPerformers")),
-          React.createElement("p", null, t(lang, "helpMain")),
-          React.createElement("p", null, t(lang, "helpId")),
-          React.createElement("p", null, t(lang, "helpSave")),
-          React.createElement(
-            "p",
-            { className: "text-muted small mb-0" },
-            t(lang, "helpWarning")
-          )
-        ),
-        React.createElement(
-          "div",
-          { className: "tag-categories-modal-footer" },
-          React.createElement(
-            "button",
-            {
-              type: "button",
-              className: "btn btn-primary",
-              onClick: props.onClose,
-            },
-            t(lang, "helpOk")
-          )
-        )
-      )
-    );
+  // ---------- Settings page ----------
+  // settings.js draws it (the same module as in Stash UI); this only connects it to classic Stash.
+
+  const SETTINGS_URL = "/plugin/" + PLUGIN_ID + "/assets/settings.js?v=" + PLUGIN_VERSION;
+
+  // Inside Stash UI's plugin host (its Plugins page) the settings take Stash UI's look
+  function isStashUiHost() {
+    const app = document.getElementById("app");
+    return !!(app && app.classList.contains("kb-app"));
   }
 
   function TagCategoriesSettings() {
     const settingsApi =
       PluginApi.hooks && typeof PluginApi.hooks.useSettings === "function"
         ? PluginApi.hooks.useSettings()
-        : {
-            plugins: {},
-            savePluginSettings: function () {},
-            loading: false,
-            interface: null,
-          };
-    const { plugins, savePluginSettings, loading, interface: iface } =
-      settingsApi;
+        : { plugins: {}, savePluginSettings: function () {}, loading: false, interface: null };
     const toastApi =
       PluginApi.hooks && typeof PluginApi.hooks.useToast === "function"
         ? PluginApi.hooks.useToast()
         : null;
-    const Toast = {
-      success: function (m) {
-        if (toastApi && toastApi.success) toastApi.success(m);
-        else console.info("[Tag Categories]", m);
-      },
-      error: function (m) {
-        if (toastApi && toastApi.error) toastApi.error(m);
-        else console.error("[Tag Categories]", m);
-      },
-    };
-    const lang = getUiLang(iface);
-
-    const [config, setConfig] = React.useState(DEFAULT_CONFIG);
-    const [usingFile, setUsingFile] = React.useState(false);
-    const [usingDefaults, setUsingDefaults] = React.useState(false);
-    const [loadError, setLoadError] = React.useState(null);
-
-    const [showCategoryList, setShowCategoryList] = React.useState(false);
-    const [showAddForm, setShowAddForm] = React.useState(false);
-    const [showJsonModal, setShowJsonModal] = React.useState(false);
-    const [showHelpModal, setShowHelpModal] = React.useState(false);
-    const [jsonModalDraft, setJsonModalDraft] = React.useState("");
-
-    const [editingId, setEditingId] = React.useState(null);
-    const [newName, setNewName] = React.useState("");
-    const [newTags, setNewTags] = React.useState("");
-    const [newSubTags, setNewSubTags] = React.useState(false);
-    const [newPerformers, setNewPerformers] = React.useState("");
-
-    function resetForm() {
-      setEditingId(null);
-      setNewName("");
-      setNewTags("");
-      setNewSubTags(false);
-      setNewPerformers("");
-    }
-
-    function fillForm(category) {
-      setEditingId(category.id);
-      setNewName(category.name || "");
-      setNewTags(
-        category.tags && category.tags.length ? category.tags.join(", ") : ""
-      );
-      setNewSubTags(!!category.subTags);
-      setNewPerformers((category.performers || []).join(", "));
-    }
+    const ref = React.useRef(null);
+    // The module keeps running across renders; it reads the newest settings and toast from here
+    const latest = React.useRef(null);
+    latest.current = { settings: settingsApi, toast: toastApi };
+    const loading = settingsApi.loading;
 
     React.useEffect(
       function () {
-        if (loading) return;
+        if (loading || !ref.current) return;
+        const el = ref.current;
+        let handle = null;
         let cancelled = false;
-        async function load() {
-          setLoadError(null);
-          try {
-            const fromSettings = getConfigFromSettings(plugins);
-            if (fromSettings) {
-              if (!cancelled) {
-                setConfig(fromSettings);
-                setUsingFile(false);
-                setUsingDefaults(false);
-              }
-              return;
-            }
-            const fromFile = await loadCategoriesFromFile();
-            if (!cancelled) {
-              if (fromFile) {
-                setConfig(fromFile);
-                setUsingFile(true);
-                setUsingDefaults(false);
-              } else {
-                setConfig(DEFAULT_CONFIG);
-                setUsingFile(false);
-                setUsingDefaults(true);
-              }
-            }
-          } catch (e) {
-            if (!cancelled) {
-              setLoadError(e.message || String(e));
-              setConfig(DEFAULT_CONFIG);
-              setUsingFile(false);
-              setUsingDefaults(true);
-            }
-          }
-        }
-        load();
+        const iface = settingsApi.interface;
+        import(SETTINGS_URL)
+          .then(function (mod) {
+            if (cancelled) return;
+            handle = mod.mountSettings(el, {
+              theme: isStashUiHost() ? "stashui" : "classic",
+              lang: iface ? getUiLang(iface) : getUiLang({ language: navigator.language }),
+              version: PLUGIN_VERSION,
+              gql: gqlFetch,
+              toast: function (text, kind) {
+                const api = latest.current.toast;
+                if (api && kind === "error" && api.error) api.error(text);
+                else if (api && api.success) api.success(text);
+                else console.info("[Tag Categories]", text);
+              },
+              load: async function () {
+                const fromSettings = getConfigFromSettings(latest.current.settings.plugins);
+                if (fromSettings) return { config: fromSettings, source: "settings" };
+                const fromFile = await loadCategoriesFromFile();
+                if (fromFile) return { config: fromFile, source: "file" };
+                return { config: DEFAULT_CONFIG, source: "defaults" };
+              },
+              save: async function (config) {
+                latest.current.settings.savePluginSettings(PLUGIN_ID, {
+                  categoriesJson: categoriesToJson(config),
+                });
+                clearTagCaches();
+              },
+              parseJson: parseCategoriesJson,
+              toJson: categoriesToJson,
+            });
+          })
+          .catch(function (e) {
+            console.error("[Tag Categories] settings.js not loaded", e);
+            if (!cancelled) el.textContent = "Tag Categories: the settings could not be loaded (" + (e.message || String(e)) + ").";
+          });
         return function () {
           cancelled = true;
+          if (handle) handle.destroy();
         };
       },
-      [plugins, loading]
+      [loading]
     );
 
-    function persistConfig(updates) {
-      const nextConfig = Object.assign(
-        { categories: config.categories },
-        updates
-      );
-      savePluginSettings(PLUGIN_ID, {
-        categoriesJson: categoriesToJson(nextConfig),
-      });
-      setConfig(nextConfig);
-      setUsingFile(false);
-      setUsingDefaults(false);
-      clearTagCaches();
-    }
-
-    function openJsonModal() {
-      setJsonModalDraft(categoriesToJson(config));
-      setShowJsonModal(true);
-    }
-
-    function closeJsonModal() {
-      setShowJsonModal(false);
-    }
-
-    function onSaveJsonModal() {
-      try {
-        const parsed = parseCategoriesJson(jsonModalDraft);
-        persistConfig(parsed);
-        setShowJsonModal(false);
-        Toast.success(t(lang, "jsonSaved"));
-      } catch (e) {
-        Toast.error(e.message || t(lang, "jsonInvalid"));
-      }
-    }
-
-    function onSaveCategory() {
-      const name = newName.trim();
-      const tags = uniqueStrings(parseTagsList(newTags));
-      const performers = uniqueStrings(parseTagsList(newPerformers));
-      if (!name) {
-        Toast.error(t(lang, "nameRequired"));
-        return;
-      }
-      if (!tags.length && !performers.length) {
-        Toast.error(t(lang, "tagsRequired"));
-        return;
-      }
-
-      if (editingId != null) {
-        const idx = config.categories.findIndex(function (c) {
-          return c.id === editingId;
-        });
-        if (idx < 0) {
-          Toast.error(t(lang, "categoryNotFound"));
-          resetForm();
-          setShowAddForm(false);
-          return;
-        }
-        const categories = config.categories.map(function (c, i) {
-          if (i !== idx) return c;
-          return { id: c.id, name: name, tags: tags, performers: performers, subTags: newSubTags };
-        });
-        persistConfig({ categories: categories });
-        resetForm();
-        setShowAddForm(false);
-        Toast.success(t(lang, "categoryUpdated"));
-        return;
-      }
-
-      const id = slugId(name);
-      let uniqueId = id;
-      let n = 2;
-      while (
-        config.categories.some(function (c) {
-          return c.id === uniqueId;
-        })
-      ) {
-        uniqueId = id + "-" + n;
-        n += 1;
-      }
-      persistConfig({
-        categories: config.categories.concat([
-          { id: uniqueId, name: name, tags: tags, performers: performers, subTags: newSubTags },
-        ]),
-      });
-      resetForm();
-      setShowAddForm(false);
-      Toast.success(t(lang, "categoryAdded"));
-    }
-
-    function onEditCategory(category) {
-      fillForm(category);
-      setShowAddForm(true);
-      setShowCategoryList(true);
-    }
-
-    function onCancelForm() {
-      resetForm();
-      setShowAddForm(false);
-    }
-
-    function onRemoveCategory(category) {
-      const message = t(lang, "removeConfirm", { name: category.name });
-      if (!window.confirm(message)) return;
-      const categories = config.categories.filter(function (c) {
-        return c.id !== category.id;
-      });
-      if (editingId === category.id) {
-        resetForm();
-        setShowAddForm(false);
-      }
-      persistConfig({ categories: categories });
-      Toast.success(t(lang, "categoryRemoved"));
-    }
-
-    return React.createElement(
-      "div",
-      { className: "plugin-settings tag-categories-settings" },
-      React.createElement(
-        "p",
-        { className: "tag-categories-settings-version text-muted" },
-        t(lang, "versionLine")
-      ),
-      React.createElement(
-        "p",
-        { className: "tag-categories-settings-intro text-muted" },
-        t(lang, "intro")
-      ),
-      React.createElement(HelpModal, {
-        open: showHelpModal,
-        lang: lang,
-        onClose: function () {
-          setShowHelpModal(false);
-        },
-      }),
-      usingFile
-        ? React.createElement(
-            "p",
-            { className: "tag-categories-settings-note text-muted" },
-            t(lang, "loadedFromFile") + " ",
-            React.createElement("code", null, "categories.json"),
-            t(lang, "loadedFromFileSuffix")
-          )
-        : usingDefaults
-          ? React.createElement(
-              "p",
-              { className: "tag-categories-settings-note text-muted" },
-              t(lang, "usingDefaultsPrefix") + " ",
-              React.createElement("code", null, "categories.json"),
-              " " + t(lang, "usingDefaultsSuffix") + " ",
-              React.createElement("code", null, "categories.json.example"),
-              " " + t(lang, "usingDefaultsArrow") + " ",
-              React.createElement("code", null, "categories.json"),
-              " " + t(lang, "usingDefaultsInFolder")
-            )
-          : null,
-      loadError
-        ? React.createElement("p", { className: "text-warning" }, loadError)
-        : null,
-      React.createElement(
-        "div",
-        { className: "tag-categories-settings-list-section" },
-        React.createElement(
-          "button",
-          {
-            type: "button",
-            className:
-              "btn btn-secondary btn-sm tag-categories-settings-toggle mb-2" +
-              (showCategoryList ? " tag-categories-settings-toggle-open" : ""),
-            onClick: function () {
-              setShowCategoryList(!showCategoryList);
-            },
-            "aria-expanded": showCategoryList,
-          },
-          (showCategoryList ? "▼ " : "▶ ") +
-            t(lang, "categories") +
-            " (" +
-            config.categories.length +
-            ")"
-        ),
-        showCategoryList
-          ? config.categories.length > 0
-            ? React.createElement(
-                "div",
-                { className: "tag-categories-settings-list" },
-                React.createElement(
-                  "div",
-                  { className: "tag-categories-settings-list-header" },
-                  React.createElement("span", null, t(lang, "colName")),
-                  React.createElement("span", null, t(lang, "colTags")),
-                  React.createElement("span", {
-                    className: "tag-categories-settings-list-actions-hdr",
-                    "aria-hidden": true,
-                  })
-                ),
-                config.categories.map(function (category) {
-                  return React.createElement(
-                    "div",
-                    {
-                      key: category.id,
-                      className: "tag-categories-settings-list-row",
-                    },
-                    React.createElement("span", null, category.name),
-                    React.createElement(
-                      "span",
-                      { className: "tag-categories-settings-tags text-muted" },
-                      ((category.tags || []).join(", ") || "—") +
-                        (category.subTags ? " " + t(lang, "subTagsShort") : "") +
-                        ((category.performers || []).length
-                          ? " · " + t(lang, "performersLabelShort") + " " + category.performers.join(", ")
-                          : "")
-                    ),
-                    React.createElement(
-                      "div",
-                      { className: "tag-categories-settings-list-actions" },
-                      React.createElement(
-                        "button",
-                        {
-                          type: "button",
-                          className:
-                            "btn btn-primary btn-sm" +
-                            (editingId === category.id ? " active" : ""),
-                          onClick: function () {
-                            onEditCategory(category);
-                          },
-                        },
-                        t(lang, "edit")
-                      ),
-                      React.createElement(
-                        "button",
-                        {
-                          type: "button",
-                          className: "btn btn-danger btn-sm",
-                          onClick: function () {
-                            onRemoveCategory(category);
-                          },
-                        },
-                        t(lang, "delete")
-                      )
-                    )
-                  );
-                })
-              )
-            : React.createElement(
-                "p",
-                { className: "text-muted" },
-                t(lang, "emptyCategories")
-              )
-          : null
-      ),
-      React.createElement(
-        "div",
-        { className: "tag-categories-settings-add" },
-        React.createElement(
-          "button",
-          {
-            type: "button",
-            className:
-              "btn btn-secondary btn-sm tag-categories-settings-toggle mb-2" +
-              (showAddForm ? " tag-categories-settings-toggle-open" : ""),
-            onClick: function () {
-              if (showAddForm) {
-                onCancelForm();
-                return;
-              }
-              resetForm();
-              setShowAddForm(true);
-            },
-            "aria-expanded": showAddForm,
-          },
-          showAddForm
-            ? "▼ " +
-              (editingId != null
-                ? t(lang, "editCategory")
-                : t(lang, "addCategory"))
-            : "▶ " + t(lang, "addCategory")
-        ),
-        showAddForm
-          ? React.createElement(
-              "div",
-              { className: "tag-categories-settings-add-body" },
-              editingId != null
-                ? React.createElement(
-                    "p",
-                    { className: "text-muted small" },
-                    t(lang, "editing") + " ",
-                    React.createElement("strong", null, newName || editingId)
-                  )
-                : null,
-              React.createElement(
-                "div",
-                { className: "form-group" },
-                React.createElement(
-                  "label",
-                  { htmlFor: "tc-new-name" },
-                  t(lang, "nameLabel")
-                ),
-                React.createElement("input", {
-                  id: "tc-new-name",
-                  type: "text",
-                  className: "form-control",
-                  value: newName,
-                  placeholder: t(lang, "namePlaceholder"),
-                  onChange: function (e) {
-                    setNewName(e.target.value);
-                  },
-                })
-              ),
-              React.createElement(
-                "div",
-                { className: "form-group" },
-                React.createElement(
-                  "label",
-                  { htmlFor: "tc-new-tags" },
-                  t(lang, "tagsLabel")
-                ),
-                React.createElement("input", {
-                  id: "tc-new-tags",
-                  type: "text",
-                  className: "form-control",
-                  value: newTags,
-                  placeholder: t(lang, "tagsPlaceholder"),
-                  onChange: function (e) {
-                    setNewTags(e.target.value);
-                  },
-                  onKeyDown: function (e) {
-                    if (e.key === "Enter") onSaveCategory();
-                  },
-                }),
-                React.createElement(
-                  "p",
-                  { className: "text-muted small mb-0" },
-                  t(lang, "tagsHelp")
-                )
-              ),
-              React.createElement(
-                "div",
-                { className: "form-group" },
-                React.createElement(
-                  "label",
-                  { htmlFor: "tc-new-performers" },
-                  t(lang, "performersLabel")
-                ),
-                React.createElement("input", {
-                  id: "tc-new-performers",
-                  type: "text",
-                  className: "form-control",
-                  value: newPerformers,
-                  placeholder: t(lang, "performersPlaceholder"),
-                  onChange: function (e) {
-                    setNewPerformers(e.target.value);
-                  },
-                  onKeyDown: function (e) {
-                    if (e.key === "Enter") onSaveCategory();
-                  },
-                }),
-                React.createElement(
-                  "p",
-                  { className: "text-muted small mb-0" },
-                  t(lang, "performersHelp")
-                )
-              ),
-              React.createElement(
-                "div",
-                { className: "form-group form-check tag-categories-settings-subtags" },
-                React.createElement("input", {
-                  id: "tc-new-subtags",
-                  type: "checkbox",
-                  className: "form-check-input",
-                  checked: newSubTags,
-                  onChange: function (e) {
-                    setNewSubTags(e.target.checked);
-                  },
-                }),
-                React.createElement(
-                  "label",
-                  { htmlFor: "tc-new-subtags", className: "form-check-label" },
-                  t(lang, "subTagsLabel")
-                ),
-                React.createElement(
-                  "p",
-                  { className: "text-muted small mb-0" },
-                  t(lang, "subTagsHelp")
-                )
-              ),
-              React.createElement(
-                "div",
-                { className: "tag-categories-settings-form-actions" },
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "btn btn-primary",
-                    onClick: onSaveCategory,
-                  },
-                  editingId != null ? t(lang, "saveChanges") : t(lang, "add")
-                ),
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "btn btn-secondary",
-                    onClick: onCancelForm,
-                  },
-                  t(lang, "cancel")
-                )
-              )
-            )
-          : null
-      ),
-      React.createElement(
-        "div",
-        { className: "tag-categories-settings-json-actions mt-2" },
-        React.createElement(
-          "button",
-          {
-            type: "button",
-            className: "btn btn-secondary btn-sm",
-            onClick: openJsonModal,
-          },
-          t(lang, "editJson")
-        ),
-        React.createElement(
-          "button",
-          {
-            type: "button",
-            className: "btn btn-outline-info btn-sm",
-            onClick: function () {
-              setShowHelpModal(true);
-            },
-          },
-          t(lang, "helpJson")
-        )
-      ),
-      showJsonModal
-        ? React.createElement(
-            "div",
-            {
-              className: "tag-categories-modal-backdrop",
-              role: "presentation",
-              onClick: closeJsonModal,
-            },
-            React.createElement(
-              "div",
-              {
-                className: "tag-categories-modal",
-                role: "dialog",
-                "aria-modal": true,
-                "aria-labelledby": "tc-json-modal-title",
-                onClick: function (e) {
-                  e.stopPropagation();
-                },
-              },
-              React.createElement(
-                "div",
-                { className: "tag-categories-modal-header" },
-                React.createElement(
-                  "h3",
-                  {
-                    id: "tc-json-modal-title",
-                    className: "tag-categories-modal-title",
-                  },
-                  t(lang, "jsonModalTitle")
-                ),
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "tag-categories-modal-close",
-                    "aria-label": t(lang, "close"),
-                    onClick: closeJsonModal,
-                  },
-                  "×"
-                )
-              ),
-              React.createElement(
-                "div",
-                { className: "tag-categories-modal-body" },
-                React.createElement(
-                  "p",
-                  { className: "text-muted small mb-2" },
-                  t(lang, "jsonModalHint")
-                ),
-                React.createElement("textarea", {
-                  className: "form-control tag-categories-json",
-                  rows: 16,
-                  value: jsonModalDraft,
-                  onChange: function (e) {
-                    setJsonModalDraft(e.target.value);
-                  },
-                })
-              ),
-              React.createElement(
-                "div",
-                { className: "tag-categories-modal-footer" },
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "btn btn-secondary",
-                    onClick: closeJsonModal,
-                  },
-                  t(lang, "cancel")
-                ),
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "btn btn-primary",
-                    onClick: onSaveJsonModal,
-                  },
-                  t(lang, "save")
-                )
-              )
-            )
-          )
-        : null
-    );
+    return React.createElement("div", { ref: ref, className: "plugin-settings tag-categories-settings" });
   }
 
   PluginApi.patch.instead("PluginSettings", function () {

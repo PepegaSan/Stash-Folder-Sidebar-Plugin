@@ -4,7 +4,6 @@
 
 .quick-markers-panel,
 .quick-markers-touch-bar,
-.quick-markers-settings,
 .quick-markers-modal {
   --qm-accent: var(--st-flush, var(--primary, #137cbd));
   --qm-on-accent: var(--st-ink, #fff);
@@ -283,7 +282,6 @@
 }
 
 .quick-markers-panel kbd,
-.quick-markers-settings kbd,
 .quick-markers-modal kbd {
   padding: 0.05rem 0.35rem;
   border-radius: 0.3rem;
@@ -367,156 +365,7 @@
   text-align: center;
 }
 
-/* ── Plugin settings (classic Stash) ── */
-
-.quick-markers-settings {
-  max-width: 48rem;
-}
-
-.quick-markers-settings-version {
-  font-size: 0.8rem;
-}
-
-.quick-markers-settings-intro {
-  margin-bottom: 0.75rem;
-  line-height: 1.8;
-}
-
-.quick-markers-settings-note {
-  font-size: 0.9rem;
-  margin-bottom: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border-left: 3px solid var(--qm-accent);
-  border-radius: 0 var(--qm-radius-sm) var(--qm-radius-sm) 0;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.quick-markers-panel-ui,
-.quick-markers-default-preset {
-  margin-bottom: 1rem;
-}
-
-.quick-markers-settings-toggle {
-  width: 100%;
-  text-align: left;
-}
-
-.quick-markers-settings-toggle-open {
-  margin-bottom: 0.5rem !important;
-}
-
-.quick-markers-settings-list {
-  border: 1px solid var(--qm-line);
-  border-radius: var(--qm-radius-sm);
-  overflow: hidden;
-}
-
-.quick-markers-settings-list-header,
-.quick-markers-settings-list-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(9.5rem, auto);
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.5rem 0.75rem;
-}
-
-.quick-markers-settings-list-header {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--qm-muted);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.quick-markers-settings-list-row {
-  border-top: 1px solid var(--qm-line);
-  font-size: 0.9rem;
-  transition: background 0.15s;
-}
-
-.quick-markers-settings-list-row:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.quick-markers-settings-list-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  justify-content: flex-end;
-  min-width: 9.5rem;
-}
-
-.quick-markers-settings-keys {
-  font-size: 0.75rem;
-  word-break: break-word;
-}
-
-.quick-markers-settings-tags {
-  font-size: 0.85rem;
-  word-break: break-word;
-}
-
-.quick-markers-settings-add-body {
-  padding: 0.75rem 1rem 0.5rem;
-  margin-bottom: 0.5rem;
-  border: 1px solid var(--qm-line);
-  border-radius: var(--qm-radius-sm);
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.quick-markers-settings-key-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-}
-
-.quick-markers-settings-form-actions,
-.quick-markers-settings-json-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.quick-markers-settings .quick-markers-json,
-.quick-markers-modal .quick-markers-json {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 0.85rem;
-}
-
-.quick-markers-tags-help-body p {
-  margin-bottom: 0.75rem;
-}
-
-.quick-markers-tags-help-steps {
-  margin: 0 0 0.75rem 1.1rem;
-  padding: 0;
-}
-
-.quick-markers-tags-help-steps li {
-  margin-bottom: 0.35rem;
-}
-
-.quick-markers-tags-help-modal {
-  width: min(520px, 100%);
-}
-
-.quick-markers-tags-help-code {
-  margin: 0 0 0.75rem;
-  padding: 0.65rem 0.75rem;
-  font-size: 0.8rem;
-  line-height: 1.4;
-  color: var(--qm-text);
-  border-radius: var(--qm-radius-sm);
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid var(--qm-line);
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* ── Modals (JSON editor, tags help) ── */
+/* ── Modals (marker transfer) ── */
 
 .quick-markers-modal-backdrop {
   position: fixed;

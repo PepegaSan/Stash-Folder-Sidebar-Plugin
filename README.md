@@ -145,7 +145,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.11.0-informational)
+![Version](https://img.shields.io/badge/version-1.12.0-informational)
 
 ## Requirements
 
@@ -197,7 +197,7 @@ With the [Stash UI](https://github.com/AffordObedienceUntamed/stash-pmv-plugins)
 - **Player info bar → Quick Markers** — In / Out / Instant buttons, preset chips, live range while recording (`0:12 → 0:30`); the markers list and timeline pins refresh after each marker
 - **Same hotkeys** as in classic Stash. They are caught before the Stash UI player, so `Shift+I` / `Shift+O` / `Shift+M` no longer also fold the info bar, add an O or mute. Plain `I` / `O` / `M` keep their player function. Shift+1–9 works on any keyboard layout
 - **Missing tag** — the error message has a **Create tag** button and then saves the marker
-- **Settings → Plugins → Quick Markers** — preset list with **edit** (label, tags, select slot, In / Out / Instant keys) and delete, default preset, add preset, JSON editor; same storage (`presetsJson`) as classic Stash
+- **Settings → Plugins → Quick Markers** — the same settings page as in classic Stash (see [Configuration](#configuration)), in Stash UI's look; same storage (`presetsJson`)
 - Follows Stash UI's colour presets, liquid glass and interface language (English / German)
 
 The classic panel and touch bar also pick up the Stash UI colours when Stash UI restyles classic Stash.
@@ -206,15 +206,14 @@ The classic panel and touch bar also pick up the Stash UI colours when Stash UI 
 
 **Settings → Plugins → Quick Markers**
 
-- **Scene panel position** — starting corner (top-left default), or hidden (hotkeys only); drag the panel header on the scene page to place it freely
-- **Start scene panel collapsed** — small header until expanded
-- **Touch controls (Android / tablet)** — auto-detect, always on, or off (bar follows player width/position; avoids covering the timeline)
-- **Presets** list (collapsible) — view/edit/delete presets; **Select hotkey** assigns Shift+1–9 to any preset
-- **Add / Edit preset** — label, primary tag, optional tags, range keys, instant key (`shift+m`), select slot
-- **Edit JSON (advanced)…** — full config in a popup
-- **Help: tags in JSON** — how to add `tags` to a preset (German or English by browser locale)
+One page for classic Stash and Stash UI (`settings.js`), in English or German:
 
-JSON example (same as in the modal):
+- **General** — default preset; classic Stash also: **panel position** (corner or hidden, drag the panel header to place it freely), **start collapsed**, **touch controls** (auto / on / off)
+- **Presets** — every preset with its select key, tags as chips (primary tag highlighted, tags missing in Stash in red) and its In / Out / Instant keys. **Drag the handle** (or ↑ / ↓ on it) to change the order — it is the order of the preset chips on the scene page
+- **Edit / New preset** — opens right under the row: name, **primary tag** and **more tags** with suggestions from Stash (number of scenes each), **select key** Shift+1–9 as buttons (taken ones struck through; taking one moves it), **key fields** that record the combination you press, with warnings for clashes (same key twice, Shift+1–9, plain keys)
+- **Advanced** — help and the full config as JSON
+
+JSON example:
 
 ```json
 {
@@ -259,10 +258,10 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.11.0`.
-6. Open **Settings → Plugins → Quick Markers** — top line must say **Quick Markers v1.11.0**.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.12.0`.
+6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.12.0** next to Quick Markers.
 
-If the version line is missing or an old version number appears, the old `quickMarkers.js` is still active.
+If an old version number appears, the old plugin files are still active.
 
 ---
 
@@ -435,7 +434,7 @@ Named **categories**, each with a list of Stash **tags** and optionally **perfor
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.8.1-informational)
+![Version](https://img.shields.io/badge/version-1.9.0-informational)
 
 ## Features
 
@@ -457,8 +456,8 @@ The same tag can appear in multiple categories; categories do not block or claim
 - **Open in Stash** — the same selection (tags, excluded tags, search, sort) as a regular Stash scene list, with
   paging, bulk edit and queue
 - **List / Preview** view toggle (thumbnails in Preview; preference kept in the browser)
-- Settings UI: name + comma-separated tags + optional performers + **Include sub-tags**, edit/delete, collapsible sections
-- **Edit JSON (advanced)** modal with short help
+- Settings page (classic Stash and Stash UI): categories with their number of scenes, drag to reorder, editor right under the row with tag and performer suggestions from Stash, **Include sub-tags** switch and a live preview of the matching scenes
+- **Advanced**: help and the full config as JSON
 - UI language follows Stash (**English** / **German**; otherwise English)
 
 ## Requirements
@@ -474,7 +473,7 @@ Install **Tag Categories** from the [plugin source URL](#installation-from-stash
 | Windows | `%USERPROFILE%\.stash\plugins\tagCategories\` |
 | Linux / macOS | `~/.stash/plugins/tagCategories/` |
 
-Required files: `tagCategories.yml`, `tagCategories.js`, `tagCategories.css` (Stash UI: also `stashui.js`, `stashui.css`)  
+Required files: `tagCategories.yml`, `tagCategories.js`, `tagCategories.css`, `settings.js`, `settings.css` (Stash UI: also `stashui.js`, `stashui.css`)  
 Optional: `categories.json` (copy from `categories.json.example`)
 
 Then **Settings → Plugins → Reload plugins**.
@@ -483,11 +482,13 @@ Then **Settings → Plugins → Reload plugins**.
 
 **Settings → Plugins → Tag Categories**
 
-| Section | Description |
-|---------|-------------|
-| **Categories** | List, edit, or delete categories |
-| **Add category** | Name + tags (`Action, Comedy, Drama`) + performers (optional) |
-| **Edit JSON** | Full config editor + help button |
+One page for classic Stash and Stash UI (`settings.js`):
+
+| Part | Description |
+|------|-------------|
+| **Categories** | Each category with its number of scenes and its tags / performers as chips (missing in Stash: red). Drag the handle (or ↑ / ↓ on it) to change the order of the category menu |
+| **Edit / New category** | Opens under the row: name, tags and performers with suggestions from Stash, **Include sub-tags**, live preview of how many scenes match |
+| **Advanced** | Help and the full config as JSON |
 
 ### JSON shape
 
@@ -545,7 +546,7 @@ With the [Stash UI](https://github.com/AffordObedienceUntamed/stash-pmv-plugins)
 - A click on a scene opens the **Stash UI player**; **Open in classic Stash** shows the same selection as a regular scene list (paging, bulk edit)
 - **Next / previous** in the player (and the next video when one ends) follow the category's list — same tag chips, search and sort, all scenes, not only the ones loaded so far. Needs a Stash UI with `stashui.play` (Pepega fork); otherwise the player goes on as usual
 - Each category has its own address (`#/p/tagCategories/<id>`), so Back and bookmarks work
-- Same categories (`categoriesJson`) as in classic Stash; edit them under **Settings → Plugins → Tag Categories** (performers: `performers` in the JSON, or the form in classic Stash)
+- Same categories (`categoriesJson`) as in classic Stash; edit them under **Settings → Plugins → Tag Categories** — the same settings page as in classic Stash, in Stash UI's look
 - Follows Stash UI's colour presets, liquid glass and interface language (English / German)
 
 ## Manual install
@@ -555,7 +556,7 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.8.1`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.9.0`.
 
 ---
 

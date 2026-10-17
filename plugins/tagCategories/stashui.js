@@ -112,6 +112,16 @@ function parseCategoriesJson(text) {
   }
 }
 
+function categoriesToJson(config) {
+  const categories = config.categories.map((c) => {
+    const out = { id: c.id, name: c.name, tags: c.tags || [] };
+    if (c.performers && c.performers.length) out.performers = c.performers;
+    if (c.subTags) out.subTags = true;
+    return out;
+  });
+  return JSON.stringify({ categories }, null, 2);
+}
+
 export default function setup(stashui) {
   if (!stashui || !stashui.has || !stashui.has("route") || !stashui.has("navItem")) return;
   const ui = stashui.ui;
@@ -121,6 +131,7 @@ export default function setup(stashui) {
   loadStyles();
 
   let configPromise = null;
+  let configSource = "settings"; // where the categories came from: settings, file or defaults
   const tagCache = new Map(); // lower-case tag name → Stash tag
   const childCache = new Map(); // sorted parent ids → all sub-tags (any depth)
   const perfCache = new Map(); // lower-case performer name → Stash performer
@@ -149,19 +160,35 @@ export default function setup(stashui) {
         const d = await stashui.gql("query { configuration { plugins } }");
         const own = ((d && d.configuration && d.configuration.plugins) || {})[PLUGIN_ID] || {};
         const fromSettings = own.categoriesJson && String(own.categoriesJson).trim() ? parseCategoriesJson(own.categoriesJson) : null;
-        if (fromSettings) return fromSettings;
+        if (fromSettings) {
+          configSource = "settings";
+          return fromSettings;
+        }
         try {
           const res = await fetch(ASSETS_CATEGORIES, { cache: "no-store" });
           const fromFile = res.ok ? parseCategoriesJson(await res.text()) : null;
-          if (fromFile) return fromFile;
+          if (fromFile) {
+            configSource = "file";
+            return fromFile;
+          }
         } catch (e) {
           /* no categories.json */
         }
+        configSource = "defaults";
         return [];
       })();
       configPromise.catch(() => (configPromise = null));
     }
     return configPromise;
+  }
+
+  async function saveCategories(config) {
+    const d = await stashui.gql("query { configuration { plugins } }");
+    const cur = ((d && d.configuration && d.configuration.plugins) || {})[PLUGIN_ID] || {};
+    const input = Object.assign({}, cur, { categoriesJson: categoriesToJson(config) });
+    await stashui.gql("mutation($id: ID!, $i: Map!) { configurePlugin(plugin_id: $id, input: $i) }", { id: PLUGIN_ID, i: input });
+    configPromise = Promise.resolve(config.categories);
+    configSource = "settings";
   }
 
   const TAG_FIELDS = "id name scene_count all: scene_count(depth: -1) parents { id }";
@@ -357,7 +384,7 @@ export default function setup(stashui) {
       const categories = await loadCategories();
       if (signal.aborted) return;
       if (!categories.length) {
-        el.innerHTML = `<div class="kb-empty"><b>${t("No categories configured yet.")}</b><p>${t("Add some in the settings of Tag Categories.")}</p><a class="kb-btn" href="#/plugins?focus=${PLUGIN_ID}">${t("Open settings")}</a></div>`;
+        el.innerHTML = `<div class="kb-empty"><b>${t("No categories configured yet.")}</b><p>${t("Add some in the settings of Tag Categories.")}</p><a class="kb-btn" href="${stashui.has("slot:settings.section") ? `#/settings/x:${PLUGIN_ID}:settings` : `#/plugins?focus=${PLUGIN_ID}`}">${t("Open settings")}</a></div>`;
         return;
       }
       const category = categories.find((c) => c.id === rest) || categories[0];
@@ -384,6 +411,48 @@ export default function setup(stashui) {
     group: "Library",
     place: { after: "tags" },
   });
+
+  // ---------- Settings → Plugins → Tag Categories ----------
+  // settings.js draws the page (the same module as in classic Stash).
+
+  if (stashui.has("slot:settings.section")) {
+    stashui.addSlot("settings.section", {
+      id: "settings",
+      title: "Tag Categories",
+      mount(el, ctx) {
+        const search = new URL(import.meta.url).search;
+        let handle = null;
+        el.innerHTML = `<div class="kb-loading">…</div>`;
+        import(new URL("settings.js" + search, import.meta.url).href)
+          .then((mod) => {
+            if (ctx.signal.aborted) return;
+            stashui.addStrings("de", mod.STRINGS_DE);
+            handle = mod.mountSettings(el, {
+              theme: "stashui",
+              t,
+              version: (new URLSearchParams(search).get("v") || "").split("-")[0],
+              gql: (q, v) => stashui.gql(q, v),
+              toast: (text, kind) => ui.toast(text, kind),
+              confirm: async (o) => {
+                const answer = await ui.confirmDialog({ title: o.title, text: o.text, ok: o.ok, danger: o.danger });
+                return !!(answer && answer.ok);
+              },
+              load: async () => ({ config: { categories: await loadCategories() }, source: configSource }),
+              save: saveCategories,
+              parseJson: (text) => {
+                JSON.parse(text); // (its own error message for broken JSON)
+                const categories = parseCategoriesJson(text);
+                if (!categories) throw new Error("categories array required");
+                return { categories };
+              },
+              toJson: categoriesToJson,
+            });
+          })
+          .catch((e) => ui.errorToast(e, "Tag Categories"));
+        return () => handle && handle.destroy();
+      },
+    });
+  }
 
   // Number of scenes per category in the list on the left (count only)
   async function paintCounts(el, categories, signal) {

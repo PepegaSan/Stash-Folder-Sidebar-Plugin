@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.11.0";
+  const PLUGIN_VERSION = "1.12.0";
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -308,17 +308,6 @@
 
   function selectSlotToKey(slot) {
     return slot ? "shift+" + slot : "";
-  }
-
-  function nextFreeSelectSlot(presets) {
-    const used = {};
-    (presets || []).forEach(function (p) {
-      if (p && p.selectSlot) used[p.selectSlot] = true;
-    });
-    for (let n = 1; n <= 9; n++) {
-      if (!used[n]) return n;
-    }
-    return null;
   }
 
   function normalizeInstantKey(value) {
@@ -2838,133 +2827,44 @@
     }
   });
 
-  const TAGS_HELP_I18N = {
-    de: {
-      title: "Zusatz-Tags im Preset-JSON (tags)",
-      button: "Hilfe: tags in JSON",
-      intro:
-        "So fügst du weitere Tags (nicht den Primärtag) nachträglich in die Preset-Konfiguration ein. Gespeichert wird in der Stash-Datenbank, nicht in einer Datei auf der Festplatte.",
-      step1: "Hier in den Plugin-Settings auf Edit JSON (advanced) klicken (Button unten auf dieser Seite).",
-      step2:
-        "Im Array presets das gewünschte Preset suchen (z. B. an id oder label).",
-      step3:
-        "Zeile tags einfügen oder anpassen — Array aus Tag-Namen, exakt wie in Stash unter Tags.",
-      primaryNote:
-        "primaryTag = Primärtag am Marker. tags = zusätzliche normale Tags. Den Primärtag nicht nochmal in tags eintragen.",
-      saveNote:
-        "Save im JSON-Dialog — danach Reload plugins und Reload UI in Stash.",
-      warning:
-        "Wichtig: Das gilt für neue Marker, die du danach mit Quick Markers anlegst. Bereits existierende Marker auf Szenen werden durch JSON-Änderungen nicht automatisch aktualisiert — dafür Marker in Stash bearbeiten (Tab Markers → Edit → Feld Tags).",
-      ok: "OK",
-    },
-    en: {
-      title: "Additional tags in preset JSON (tags)",
-      button: "Help: tags in JSON",
-      intro:
-        "How to add extra tags (not the primary tag) to a preset later. Saved in the Stash database (plugin settings), not as a file on disk.",
-      step1:
-        'In these plugin settings, click Edit JSON (advanced) (button at the bottom of this page).',
-      step2: "In the presets array, find the preset (e.g. by id or label).",
-      step3:
-        'Add or edit the tags line — array of tag names, exactly as in Stash under Tags.',
-      primaryNote:
-        "primaryTag = primary tag on the marker. tags = additional tags. Do not duplicate the primary tag in tags.",
-      saveNote: "Click Save in the JSON dialog, then Reload plugins and Reload UI in Stash.",
-      warning:
-        "Important: This applies to new markers you create with Quick Markers after saving. Existing markers on scenes are not updated by JSON changes — edit them in Stash (Markers tab → Edit → Tags field).",
-      ok: "OK",
-    },
-  };
+  // ---------- Settings page ----------
+  // settings.js draws it (the same module as in Stash UI); this only connects it to classic Stash.
 
-  function getTagsHelpLang() {
-    try {
-      const lang = String(navigator.language || "en").toLowerCase();
-      if (lang.startsWith("de")) return "de";
-    } catch (e) {
-      /* ignore */
-    }
-    return "en";
+  const SETTINGS_URL = "/plugin/" + PLUGIN_ID + "/assets/settings.js?v=" + PLUGIN_VERSION;
+
+  // Inside Stash UI's plugin host (its Plugins page) the settings take Stash UI's look
+  function isStashUiHost() {
+    const app = document.getElementById("app");
+    return !!(app && app.classList.contains("kb-app"));
   }
 
-  function TagsHelpModal(props) {
-    if (!props.open) return null;
-    const t = TAGS_HELP_I18N[getTagsHelpLang()];
-    return React.createElement(
-      "div",
-      {
-        className: "quick-markers-modal-backdrop",
-        role: "presentation",
-        onClick: props.onClose,
-      },
-      React.createElement(
-        "div",
-        {
-          className: "quick-markers-modal quick-markers-tags-help-modal",
-          role: "dialog",
-          "aria-modal": true,
-          "aria-labelledby": "qm-tags-help-title",
-          onClick: function (e) {
-            e.stopPropagation();
-          },
-        },
-        React.createElement(
-          "div",
-          { className: "quick-markers-modal-header" },
-          React.createElement(
-            "h3",
-            { id: "qm-tags-help-title", className: "quick-markers-modal-title" },
-            t.title
-          ),
-          React.createElement(
-            "button",
-            {
-              type: "button",
-              className: "quick-markers-modal-close",
-              "aria-label": "Close",
-              onClick: props.onClose,
-            },
-            "×"
-          )
-        ),
-        React.createElement(
-          "div",
-          { className: "quick-markers-modal-body quick-markers-tags-help-body" },
-          React.createElement("p", null, t.intro),
-          React.createElement(
-            "ol",
-            { className: "quick-markers-tags-help-steps" },
-            React.createElement("li", null, t.step1),
-            React.createElement("li", null, t.step2),
-            React.createElement("li", null, t.step3)
-          ),
-          React.createElement(
-            "pre",
-            { className: "quick-markers-tags-help-code" },
-            '{\n  "id": "com-joi",\n  "label": "Com Joi",\n  "primaryTag": "Compilation",\n  "tags": ["Joi", "Talk"],\n  "title": "Com Joi",\n  "rangeInKey": "shift+i",\n  "rangeOutKey": "shift+o"\n}'
-          ),
-          React.createElement("p", null, t.primaryNote),
-          React.createElement("p", null, t.saveNote),
-          React.createElement(
-            "p",
-            { className: "text-muted small mb-0" },
-            t.warning
-          )
-        ),
-        React.createElement(
-          "div",
-          { className: "quick-markers-modal-footer" },
-          React.createElement(
-            "button",
-            {
-              type: "button",
-              className: "btn btn-primary",
-              onClick: props.onClose,
-            },
-            t.ok
-          )
-        )
-      )
-    );
+  function browserLang() {
+    try {
+      return String(navigator.language || "en").toLowerCase().startsWith("de") ? "de" : "en";
+    } catch (e) {
+      return "en";
+    }
+  }
+
+  async function gqlFetch(query, variables) {
+    const res = await fetch("/graphql", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: query, variables: variables }),
+    });
+    if (!res.ok) throw new Error("Stash answered " + res.status);
+    const json = await res.json();
+    if (json.errors && json.errors.length) {
+      throw new Error(
+        json.errors
+          .map(function (e) {
+            return e.message;
+          })
+          .join("; ")
+      );
+    }
+    return json.data;
   }
 
   function QuickMarkersSettings() {
@@ -2972,877 +2872,67 @@
       typeof hooks.useSettings === "function"
         ? hooks.useSettings()
         : { plugins: {}, savePluginSettings: function () {}, loading: false };
-    const { plugins, savePluginSettings, loading } = settingsApi;
     const Toast = useSafeToast();
-    const tagsHelpT = TAGS_HELP_I18N[getTagsHelpLang()];
-
-    const [config, setConfig] = React.useState({
-      defaultPresetIndex: 0,
-      presets: [],
-    });
-    const [usingFile, setUsingFile] = React.useState(false);
-    const [usingDefaults, setUsingDefaults] = React.useState(false);
-    const [loadError, setLoadError] = React.useState(null);
-    const [showPresetList, setShowPresetList] = React.useState(false);
-    const [showAddForm, setShowAddForm] = React.useState(false);
-    const [editingPresetId, setEditingPresetId] = React.useState(null);
-    const [showJsonModal, setShowJsonModal] = React.useState(false);
-    const [showTagsHelpModal, setShowTagsHelpModal] = React.useState(false);
-    const [jsonModalDraft, setJsonModalDraft] = React.useState("");
-
-    const [newLabel, setNewLabel] = React.useState("");
-    const [newPrimaryTag, setNewPrimaryTag] = React.useState("");
-    const [newTags, setNewTags] = React.useState("");
-    const [newRangeIn, setNewRangeIn] = React.useState("shift+i");
-    const [newRangeOut, setNewRangeOut] = React.useState("shift+o");
-    const [newInstant, setNewInstant] = React.useState(DEFAULT_INSTANT_KEY);
-    const [newSelectSlot, setNewSelectSlot] = React.useState("");
-
-    function resetPresetForm() {
-      setNewLabel("");
-      setNewPrimaryTag("");
-      setNewTags("");
-      setNewRangeIn("shift+i");
-      setNewRangeOut("shift+o");
-      setNewInstant(DEFAULT_INSTANT_KEY);
-      setNewSelectSlot("");
-      setEditingPresetId(null);
-    }
-
-    function fillPresetForm(preset) {
-      setNewLabel(preset.label || "");
-      setNewPrimaryTag(preset.primaryTag || "");
-      setNewTags(
-        preset.tags && preset.tags.length ? preset.tags.join(", ") : ""
-      );
-      setNewRangeIn(preset.rangeInKey || "shift+i");
-      setNewRangeOut(preset.rangeOutKey || "shift+o");
-      setNewInstant(normalizeInstantKey(preset.instantKey));
-      setNewSelectSlot(
-        preset.selectSlot ? String(preset.selectSlot) : ""
-      );
-      setEditingPresetId(preset.id);
-    }
+    const ref = React.useRef(null);
+    // The module keeps running across renders; it reads the newest settings and toast from here
+    const latest = React.useRef(null);
+    latest.current = { settings: settingsApi, Toast: Toast };
+    const loading = settingsApi.loading;
 
     React.useEffect(
       function () {
-        if (loading) return;
+        if (loading || !ref.current) return;
+        const el = ref.current;
+        let handle = null;
         let cancelled = false;
-        async function load() {
-          setLoadError(null);
-          try {
-            const fromSettings = getPresetsFromSettings(plugins);
-            if (fromSettings) {
-              if (!cancelled) {
-                setConfig(fromSettings);
-                setUsingFile(false);
-                setUsingDefaults(false);
-              }
-              return;
-            }
-            const fromFile = await loadPresetsFromFile();
-            if (!cancelled) {
-              if (fromFile) {
-                setConfig(fromFile);
-                setUsingFile(true);
-                setUsingDefaults(false);
-              } else {
-                setConfig(getDefaultPresetsConfig());
-                setUsingFile(false);
-                setUsingDefaults(true);
-              }
-            }
-          } catch (e) {
-            if (!cancelled) {
-              setLoadError(e.message || String(e));
-              setConfig(getDefaultPresetsConfig());
-              setUsingFile(false);
-              setUsingDefaults(true);
-            }
-          }
-        }
-        load();
+        import(SETTINGS_URL)
+          .then(function (mod) {
+            if (cancelled) return;
+            handle = mod.mountSettings(el, {
+              theme: isStashUiHost() ? "stashui" : "classic",
+              lang: browserLang(),
+              version: PLUGIN_VERSION,
+              gql: gqlFetch,
+              toast: function (text, kind) {
+                if (kind === "error") latest.current.Toast.error(text);
+                else latest.current.Toast.success(text);
+              },
+              load: async function () {
+                try {
+                  const fromSettings = getPresetsFromSettings(latest.current.settings.plugins);
+                  if (fromSettings) return { config: fromSettings, source: "settings" };
+                } catch (e) {
+                  latest.current.Toast.error("presetsJson: " + formatError(e));
+                }
+                const fromFile = await loadPresetsFromFile().catch(function () {
+                  return null;
+                });
+                if (fromFile) return { config: fromFile, source: "file" };
+                return { config: getDefaultPresetsConfig(), source: "defaults" };
+              },
+              save: async function (config) {
+                latest.current.settings.savePluginSettings(PLUGIN_ID, {
+                  presetsJson: presetsToJson(config),
+                });
+                tagIdCache.clear();
+              },
+              parseJson: parsePresetsJson,
+              toJson: presetsToJson,
+            });
+          })
+          .catch(function (e) {
+            console.error("[Quick Markers] settings.js not loaded", e);
+            if (!cancelled) el.textContent = "Quick Markers: the settings could not be loaded (" + formatError(e) + ").";
+          });
         return function () {
           cancelled = true;
+          if (handle) handle.destroy();
         };
       },
-      [plugins, loading]
+      [loading]
     );
 
-    function persistConfig(updates) {
-      const nextConfig = Object.assign(
-        {
-          defaultPresetIndex: config.defaultPresetIndex,
-          panelPosition: config.panelPosition || "top-left",
-          panelCollapsed: config.panelCollapsed !== false,
-          touchControls: config.touchControls || "auto",
-          presets: config.presets,
-        },
-        updates
-      );
-      savePluginSettings(PLUGIN_ID, {
-        presetsJson: presetsToJson(nextConfig),
-      });
-      setConfig(nextConfig);
-      setUsingFile(false);
-      setUsingDefaults(false);
-      tagIdCache.clear();
-    }
-
-    function openJsonModal() {
-      setJsonModalDraft(presetsToJson(config));
-      setShowJsonModal(true);
-    }
-
-    function closeJsonModal() {
-      setShowJsonModal(false);
-    }
-
-    function onSaveJsonModal() {
-      try {
-        const parsed = parsePresetsJson(jsonModalDraft);
-        persistConfig(parsed);
-        setShowJsonModal(false);
-        Toast.success("JSON saved.");
-      } catch (e) {
-        Toast.error(e.message || String(e));
-      }
-    }
-
-    function onSavePreset() {
-      const label = newLabel.trim();
-      const primaryTag = (newPrimaryTag || newLabel).trim();
-      if (!label || !primaryTag) {
-        Toast.error("Label and primary tag are required.");
-        return;
-      }
-      const fields = {
-        label: label,
-        primaryTag: primaryTag,
-        tags: normalizePresetTags(newTags, primaryTag),
-        title: label,
-        rangeInKey: (newRangeIn.trim() || "shift+i").toLowerCase(),
-        rangeOutKey: (newRangeOut.trim() || "shift+o").toLowerCase(),
-        instantKey: normalizeInstantKey(newInstant),
-        selectSlot: normalizeSelectSlot(
-          newSelectSlot === "" ? null : newSelectSlot,
-          99
-        ),
-      };
-
-      if (editingPresetId != null) {
-        const idx = config.presets.findIndex(function (p) {
-          return p.id === editingPresetId;
-        });
-        if (idx < 0) {
-          Toast.error("Preset not found.");
-          resetPresetForm();
-          setShowAddForm(false);
-          return;
-        }
-        const presets = config.presets.map(function (p, i) {
-          if (i === idx) return Object.assign({}, p, fields);
-          if (
-            fields.selectSlot &&
-            p.selectSlot === fields.selectSlot
-          ) {
-            return Object.assign({}, p, { selectSlot: null });
-          }
-          return p;
-        });
-        persistConfig({
-          defaultPresetIndex: config.defaultPresetIndex,
-          presets: presets,
-        });
-        resetPresetForm();
-        setShowAddForm(false);
-        Toast.success("Preset updated.");
-        return;
-      }
-
-      const id = label.toLowerCase().replace(/\s+/g, "-");
-      if (!fields.selectSlot) {
-        fields.selectSlot = nextFreeSelectSlot(config.presets);
-      }
-      const presets = config.presets
-        .map(function (p) {
-          if (
-            fields.selectSlot &&
-            p.selectSlot === fields.selectSlot
-          ) {
-            return Object.assign({}, p, { selectSlot: null });
-          }
-          return p;
-        })
-        .concat([Object.assign({ id: id }, fields)]);
-      persistConfig({
-        defaultPresetIndex: config.defaultPresetIndex,
-        presets: presets,
-      });
-      resetPresetForm();
-      setShowAddForm(false);
-      Toast.success("Preset added.");
-    }
-
-    function onEditPreset(preset) {
-      fillPresetForm(preset);
-      setShowAddForm(true);
-      setShowPresetList(true);
-    }
-
-    function onCancelPresetForm() {
-      resetPresetForm();
-      setShowAddForm(false);
-    }
-
-    function onRemovePreset(preset) {
-      const message = 'Remove preset "' + preset.label + '"?';
-      if (!window.confirm(message)) return;
-      const presets = config.presets.filter(function (p) {
-        return p.id !== preset.id;
-      });
-      let defaultPresetIndex = config.defaultPresetIndex;
-      if (defaultPresetIndex >= presets.length) {
-        defaultPresetIndex = Math.max(0, presets.length - 1);
-      }
-      if (editingPresetId === preset.id) {
-        resetPresetForm();
-        setShowAddForm(false);
-      }
-      persistConfig({ defaultPresetIndex: defaultPresetIndex, presets: presets });
-      Toast.success("Preset removed.");
-    }
-
-    function onDefaultIndexChange(index) {
-      persistConfig({
-        defaultPresetIndex: index,
-        presets: config.presets,
-      });
-    }
-
-    return React.createElement(
-      "div",
-      { className: "plugin-settings quick-markers-settings" },
-      React.createElement(
-        "p",
-        { className: "quick-markers-settings-version text-muted" },
-        "Quick Markers v" + PLUGIN_VERSION + " — if you do not see this version, Stash is still using old plugin files."
-      ),
-      React.createElement(
-        "p",
-        { className: "quick-markers-settings-intro text-muted" },
-        "Hotkeys on the scene page: ",
-        React.createElement("kbd", null, "shift+1"),
-        "–",
-        React.createElement("kbd", null, "9"),
-        " select a preset (assign slots in Edit), ",
-        React.createElement("kbd", null, "shift+i"),
-        " / ",
-        React.createElement("kbd", null, "shift+o"),
-        " range, ",
-        React.createElement("kbd", null, DEFAULT_INSTANT_KEY),
-        " instant (active preset). Not Ctrl/Strg — plain Shift. Panel header is draggable. Avoid plain ",
-        React.createElement("kbd", null, "i"),
-        " / ",
-        React.createElement("kbd", null, "o"),
-        " / ",
-        React.createElement("kbd", null, "m"),
-        " (Stash shortcuts)."
-      ),
-      React.createElement(TagsHelpModal, {
-        open: showTagsHelpModal,
-        onClose: function () {
-          setShowTagsHelpModal(false);
-        },
-      }),
-      usingFile
-        ? React.createElement(
-            "p",
-            { className: "quick-markers-settings-note text-muted" },
-            "Loaded from ",
-            React.createElement("code", null, "presets.json"),
-            ". Saving here overrides the file."
-          )
-        : usingDefaults
-          ? React.createElement(
-              "p",
-              { className: "quick-markers-settings-note text-muted" },
-              "Using built-in defaults (no ",
-              React.createElement("code", null, "presets.json"),
-              " yet). Add a preset or click Save in JSON to store settings in Stash. Optional: copy ",
-              React.createElement("code", null, "presets.json.example"),
-              " → ",
-              React.createElement("code", null, "presets.json"),
-              " in the plugin folder."
-            )
-          : null,
-      loadError
-        ? React.createElement("p", { className: "text-warning" }, loadError)
-        : null,
-      React.createElement(
-        "div",
-        { className: "form-group quick-markers-panel-ui" },
-        React.createElement(
-          "label",
-          { htmlFor: "qm-panel-position" },
-          "Scene panel position"
-        ),
-        React.createElement(
-          "select",
-          {
-            id: "qm-panel-position",
-            className: "form-control",
-            value: normalizePanelPosition(config.panelPosition),
-            onChange: function (e) {
-              persistConfig({
-                panelPosition: normalizePanelPosition(e.target.value),
-              });
-            },
-          },
-          React.createElement(
-            "option",
-            { value: "top-left" },
-            "Top left (default)"
-          ),
-          React.createElement("option", { value: "top-right" }, "Top right"),
-          React.createElement(
-            "option",
-            { value: "bottom-left" },
-            "Bottom left"
-          ),
-          React.createElement(
-            "option",
-            { value: "bottom-right" },
-            "Bottom right (old)"
-          ),
-          React.createElement(
-            "option",
-            { value: "hidden" },
-            "Hidden (hotkeys only)"
-          )
-        ),
-        React.createElement(
-          "p",
-          { className: "text-muted small mb-2" },
-          "Collapsed by default on the scene page. Click ▶ to expand. Drag the panel header to move it; double-click the header to reset. Position is remembered per browser."
-        ),
-        React.createElement(
-          "div",
-          { className: "form-check" },
-          React.createElement("input", {
-            id: "qm-panel-collapsed",
-            className: "form-check-input",
-            type: "checkbox",
-            checked: config.panelCollapsed !== false,
-            onChange: function (e) {
-              persistConfig({ panelCollapsed: e.target.checked });
-            },
-          }),
-          React.createElement(
-            "label",
-            { className: "form-check-label", htmlFor: "qm-panel-collapsed" },
-            "Start scene panel collapsed"
-          )
-        )
-      ),
-      React.createElement(
-        "div",
-        { className: "form-group quick-markers-panel-ui" },
-        React.createElement(
-          "label",
-          { htmlFor: "qm-touch-controls" },
-          "Touch controls (Android / tablet)"
-        ),
-        React.createElement(
-          "select",
-          {
-            id: "qm-touch-controls",
-            className: "form-control",
-            value: normalizeTouchControls(config.touchControls),
-            onChange: function (e) {
-              persistConfig({
-                touchControls: normalizeTouchControls(e.target.value),
-              });
-            },
-          },
-          React.createElement(
-            "option",
-            { value: "auto" },
-            "Auto-detect (default)"
-          ),
-          React.createElement("option", { value: "on" }, "Always on"),
-          React.createElement("option", { value: "off" }, "Always off")
-        ),
-        React.createElement(
-          "p",
-          { className: "text-muted small mb-0" },
-          "Shows IN / OUT / INSTANT directly under the video, in the page (never on top of the player), so the seek bar and player settings stay reachable. One compact row when the screen is low (phone in landscape). Auto-detect: touch devices on, desktop off."
-        )
-      ),
-      config.presets.length > 0
-        ? React.createElement(
-            "div",
-            { className: "form-group quick-markers-default-preset" },
-            React.createElement(
-              "label",
-              { htmlFor: "qm-default-preset" },
-              "Default preset (for Shift+I/O)"
-            ),
-            React.createElement(
-              "select",
-              {
-                id: "qm-default-preset",
-                className: "form-control",
-                value: String(config.defaultPresetIndex),
-                onChange: function (e) {
-                  onDefaultIndexChange(Number(e.target.value));
-                },
-              },
-              config.presets.map(function (p, index) {
-                return React.createElement(
-                  "option",
-                  { key: p.id, value: String(index) },
-                  p.label
-                );
-              })
-            )
-          )
-        : null,
-      React.createElement(
-        "div",
-        { className: "quick-markers-settings-list-section" },
-        React.createElement(
-          "button",
-          {
-            type: "button",
-            className:
-              "btn btn-secondary btn-sm quick-markers-settings-toggle mb-2" +
-              (showPresetList ? " quick-markers-settings-toggle-open" : ""),
-            onClick: function () {
-              setShowPresetList(!showPresetList);
-            },
-            "aria-expanded": showPresetList,
-          },
-          (showPresetList ? "▼ " : "▶ ") +
-            "Presets (" +
-            config.presets.length +
-            ")"
-        ),
-        showPresetList
-          ? config.presets.length > 0
-            ? React.createElement(
-                "div",
-                { className: "quick-markers-settings-list" },
-                React.createElement(
-                  "div",
-                  { className: "quick-markers-settings-list-header" },
-                  React.createElement("span", null, "Label"),
-                  React.createElement("span", null, "Tags"),
-                  React.createElement("span", null, "Keys"),
-                  React.createElement("span", {
-                    className: "quick-markers-settings-list-actions-hdr",
-                    "aria-hidden": true,
-                  })
-                ),
-                config.presets.map(function (preset, index) {
-                  const selectKey = selectSlotToKey(
-                    normalizeSelectSlot(preset.selectSlot, index)
-                  );
-                  const keys = [
-                    selectKey && "Select: " + selectKey,
-                    preset.rangeInKey && "In: " + preset.rangeInKey,
-                    preset.rangeOutKey && "Out: " + preset.rangeOutKey,
-                    preset.instantKey && "Instant: " + preset.instantKey,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
-                  return React.createElement(
-                    "div",
-                    {
-                      key: preset.id,
-                      className: "quick-markers-settings-list-row",
-                    },
-                    React.createElement("span", null, preset.label),
-                    React.createElement(
-                      "span",
-                      { className: "quick-markers-settings-tags" },
-                      React.createElement("code", null, preset.primaryTag),
-                      preset.tags && preset.tags.length
-                        ? React.createElement(
-                            "span",
-                            { className: "text-muted" },
-                            " + " + preset.tags.join(", ")
-                          )
-                        : null
-                    ),
-                    React.createElement(
-                      "span",
-                      { className: "quick-markers-settings-keys text-muted" },
-                      keys || "—"
-                    ),
-                    React.createElement(
-                      "div",
-                      { className: "quick-markers-settings-list-actions" },
-                      React.createElement(
-                        "button",
-                        {
-                          type: "button",
-                          className:
-                            "btn btn-primary btn-sm" +
-                            (editingPresetId === preset.id
-                              ? " active"
-                              : ""),
-                          onClick: function () {
-                            onEditPreset(preset);
-                          },
-                        },
-                        "Edit"
-                      ),
-                      React.createElement(
-                        "button",
-                        {
-                          type: "button",
-                          className: "btn btn-danger btn-sm",
-                          onClick: function () {
-                            onRemovePreset(preset);
-                          },
-                        },
-                        "Delete"
-                      )
-                    )
-                  );
-                })
-              )
-            : React.createElement(
-                "p",
-                { className: "quick-markers-empty text-muted" },
-                "No presets yet."
-              )
-          : null
-      ),
-      React.createElement(
-        "div",
-        { className: "quick-markers-settings-add" },
-        React.createElement(
-          "button",
-          {
-            type: "button",
-            className:
-              "btn btn-secondary btn-sm quick-markers-settings-toggle mb-2" +
-              (showAddForm ? " quick-markers-settings-toggle-open" : ""),
-            onClick: function () {
-              if (showAddForm) {
-                onCancelPresetForm();
-                return;
-              }
-              resetPresetForm();
-              setShowAddForm(true);
-            },
-            "aria-expanded": showAddForm,
-          },
-          showAddForm
-            ? editingPresetId != null
-              ? "▼ Edit preset"
-              : "▼ Add preset"
-            : "▶ Add preset"
-        ),
-        showAddForm
-          ? React.createElement(
-              "div",
-              { className: "quick-markers-settings-add-body" },
-              editingPresetId != null
-                ? React.createElement(
-                    "p",
-                    { className: "text-muted small" },
-                    "Editing: ",
-                    React.createElement("strong", null, newLabel || editingPresetId)
-                  )
-                : null,
-              React.createElement(
-                "div",
-                { className: "form-group" },
-                React.createElement("label", { htmlFor: "qm-new-label" }, "Label"),
-                React.createElement("input", {
-                  id: "qm-new-label",
-                  type: "text",
-                  className: "form-control",
-                  value: newLabel,
-                  placeholder: "Compilation",
-                  onChange: function (e) {
-                    setNewLabel(e.target.value);
-                  },
-                })
-              ),
-              React.createElement(
-                "div",
-                { className: "form-group" },
-                React.createElement(
-                  "label",
-                  { htmlFor: "qm-new-tag" },
-                  "Primary tag (must exist in Stash)"
-                ),
-                React.createElement("input", {
-                  id: "qm-new-tag",
-                  type: "text",
-                  className: "form-control",
-                  value: newPrimaryTag,
-                  placeholder: "Compilation",
-                  onChange: function (e) {
-                    setNewPrimaryTag(e.target.value);
-                  },
-                })
-              ),
-              React.createElement(
-                "div",
-                { className: "form-group" },
-                React.createElement(
-                  "label",
-                  { htmlFor: "qm-new-tags" },
-                  "Additional tags (optional)"
-                ),
-                React.createElement("input", {
-                  id: "qm-new-tags",
-                  type: "text",
-                  className: "form-control",
-                  value: newTags,
-                  placeholder: "Favorite, Outdoor",
-                  onChange: function (e) {
-                    setNewTags(e.target.value);
-                  },
-                }),
-                React.createElement(
-                  "p",
-                  { className: "text-muted small mb-0" },
-                  "Comma-separated. Must exist in Stash Tags. Not the same as primary tag."
-                )
-              ),
-              React.createElement(
-                "div",
-                { className: "quick-markers-settings-key-row" },
-                React.createElement(
-                  "div",
-                  { className: "form-group" },
-                  React.createElement("label", { htmlFor: "qm-new-in" }, "Range In key"),
-                  React.createElement("input", {
-                    id: "qm-new-in",
-                    type: "text",
-                    className: "form-control",
-                    value: newRangeIn,
-                    onChange: function (e) {
-                      setNewRangeIn(e.target.value);
-                    },
-                  })
-                ),
-                React.createElement(
-                  "div",
-                  { className: "form-group" },
-                  React.createElement("label", { htmlFor: "qm-new-out" }, "Range Out key"),
-                  React.createElement("input", {
-                    id: "qm-new-out",
-                    type: "text",
-                    className: "form-control",
-                    value: newRangeOut,
-                    onChange: function (e) {
-                      setNewRangeOut(e.target.value);
-                    },
-                  })
-                )
-              ),
-              React.createElement(
-                "div",
-                { className: "form-group" },
-                React.createElement(
-                  "label",
-                  { htmlFor: "qm-new-select" },
-                  "Select hotkey (Shift+1–9)"
-                ),
-                React.createElement(
-                  "select",
-                  {
-                    id: "qm-new-select",
-                    className: "form-control",
-                    value: newSelectSlot,
-                    onChange: function (e) {
-                      setNewSelectSlot(e.target.value);
-                    },
-                  },
-                  React.createElement("option", { value: "" }, "None"),
-                  [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) {
-                    return React.createElement(
-                      "option",
-                      { key: n, value: String(n) },
-                      "Shift+" + n
-                    );
-                  })
-                ),
-                React.createElement(
-                  "p",
-                  { className: "text-muted small mb-0" },
-                  "Which Shift+number activates this preset. With 10+ presets, assign only the ones you need on the macropad. Duplicate slots are cleared from other presets."
-                )
-              ),
-              React.createElement(
-                "div",
-                { className: "form-group" },
-                React.createElement(
-                  "label",
-                  { htmlFor: "qm-new-instant" },
-                  "Instant key"
-                ),
-                React.createElement("input", {
-                  id: "qm-new-instant",
-                  type: "text",
-                  className: "form-control",
-                  value: newInstant,
-                  placeholder: DEFAULT_INSTANT_KEY,
-                  onChange: function (e) {
-                    setNewInstant(e.target.value);
-                  },
-                }),
-                React.createElement(
-                  "p",
-                  { className: "text-muted small mb-0" },
-                  "Instant marker for the ",
-                  React.createElement("strong", null, "active"),
-                  " preset. Default ",
-                  React.createElement("kbd", null, DEFAULT_INSTANT_KEY),
-                  " (Shift+M — not Ctrl). ",
-                  React.createElement("kbd", null, "shift+1"),
-                  "–",
-                  React.createElement("kbd", null, "9"),
-                  " are for select slots only."
-                )
-              ),
-              React.createElement(
-                "div",
-                { className: "quick-markers-settings-form-actions" },
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "btn btn-primary",
-                    onClick: onSavePreset,
-                  },
-                  editingPresetId != null ? "Save changes" : "Add"
-                ),
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "btn btn-secondary",
-                    onClick: onCancelPresetForm,
-                  },
-                  "Cancel"
-                )
-              )
-            )
-          : null
-      ),
-      React.createElement(
-        "div",
-        { className: "quick-markers-settings-json-actions mt-2" },
-        React.createElement(
-          "button",
-          {
-            type: "button",
-            className: "btn btn-secondary btn-sm",
-            onClick: openJsonModal,
-          },
-          "Edit JSON (advanced)…"
-        ),
-        React.createElement(
-          "button",
-          {
-            type: "button",
-            className: "btn btn-outline-info btn-sm",
-            onClick: function () {
-              setShowTagsHelpModal(true);
-            },
-          },
-          tagsHelpT.button
-        )
-      ),
-      showJsonModal
-        ? React.createElement(
-            "div",
-            {
-              className: "quick-markers-modal-backdrop",
-              role: "presentation",
-              onClick: closeJsonModal,
-            },
-            React.createElement(
-              "div",
-              {
-                className: "quick-markers-modal",
-                role: "dialog",
-                "aria-modal": true,
-                "aria-labelledby": "qm-json-modal-title",
-                onClick: function (e) {
-                  e.stopPropagation();
-                },
-              },
-              React.createElement(
-                "div",
-                { className: "quick-markers-modal-header" },
-                React.createElement(
-                  "h3",
-                  { id: "qm-json-modal-title", className: "quick-markers-modal-title" },
-                  "Edit presets (JSON)"
-                ),
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "quick-markers-modal-close",
-                    "aria-label": "Close",
-                    onClick: closeJsonModal,
-                  },
-                  "×"
-                )
-              ),
-              React.createElement(
-                "div",
-                { className: "quick-markers-modal-body" },
-                React.createElement(
-                  "p",
-                  { className: "text-muted small mb-2" },
-                  "Full config: defaultPresetIndex and presets array. Each preset: primaryTag (required), optional tags array for extra marker tags. Names must exist in Stash."
-                ),
-                React.createElement("textarea", {
-                  className: "form-control quick-markers-json",
-                  rows: 16,
-                  value: jsonModalDraft,
-                  onChange: function (e) {
-                    setJsonModalDraft(e.target.value);
-                  },
-                })
-              ),
-              React.createElement(
-                "div",
-                { className: "quick-markers-modal-footer" },
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "btn btn-secondary",
-                    onClick: closeJsonModal,
-                  },
-                  "Cancel"
-                ),
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    className: "btn btn-primary",
-                    onClick: onSaveJsonModal,
-                  },
-                  "Save"
-                )
-              )
-            )
-          )
-        : null
-    );
+    return React.createElement("div", { ref: ref, className: "plugin-settings quick-markers-settings" });
   }
 
   PluginApi.patch.instead("PluginSettings", function () {
