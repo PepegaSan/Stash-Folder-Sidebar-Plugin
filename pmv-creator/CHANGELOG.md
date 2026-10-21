@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 (2026-10-21)
+
+- Help dialog (? in the toolbar): workflow in five steps and all shortcuts.
+- "Motion on the beat": measured spots are remembered per browser, so a re-run or the same seed does not measure them again.
+
 ## 0.3.0 – first public beta (2026-10-21)
 
 - English interface, German as second language (follows Stash's interface language, or Stash UI's); backend messages, log lines and CLI help in English.

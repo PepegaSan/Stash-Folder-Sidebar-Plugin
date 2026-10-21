@@ -106,18 +106,29 @@ export async function loadSpeedMaps(scenes: Array<{ id: string; duration: number
 
 const RHYTHM_WINDOW = 2.0;
 
+const RHYTHM_V = 1;
+/** A measured spot is remembered per browser (scene + start), so the same seed – or the same spot in another run – costs nothing again. */
+const rhythmKey = (c: Clip) => `pmv-creator:rhythm:${RHYTHM_V}:${c.sceneId}:${(Math.round(c.sourceIn * 20) / 20).toFixed(2)}`;
+
 /** Motion rhythm at the start of each clip (2 s of its source at 30 fps). */
 export async function measureRhythms(clips: Clip[], sources: Record<string, SourceMedia>, status: Status): Promise<Record<string, Rhythm | null>> {
   const out: Record<string, Rhythm | null> = {};
-  const items = clips.filter((c) => sources[c.sceneId]?.path);
-  for (let i = 0; i < items.length; i += 8) {
-    status(t("Motion on the beat: {i}/{n} clips measured…", { i, n: items.length }));
-    const batch = items.slice(i, i + 8);
+  const todo: Clip[] = [];
+  for (const c of clips.filter((x) => sources[x.sceneId]?.path)) {
+    const hit = lsGet(rhythmKey(c));
+    if (hit === null) todo.push(c);
+    else out[c.id] = JSON.parse(hit) as Rhythm | null;
+  }
+  for (let i = 0; i < todo.length; i += 8) {
+    status(t("Motion on the beat: {i}/{n} clips measured…", { i, n: todo.length }));
+    const batch = todo.slice(i, i + 8);
     const res = await grayFrames(batch.map((c) => ({ key: c.id, path: sources[c.sceneId].path, start: c.sourceIn, duration: RHYTHM_WINDOW, fps: 30 })));
     for (const c of batch) {
       const r = res[c.id];
       const pts = r && !r.error ? motionCurve(toFrames(decodeGrayFrames(r.data, r.w, r.h, r.fps, r.t0))) : null;
       out[c.id] = pts ? rhythmOf(pts) : null;
+      // a backend failure (missing file, timeout) is not remembered – it may work next time
+      if (r && !r.error) lsSet(rhythmKey(c), JSON.stringify(out[c.id]));
     }
   }
   return out;

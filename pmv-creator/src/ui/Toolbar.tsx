@@ -34,6 +34,7 @@ export function Toolbar() {
   const p = state.present;
   const ui = state.ui;
   const [renderOpen, setRenderOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const base = safeName(p.name);
@@ -184,7 +185,11 @@ export function Toolbar() {
       <button className="btn btn-sm btn-primary" onClick={() => setRenderOpen(true)}>
         {t("Render")}
       </button>
+      <button className="btn btn-sm btn-secondary" title={t("Help: controls and shortcuts")} onClick={() => setHelpOpen(true)}>
+        ?
+      </button>
       {renderOpen && <RenderDialog onClose={() => setRenderOpen(false)} />}
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
       {openDialog && (
         <OpenDialog
           onClose={() => setOpenDialog(false)}
@@ -194,6 +199,67 @@ export function Toolbar() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** Controls and shortcuts at a glance; the README has the long version. */
+function HelpDialog({ onClose }: { onClose: () => void }) {
+  const rows: Array<[string, string]> = [
+    [t("Play / pause"), "Space"],
+    [t("Frame ± / beat ±"), "← → / Shift+← →"],
+    [t("Nudge the selected clip by a frame/beat"), "Alt+← → / Alt+Shift+← →"],
+    [t("Move / trim / slip a clip"), t("drag · drag the edges · Alt+drag")],
+    [t("Without snapping"), t("Shift while dragging")],
+    [t("Open a clip's source"), t("double-click the clip")],
+    [t("Split at the playhead · replace with the selected snippet"), "S · R"],
+    [t("Delete · ripple delete"), "Del · Shift+Del"],
+    [t("Timeline marker"), t("M (double-click in the ruler removes it)")],
+    [t("Clear selection"), "Esc"],
+    [t("Undo / redo"), "Ctrl+Z / Ctrl+Y"],
+    [t("Zoom"), t("Ctrl+wheel, + / − · wheel = scroll horizontally")],
+    [t("Start / end"), "Home / End"],
+  ];
+  const steps = [
+    t("Music: in the inspector (nothing selected) upload a file or enter a server path, then Detect BPM."),
+    t("Scenes: search in the sidebar and add with +, or paste scene ids / Stash links. Click a scene to pick markers and ranges (I/O, Shift+drag)."),
+    t("Arrange: drag snippets from the selection onto a track, or let the ⚡ Generator cut to the beat – everything stays editable."),
+    t("Fine-tune: click a clip; the inspector sets start, duration, source in/out, speed, transition. Another part of the scene never moves the clip on the timeline."),
+    t("Render with FFmpeg (exact) or Quick record in the browser (real time), or export EDL/OTIO."),
+  ];
+  return (
+    <div className="pmv-modal" onClick={onClose}>
+      <div className="pmv-modal-body" onClick={(e) => e.stopPropagation()}>
+        <div className="pmv-section-head is-static">
+          {t("Help")} <span className="pmv-spacer" />
+          <button className="btn btn-sm btn-link" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <ol className="pmv-help-steps">
+          {steps.map((s) => (
+            <li key={s}>{s}</li>
+          ))}
+        </ol>
+        <table className="pmv-help-keys">
+          <tbody>
+            {rows.map(([what, how]) => (
+              <tr key={what}>
+                <td>{what}</td>
+                <td>
+                  <code>{how}</code>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="pmv-li-meta">
+          {t("Every button has a tooltip – hover over it.")}{" "}
+          <a href="https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin/blob/main/pmv-creator/README.md" target="_blank" rel="noreferrer">
+            {t("Full manual (README)")}
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

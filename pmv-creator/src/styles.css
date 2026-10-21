@@ -1047,3 +1047,27 @@
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
+
+.pmv-help-steps {
+  margin: 8px 0 12px;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.pmv-help-steps li {
+  margin-bottom: 4px;
+}
+.pmv-help-keys {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+}
+.pmv-help-keys td {
+  padding: 3px 8px 3px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: top;
+}
+.pmv-help-keys td:last-child {
+  white-space: nowrap;
+}

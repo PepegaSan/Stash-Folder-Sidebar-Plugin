@@ -1,7 +1,7 @@
 # Plugin id = file name without .yml  ->  "pmv-creator"
 name: PMV Creator
 description: Deterministic PMV editor – pick scenes and markers, arrange them on a beat grid, fine-tune every clip and render with FFmpeg or export as EDL/OTIO. Works in classic Stash and in Stash UI.
-version: 0.3.0
+version: 0.3.1
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 
 ui:
