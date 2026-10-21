@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0 (2026-10-21)
+
+- **Render on your PC** (optional): Render → *Render on: My PC*. A render helper on the PC (one Python file, downloaded from the dialog with the Stash address filled in) takes the job from Stash, renders with the PC's FFmpeg and saves the video in a folder on the PC. The output folder and optional path mappings (`/data/` → `Y:\`) are set once in the dialog; videos and music come over Stash otherwise. Progress and *Cancel* work as for server renders; the Stash task only hands the job over.
+
 ## 0.4.1 (2026-10-21)
 
 - "Motion on the beat" (generator checkbox): 32 clips per backend call instead of 8 – far fewer plugin processes on slow servers.

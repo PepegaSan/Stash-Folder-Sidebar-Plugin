@@ -88,6 +88,18 @@ Bearbeitungsmodi (Toolbar): **An Nachbarn stoppen** (Standard) · **Ripple** (Fo
 
 Deep-Link: `/pmv-creator?scenes=12,34,56` legt Szenen direkt in den Projekt-Pool, `?project=<id>` öffnet ein Projekt.
 
+## Auf dem eigenen PC rendern (optional)
+
+Standardmäßig rendert Stash selbst. Mit dem **Render-Helfer** rendert stattdessen ein PC – deutlich schneller als eine NAS, und das Video landet auf diesem PC, auf einem beliebigen Laufwerk.
+
+1. **Rendern** → *Rendern auf*: **Mein PC** → **Render-Helfer herunterladen**. Das ist eine einzelne Python-Datei, in der deine Stash-Adresse schon eingetragen ist. Der PC braucht Python 3 ([python.org](https://www.python.org/downloads/)) und FFmpeg (z. B. `winget install Gyan.FFmpeg`).
+2. Datei doppelklicken und das Fenster offen lassen. Damit er nach jedem Windows-Start bereitsteht: in den Autostart-Ordner legen (Win+R → `shell:startup`). Der PC erscheint nach ein paar Sekunden im Render-Dialog.
+3. Einmal **Speichern in** eintragen (z. B. `I:\PMVs`), dann **Auf <PC> rendern**. Der Fortschritt steht im Dialog und in Stashs Task-Liste; *Abbrechen* stoppt auch den PC.
+
+Der PC holt sich Videos und Musik über Stash, sonst muss nichts eingerichtet werden. Liegen die Videos auch auf einem Laufwerk des PCs (z. B. die NAS als `Y:`), bildet *Videos von einem Laufwerk lesen* Stashs Pfade darauf ab (`/data/` → `Y:\`). Für Stash mit Anmeldung vor dem Herunterladen einen API-Schlüssel eintragen.
+
+Kommandozeile: `python pmv_backend.py helper --stash http://nas:9999 [--api-key KEY] [--name PC] [--jobs N] [--stream-only]`. Der Segment-Cache liegt in `%LOCALAPPDATA%\PMV Creator\cache`; Stücke älter als 14 Tage werden beim Start entfernt.
+
 ## Rendern ohne Stash (CLI)
 
 Der Export *Renderplan (.json)* enthält alles, was der Renderer braucht:

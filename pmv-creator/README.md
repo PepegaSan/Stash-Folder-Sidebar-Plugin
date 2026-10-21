@@ -88,6 +88,18 @@ Edit modes (toolbar): **Snap to neighbours** (clips stop at their neighbours, de
 
 Deep links: `/pmv-creator?scenes=12,34,56` puts scenes straight into the project pool, `?project=<id>` opens a project.
 
+## Render on your PC (optional)
+
+By default the render runs inside Stash. With the **render helper** it runs on a PC instead – much faster than on a NAS, and the video is saved on that PC, on any drive.
+
+1. **Render** → *Render on*: **My PC** → **Download render helper**. It is a single Python file with your Stash address already filled in. The PC needs Python 3 ([python.org](https://www.python.org/downloads/)) and FFmpeg (e.g. `winget install Gyan.FFmpeg`).
+2. Double-click the file and keep its window open. To have it ready after every Windows start, put it into the startup folder (Win+R → `shell:startup`). The PC shows up in the render dialog within a few seconds.
+3. Enter **Save to** once (e.g. `I:\PMVs`), then **Render on <PC>**. Progress shows in the dialog and in Stash's task list; *Cancel* stops the PC as well.
+
+The PC fetches the videos and the music over Stash, so nothing else has to be set up. If the videos are also on a drive of the PC (e.g. the NAS as `Y:`), *Read the videos from a drive* maps Stash's paths onto it (`/data/` → `Y:\`). For Stash with a login, enter an API key before downloading the helper.
+
+Command line: `python pmv_backend.py helper --stash http://nas:9999 [--api-key KEY] [--name PC] [--jobs N] [--stream-only]`. Its segment cache is `%LOCALAPPDATA%\PMV Creator\cache`; pieces older than 14 days are removed when it starts.
+
 ## Rendering without Stash (CLI)
 
 The *Render plan (.json)* export contains everything the renderer needs:

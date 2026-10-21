@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.4.1-informational)
+![Version](https://img.shields.io/badge/version-0.5.0-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -585,6 +585,7 @@ Works in classic Stash and in Stash UI.
 - **Ground rule** — another part of the scene never changes a clip's place on the timeline
 - **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"
 - **Render** — deterministic FFmpeg pipeline as a Stash task (segment cache, exact CFR), plus **Quick record** (real-time WebM in the browser, no server FFmpeg needed)
+- **Render on your PC** (optional) — a render helper on a PC renders with its own FFmpeg and saves to any folder on the PC; set up once in the render dialog
 - **Exports** — project JSON, CMX3600 EDL, OpenTimelineIO, render plan, FFmpeg scripts; CLI render without Stash
 - English interface, German when Stash (or Stash UI) is set to German
 
@@ -611,6 +612,10 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.5.0
+
+- Render on your PC (optional): a render helper on the PC takes renders from Stash, uses the PC's FFmpeg and saves to a folder on the PC (set once in the render dialog)
 
 ### PMV Creator 0.4.1
 

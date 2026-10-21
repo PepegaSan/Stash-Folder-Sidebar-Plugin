@@ -14,6 +14,9 @@ async function copyStatic() {
   await mkdir(outDir, { recursive: true });
   await cp("plugin", outDir, { recursive: true });
   await cp("schema", path.join(outDir, "schema"), { recursive: true });
+  // the editor offers the backend as render helper for a PC – ui.assets serves only assets/
+  await mkdir(path.join(outDir, "assets", "helper"), { recursive: true });
+  await cp("plugin/backend/pmv_backend.py", path.join(outDir, "assets", "helper", "pmv_backend.py"));
 }
 
 const shared = {

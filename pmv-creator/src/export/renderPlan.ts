@@ -29,6 +29,8 @@ export type RenderPiece =
 
 export interface RenderAudio {
   path: string;
+  /** Stash-relative URL of the file – a render helper on a PC fetches the music from there. */
+  url?: string;
   sourceIn: number;
   start: number;
   gainDb: number;
@@ -116,7 +118,7 @@ export function buildRenderPlan(p: PmvProject): { plan: RenderPlan; warnings: st
   let audio: RenderAudio | null = null;
   if (p.audio?.path) {
     const a = p.audio;
-    audio = { path: a.path!, sourceIn: a.sourceIn, start: a.start, gainDb: a.gainDb, fadeIn: a.fadeIn, fadeOut: a.fadeOut };
+    audio = { path: a.path!, ...(a.url ? { url: a.url } : {}), sourceIn: a.sourceIn, start: a.start, gainDb: a.gainDb, fadeIn: a.fadeIn, fadeOut: a.fadeOut };
   } else if (p.audio) {
     warnings.add(t("The music has no server path – rendering without music"));
   }

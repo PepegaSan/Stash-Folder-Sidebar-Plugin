@@ -7,6 +7,9 @@ Runs in two ways:
   * as CLI for renders outside Stash:
         python pmv_backend.py render plan.json -o out.mp4 [--ffmpeg PATH] [--jobs 2]
         python pmv_backend.py script plan.json [--shell sh|cmd]
+  * as render helper on a PC – renders started in the editor with "On my PC" run there:
+        python pmv_backend.py helper --stash http://nas:9999 [--api-key KEY] [--name PC]
+    (the editor offers this file for download with the Stash address filled in; then a double-click is enough)
 
 Render pipeline (all timing decisions were made by the frontend's render plan):
   1. every piece (clip / black / xfade) -> one FFmpeg call with its own filtergraph
@@ -27,6 +30,7 @@ import re
 import shlex
 import shutil
 import signal
+import socket
 import ssl
 import subprocess
 import sys
@@ -40,7 +44,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-VERSION = "0.4.1"
+VERSION = "0.5.0"
 PLUGIN_ID = "pmv-creator"
 PLAN_VERSION = 1
 # Bump when piece_command() changes, invalidates cached pieces.
@@ -51,6 +55,8 @@ PLUGIN_DIR = Path(__file__).resolve().parent.parent
 MEDIA_URL = f"/plugin/{PLUGIN_ID}/assets/media/"
 
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+# Filled in by the editor when this file is downloaded as render helper ("stash", "apiKey"); empty inside Stash.
+HELPER_DEFAULTS: Dict[str, str] = {}
 XFADE = {
     "fade", "fadeblack", "fadewhite", "dissolve", "wipeleft", "wiperight", "slideleft",
     "slideright", "circleopen", "pixelize", "zoomin", "hblur", "radial",
@@ -61,9 +67,12 @@ NVENC_PRESET = {"ultrafast": "p1", "superfast": "p2", "veryfast": "p3", "faster"
 # --------------------------------------------------------------------------------------- logging
 
 PLAIN_LOG = False  # CLI mode prints readable lines instead of Stash's protocol
+LOG_HOOK: Optional[Callable[[str, str], None]] = None  # render helper: progress/messages go back to Stash
 
 
 def _log(level: str, msg: str) -> None:
+    if LOG_HOOK:
+        LOG_HOOK(level, str(msg))
     if PLAIN_LOG:
         if level != "p":
             print(f"[{level}] {msg}", file=sys.stderr, flush=True)
@@ -131,6 +140,7 @@ class Context:
         # PMV_DATA_DIR is for tests/development; in Stash the media folder must be the one ui.assets serves
         data_env = os.environ.get("PMV_DATA_DIR")
         base = Path(data_env) if data_env else PLUGIN_DIR / "data"
+        self.base = base
         self.projects = Path(settings.get("projectDir") or base / "projects")
         self.media = (base / "media") if data_env else PLUGIN_DIR / "assets" / "media"  # /plugin/<id>/assets/media/
         self.renders = Path(settings.get("outputDir") or base / "renders")
@@ -340,6 +350,15 @@ def fit_filter(out: Out, fit: str, tag: str = "f") -> str:
     return f"scale={out.w}:{out.h}:force_original_aspect_ratio=increase:flags=bicubic,crop={out.w}:{out.h}"
 
 
+def is_url(path: Any) -> bool:
+    return isinstance(path, str) and path.startswith(("http://", "https://"))
+
+
+def input_args(src: Dict[str, Any]) -> List[str]:
+    """Options in front of an input: only the render helper sets them (HTTP header + timeout for Stash streams)."""
+    return [str(a) for a in src.get("inputArgs") or []] if is_url(src.get("path")) else []
+
+
 def atempo_chain(speed: float) -> List[str]:
     factors: List[float] = []
     s = speed
@@ -384,7 +403,7 @@ def piece_command(ff: str, piece: Dict[str, Any], out: Out, clip_audio: bool, de
         idx = n_inputs
         n_inputs += 1
         # input seeking (fast) + re-encode = frame accurate; -t limits decoding to what we need
-        inputs.extend(["-ss", f6(max(0.0, float(src["in"]))), "-t", f6(dur * speed + 1.0), "-i", str(src["path"])])
+        inputs.extend([*input_args(src), "-ss", f6(max(0.0, float(src["in"]))), "-t", f6(dur * speed + 1.0), "-i", str(src["path"])])
         fit = norm_fit(src.get("fit"))
         graph.append(
             f"[{idx}:v:0]setpts=(PTS-STARTPTS)/{speed:.6f},fps={out.rate},{fit_filter(out, fit, vlabel)},setsar=1,format=yuv420p,"
@@ -437,7 +456,7 @@ def final_command(ff: str, plan: Dict[str, Any], out: Out, list_path: str, dest:
     audio_map: Optional[str] = None
     music = plan.get("audio")
     if music and music.get("path"):
-        cmd += ["-ss", f6(float(music.get("sourceIn", 0))), "-i", str(music["path"])]
+        cmd += [*input_args(music), "-ss", f6(float(music.get("sourceIn", 0))), "-i", str(music["path"])]
         chain = ["asetpts=PTS-STARTPTS", "aresample=48000", "aformat=sample_fmts=fltp:channel_layouts=stereo", f"volume={float(music.get('gainDb', 0)):.2f}dB"]
         fade_in, fade_out = float(music.get("fadeIn", 0)), float(music.get("fadeOut", 0))
         if fade_in > 0:
@@ -487,10 +506,10 @@ def validate_plan(plan: Dict[str, Any]) -> Out:
     missing = set()
     for p in pieces:
         for s in (p.get("src"), p.get("a"), p.get("b")):
-            if s and not os.path.isfile(s["path"]):
+            if s and not is_url(s["path"]) and not os.path.isfile(s["path"]):
                 missing.add(s["path"])
     music = plan.get("audio")
-    if music and music.get("path") and not os.path.isfile(music["path"]):
+    if music and music.get("path") and not is_url(music["path"]) and not os.path.isfile(music["path"]):
         missing.add(music["path"])
     if missing:
         raise FileNotFoundError("files not found:\n" + "\n".join(sorted(missing)))
@@ -852,6 +871,420 @@ def scan_output(ctx: Context, folder: Path) -> Optional[str]:
         return f"The scan could not be started: {e}"
 
 
+# --------------------------------------------------------------------------------------- render on a PC
+#
+# A render helper runs on a user's PC (this file in "helper" mode). "On my PC" in the editor starts the usual
+# Stash task, but with mode "pc" it only brokers: it writes a job file, waits until the helper has claimed it
+# and mirrors the helper's progress into Stash's task list. The helper renders with the PC's FFmpeg and writes
+# the file on the PC. Sources: the Stash path if the PC sees it, a path mapping ("/data/" -> "Y:\"), otherwise
+# the scene's stream over HTTP – so nothing has to be set up besides the output folder.
+
+HELPER_ONLINE = 90  # s since the last hello -> offline
+CLAIM_TIMEOUT = 45  # s a queued job waits for its helper
+STALL_TIMEOUT = 120  # s without progress from a running helper
+BROKER_STALE = 8  # s without a heartbeat of the broker task -> the job is gone (task killed)
+
+
+def helper_key(name: Any) -> str:
+    key = re.sub(r"[^A-Za-z0-9_-]+", "_", str(name or "")).strip("_")[:64]
+    if not key:
+        raise ValueError("render helper name missing")
+    return key
+
+
+def _read_json(path: Path, default: Any = None) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def _helpers_dir(ctx: Context) -> Path:
+    return ctx.base / "helpers"
+
+
+def _jobs_dir(ctx: Context) -> Path:
+    return ctx.base / "pc-jobs"
+
+
+def _broker_alive(job: Path) -> bool:
+    beat = job.with_suffix(".alive")
+    try:
+        return time.time() - beat.stat().st_mtime < BROKER_STALE
+    except OSError:
+        return False
+
+
+def _drop_job(job: Path) -> None:
+    for f in (job, job.with_suffix(".alive")):
+        try:
+            f.unlink()
+        except OSError:
+            pass
+
+
+def op_helper_hello(ctx: Context, args: dict) -> dict:
+    """The helper says hello every 30 s; gets its settings (output folder, path mappings) back."""
+    info = as_json(args.get("info")) or {}
+    path = _helpers_dir(ctx) / f"{helper_key(info.get('name'))}.json"
+    cur = _read_json(path, {}) or {}
+    for k in ("name", "version", "ffmpeg", "defaultOutput", "platform"):
+        if info.get(k) is not None:
+            cur[k] = str(info[k])[:300]
+    cur["lastSeen"] = time.time()
+    cur.setdefault("config", {"outputDir": "", "mappings": []})
+    atomic_write(path, json.dumps(cur).encode())
+    return {"config": cur["config"]}
+
+
+def op_helper_list(ctx: Context, args: dict) -> list:
+    out = []
+    d = _helpers_dir(ctx)
+    if d.is_dir():
+        for f in sorted(d.glob("*.json")):
+            h = _read_json(f)
+            if not isinstance(h, dict):
+                continue
+            h["id"] = f.stem
+            h["online"] = time.time() - float(h.get("lastSeen") or 0) < HELPER_ONLINE
+            h.setdefault("config", {"outputDir": "", "mappings": []})
+            out.append(h)
+    return out
+
+
+def op_helper_config(ctx: Context, args: dict) -> dict:
+    path = _helpers_dir(ctx) / f"{helper_key(args.get('name'))}.json"
+    cur = _read_json(path)
+    if not isinstance(cur, dict):
+        raise FileNotFoundError("this render helper has never connected")
+    cfg = as_json(args.get("config")) or {}
+    maps = [{"from": str(m.get("from") or "").strip(), "to": str(m.get("to") or "").strip()} for m in (cfg.get("mappings") or []) if isinstance(m, dict)]
+    cur["config"] = {"outputDir": str(cfg.get("outputDir") or "").strip()[:500], "mappings": [m for m in maps if m["from"] and m["to"]][:20]}
+    atomic_write(path, json.dumps(cur).encode())
+    return cur["config"]
+
+
+def op_helper_claim(ctx: Context, args: dict) -> Optional[dict]:
+    """The helper asks for work: the oldest queued job for it, now marked as running."""
+    key = helper_key(args.get("name"))
+    d = _jobs_dir(ctx)
+    if not d.is_dir():
+        return None
+    for f in sorted(d.glob("*.json"), key=lambda p: p.stat().st_mtime):
+        if not _broker_alive(f):
+            _drop_job(f)  # its Stash task is gone
+            continue
+        job = _read_json(f)
+        if not isinstance(job, dict) or job.get("status") != "queued" or job.get("helper") != key:
+            continue
+        job.update(status="running", claimed=time.time(), updated=time.time(), progress=0.0)
+        atomic_write(f, json.dumps(job).encode())
+        cfg = (_read_json(_helpers_dir(ctx) / f"{key}.json", {}) or {}).get("config") or {}
+        return {"jobId": f.stem, "plan": job["plan"], "config": cfg}
+    return None
+
+
+def op_helper_progress(ctx: Context, args: dict) -> dict:
+    """Progress/result from the helper. Answers cancel=True when the Stash task was stopped or is gone."""
+    path = _jobs_dir(ctx) / f"{require_id(args.get('jobId'), 'job id')}.json"
+    job = _read_json(path)
+    if not isinstance(job, dict) or not _broker_alive(path):
+        return {"cancel": True}
+    job["updated"] = time.time()
+    if args.get("progress") is not None:
+        job["progress"] = max(0.0, min(1.0, float(args["progress"])))
+    if args.get("message"):
+        job["message"] = str(args["message"])[:300]
+    status = args.get("status")
+    if status == "done":
+        job.update(status="done", result=as_json(args.get("result")) or {})
+    elif status == "error":
+        job.update(status="error", error=str(args.get("error") or "render failed on the PC")[:2000])
+    atomic_write(path, json.dumps(job).encode())
+    return {"cancel": bool(job.get("cancel"))}
+
+
+def task_pc_render(ctx: Context, args: dict) -> dict:
+    """Stash task for a render on a PC: queue the job, wait for the helper, mirror its progress."""
+    plan = as_json(args.get("plan"))
+    if not plan:
+        raise ValueError("No render plan – renders are started from the PMV Creator page")
+    validate_plan_light(plan)
+    render_id = require_id(args.get("renderId") or f"render_{int(time.time())}", "Render-ID")
+    helper = helper_key(args.get("helper"))
+    status_file = result_path(ctx, render_id)
+    atomic_write(status_file, json.dumps({"status": "running", "helper": helper}).encode())
+    job_path = _jobs_dir(ctx) / f"{render_id}.json"
+    beat = job_path.with_suffix(".alive")
+    created = time.time()
+    atomic_write(beat, b"1")
+    atomic_write(job_path, json.dumps({"status": "queued", "helper": helper, "plan": plan, "created": created, "updated": created}).encode())
+    log_info(f"Waiting for the render helper on {helper} …")
+    last_msg = None
+    try:
+        while True:
+            if _CANCELLED.is_set():
+                raise Cancelled()
+            os.utime(beat, None)
+            time.sleep(1)
+            job = _read_json(job_path) or {}
+            status = job.get("status")
+            if status == "queued" and time.time() - created > CLAIM_TIMEOUT:
+                raise RuntimeError(f"The render helper on {helper} did not pick up the render – is it running on that PC?")
+            if status == "running":
+                if job.get("message") and job["message"] != last_msg:
+                    last_msg = job["message"]
+                    log_info(f"{helper}: {last_msg}")
+                log_progress(float(job.get("progress") or 0))
+                if time.time() - float(job.get("updated") or 0) > STALL_TIMEOUT:
+                    raise RuntimeError(f"The render helper on {helper} stopped responding")
+            elif status == "done":
+                result = {**(job.get("result") or {}), "helper": helper}
+                atomic_write(status_file, json.dumps({"status": "done", **result}).encode())
+                log_info(f"Done on {helper}: {result.get('file')}")
+                return result
+            elif status == "error":
+                raise RuntimeError(job.get("error") or "render failed on the PC")
+    except BaseException as e:
+        msg = "Cancelled" if isinstance(e, Cancelled) else str(e)
+        atomic_write(status_file, json.dumps({"status": "error", "error": msg, "helper": helper}).encode())
+        raise
+    finally:
+        _drop_job(job_path)  # the helper's next progress call answers "cancel" if it is still busy
+
+
+# ---- the helper itself (runs on the PC)
+
+_STOP = threading.Event()
+
+
+class HelperClient:
+    """GraphQL client of the helper: Stash address + optional API key (Stash with a login)."""
+
+    def __init__(self, base: str, api_key: str = ""):
+        self.base = base.rstrip("/")
+        self.api_key = api_key
+        self.ctx = ssl._create_unverified_context() if self.base.startswith("https") else None
+
+    def gql(self, query: str, variables: Optional[dict] = None, timeout: float = 60.0) -> dict:
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        if self.api_key:
+            headers["ApiKey"] = self.api_key
+        req = urllib.request.Request(self.base + "/graphql", data=json.dumps({"query": query, "variables": variables or {}}).encode(), headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout, context=self.ctx) as r:
+            data = json.load(r)
+        if data.get("errors"):
+            raise RuntimeError("; ".join(e.get("message", "") for e in data["errors"]))
+        return data["data"]
+
+    def op(self, args: dict, timeout: float = 120.0) -> Any:
+        q = "mutation PmvHelper($a: Map) { runPluginOperation(plugin_id: \"" + PLUGIN_ID + "\", args: $a) }"
+        return self.gql(q, {"a": args}, timeout)["runPluginOperation"]
+
+
+def map_path(path: str, mappings: List[Dict[str, str]]) -> Optional[str]:
+    """Longest matching prefix wins; the rest of the path gets the separators of the target (Y:\\ -> backslashes)."""
+    best = None
+    for m in mappings or []:
+        src, dst = str(m.get("from") or ""), str(m.get("to") or "")
+        if src and dst and path.startswith(src) and (best is None or len(src) > len(best[0])):
+            best = (src, dst)
+    if not best:
+        return None
+    rest = path[len(best[0]):].lstrip("/\\")
+    sep = "\\" if ("\\" in best[1] or re.match(r"^[A-Za-z]:", best[1])) else "/"
+    return best[1].rstrip("/\\") + sep + rest.replace("/", sep).replace("\\", sep)
+
+
+def find_ffmpeg() -> Optional[str]:
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    exe = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+    home = Path.home()
+    for cand in (home / ".stash" / exe, Path("C:/ffmpeg/bin") / exe, Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links" / exe):
+        if cand.is_file():
+            return str(cand)
+    return None
+
+
+def helper_dirs() -> Dict[str, Path]:
+    root = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / ".local" / "share")) / "PMV Creator"
+    videos = Path.home() / "Videos"
+    return {"cache": root / "cache", "work": root / "work", "output": (videos if videos.is_dir() else Path.home()) / "PMV Creator"}
+
+
+def trim_cache(cache: Path, days: float = 14) -> None:
+    if not cache.is_dir():
+        return
+    limit = time.time() - days * 86400
+    for f in cache.glob("*" + PIECE_EXT):
+        try:
+            if f.stat().st_mtime < limit:
+                f.unlink()
+        except OSError:
+            pass
+
+
+def prepare_pc_plan(plan: Dict[str, Any], cfg: Dict[str, Any], base: str, api_key: str, stream_only: bool = False) -> Dict[str, Any]:
+    """Sources the PC can read: the Stash path itself, a mapped path, or Stash's stream of the scene."""
+    plan = json.loads(json.dumps(plan))
+    mappings = cfg.get("mappings") or []
+    http_args = ["-rw_timeout", "60000000"] + (["-headers", f"ApiKey: {api_key}\r\n"] if api_key else [])
+
+    def resolve(src: Dict[str, Any], url: Optional[str]) -> None:
+        path = str(src.get("path") or "")
+        if not (stream_only and url):
+            for cand in (path, map_path(path, mappings)):
+                if cand and os.path.isfile(cand):
+                    src["path"] = cand
+                    return
+        if not url:
+            raise FileNotFoundError(f"{path} is not reachable from this PC – add a path mapping")
+        src["path"] = url
+        src["inputArgs"] = http_args
+
+    for piece in plan.get("pieces") or []:
+        for k in ("src", "a", "b"):
+            s = piece.get(k)
+            if s:
+                resolve(s, f"{base}/scene/{s.get('sceneId')}/stream")
+    music = plan.get("audio")
+    if music and music.get("path"):
+        resolve(music, base + music["url"] if str(music.get("url") or "").startswith("/") else None)
+    return plan
+
+
+def run_helper_job(job: Dict[str, Any], client: Any, ff: str, dirs: Dict[str, Path], jobs: int = 4, stream_only: bool = False, out_default: Optional[Path] = None) -> Dict[str, Any]:
+    """One render on the PC with progress reports to Stash; returns the result (or raises)."""
+    global LOG_HOOK
+    job_id = job["jobId"]
+    cfg = job.get("config") or {}
+    plan = prepare_pc_plan(job["plan"], cfg, getattr(client, "base", ""), getattr(client, "api_key", ""), stream_only)
+    out_dir = Path(os.path.expandvars(os.path.expanduser(cfg.get("outputDir") or ""))) if cfg.get("outputDir") else (out_default or dirs["output"])
+    name = safe_filename(str(plan.get("projectName") or "pmv"), "pmv")
+    dest = unique_path(out_dir, f"{name}_{time.strftime('%Y%m%d-%H%M%S')}.mp4")
+    state: Dict[str, Any] = {"p": 0.0, "msg": None, "done": False}
+    lock = threading.Lock()
+
+    def hook(level: str, msg: str) -> None:
+        with lock:
+            if level == "p":
+                try:
+                    state["p"] = float(msg)
+                except ValueError:
+                    pass
+            elif level in ("i", "w", "e"):
+                state["msg"] = msg
+
+    def report() -> None:
+        while not state["done"]:
+            time.sleep(2)
+            if state["done"]:
+                return
+            with lock:
+                p, msg = state["p"], state["msg"]
+                state["msg"] = None
+            try:
+                r = client.op({"op": "helper_progress", "jobId": job_id, "progress": p, "message": msg})
+                if r and r.get("cancel"):
+                    print("  cancelled in Stash", flush=True)
+                    _terminate_all()
+                    return
+            except Exception as e:  # a hiccup of the network must not stop the render
+                print(f"  (progress not delivered: {e})", flush=True)
+
+    print(f"Render {job_id}: {plan.get('projectName')} -> {dest}", flush=True)
+    LOG_HOOK = hook
+    reporter = threading.Thread(target=report, daemon=True)
+    reporter.start()
+    try:
+        dirs["work"].mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="pmv-", dir=str(dirs["work"])) as work:
+            result = render_plan(plan, ff, dest, dirs["cache"], Path(work), jobs)
+    except BaseException as e:
+        state["done"] = True
+        LOG_HOOK = None
+        msg = "Cancelled" if isinstance(e, Cancelled) else str(e)
+        try:
+            client.op({"op": "helper_progress", "jobId": job_id, "status": "error", "error": msg})
+        except Exception:
+            pass
+        raise
+    state["done"] = True
+    LOG_HOOK = None
+    client.op({"op": "helper_progress", "jobId": job_id, "status": "done", "progress": 1.0, "result": json.dumps(result)})
+    print(f"Done: {result['file']} ({result['seconds']} s)", flush=True)
+    return result
+
+
+def helper_main(stash: str, api_key: str = "", name: str = "", ffmpeg: str = "", jobs: int = 0, stream_only: bool = False, pause: bool = False) -> int:
+    """Long-running loop on the PC: say hello, watch Stash's task queue, claim and render jobs for this PC."""
+    global PLAIN_LOG
+    PLAIN_LOG = True
+    for stream in (sys.stdout, sys.stderr):
+        try:  # Windows consoles/pipes may be cp1252: arrows and dashes must not end the helper
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    stash = stash.strip().rstrip("/")
+    if not re.match(r"^https?://", stash):
+        stash = "http://" + stash
+    signal.signal(signal.SIGINT, lambda *_: (_STOP.set(), _terminate_all()))
+    client = HelperClient(stash, api_key)
+    ff = ffmpeg or find_ffmpeg()
+    name = name or socket.gethostname()
+    dirs = helper_dirs()
+    jobs = jobs or max(2, min(8, (os.cpu_count() or 4) // 2))
+    print(f"PMV Creator render helper {VERSION} – {name}")
+    print(f"Stash: {stash}")
+    if not ff:
+        print("FFmpeg was not found. Install it (e.g. 'winget install Gyan.FFmpeg') and start this helper again.")
+        if pause:
+            input("Press Enter to close …")
+        return 2
+    print(f"FFmpeg: {ff} · {jobs} parallel jobs")
+    print(f"Default output folder: {dirs['output']} (change it in PMV Creator → Render → On my PC)")
+    print("Waiting for renders – keep this window open (Ctrl+C stops the helper).", flush=True)
+    trim_cache(dirs["cache"])
+    info = {"name": name, "version": VERSION, "ffmpeg": ff, "defaultOutput": str(dirs["output"]), "platform": sys.platform}
+    last_hello = 0.0
+    last_claim = 0.0
+    connected = None
+    while not _STOP.is_set():
+        try:
+            if time.time() - last_hello > 30:
+                client.op({"op": "helper_hello", "info": info})
+                last_hello = time.time()
+                if connected is not True:
+                    print("Connected to Stash.", flush=True)
+                connected = True
+            queue = client.gql("query PmvHelperQueue { jobQueue { status description } }")["jobQueue"] or []
+            # a render task in the queue -> ask for work; otherwise only now and then (other Stash versions name tasks differently)
+            if any("Render PMV" in (j.get("description") or "") for j in queue) or time.time() - last_claim > 20:
+                last_claim = time.time()
+                job = client.op({"op": "helper_claim", "name": name})
+                if job:
+                    try:
+                        run_helper_job(job, client, ff, dirs, jobs, stream_only)
+                    except Cancelled:
+                        print("Render cancelled.", flush=True)
+                    except Exception as e:
+                        print(f"Render failed: {e}", flush=True)
+                    finally:
+                        if not _STOP.is_set():
+                            _CANCELLED.clear()
+                    last_hello = 0.0
+        except Exception as e:
+            if connected is not False:
+                print(f"Stash not reachable ({e}) – trying again …", flush=True)
+            connected = False
+            _STOP.wait(8)
+        _STOP.wait(2)
+    print("Helper stopped.")
+    return 0
+
+
 OPS: Dict[str, Callable[[Context, dict], Any]] = {
     "ping": op_ping,
     "save_project": op_save_project,
@@ -866,6 +1299,11 @@ OPS: Dict[str, Callable[[Context, dict], Any]] = {
     "ffmpeg_script": op_ffmpeg_script,
     "render_result": op_render_result,
     "clear_cache": op_clear_cache,
+    "helper_hello": op_helper_hello,
+    "helper_list": op_helper_list,
+    "helper_config": op_helper_config,
+    "helper_claim": op_helper_claim,
+    "helper_progress": op_helper_progress,
 }
 
 
@@ -881,6 +1319,8 @@ def plugin_main() -> int:
     try:
         if args.get("mode") == "render":
             result = task_render(ctx, args)
+        elif args.get("mode") == "pc":
+            result = task_pc_render(ctx, args)
         else:
             handler = OPS.get(str(args.get("op")))
             if not handler:
@@ -909,7 +1349,16 @@ def cli_main(argv: List[str]) -> int:
     s = sub.add_parser("script", help="print an FFmpeg script for a render plan")
     s.add_argument("plan")
     s.add_argument("--shell", choices=["sh", "cmd"], default="sh")
+    h = sub.add_parser("helper", help="render helper on a PC: renders started in the editor with \"On my PC\"")
+    h.add_argument("--stash", default=HELPER_DEFAULTS.get("stash"), required=not HELPER_DEFAULTS.get("stash"), help="Stash address, e.g. http://192.168.1.10:9999")
+    h.add_argument("--api-key", default=HELPER_DEFAULTS.get("apiKey", ""), help="Stash API key (only for Stash with a login)")
+    h.add_argument("--name", default="", help="name of this PC in the editor (default: the computer name)")
+    h.add_argument("--ffmpeg", default="")
+    h.add_argument("--jobs", type=int, default=0, help="parallel FFmpeg jobs (default: half the CPU cores)")
+    h.add_argument("--stream-only", action="store_true", help="always read the videos over Stash, never from a drive")
     a = ap.parse_args(argv)
+    if a.cmd == "helper":
+        return helper_main(a.stash, a.api_key, a.name, a.ffmpeg, a.jobs, a.stream_only)
     plan = json.loads(Path(a.plan).read_text(encoding="utf-8"))
     if a.cmd == "script":
         sys.stdout.write(ffmpeg_script(plan, a.shell))
@@ -930,6 +1379,9 @@ def main() -> int:
     signal.signal(signal.SIGINT, _terminate_all)
     if len(sys.argv) > 1:
         return cli_main(sys.argv[1:])
+    if HELPER_DEFAULTS.get("stash") and sys.stdin.isatty():
+        # the downloaded helper, started with a double-click
+        return helper_main(HELPER_DEFAULTS["stash"], HELPER_DEFAULTS.get("apiKey", ""), pause=True)
     return plugin_main()
 
 

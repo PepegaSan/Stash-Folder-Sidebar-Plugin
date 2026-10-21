@@ -7,12 +7,14 @@ that covers every piece type, and checks frame count, format, audio, the segment
 generated FFmpeg script and the raw plugin interface (stdin/stdout JSON).
 """
 import base64
+import importlib.util
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -108,6 +110,47 @@ def run_preview_server(video, tmp):
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
     server.cookies = []
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def run_stream_server(video):
+    """Stand-in for Stash's /scene/{id}/stream (range requests); records paths and the ApiKey header."""
+    import http.server
+    import threading
+
+    data = Path(video).read_bytes()
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            server.requests.append(self.path)
+            server.keys.append(self.headers.get("ApiKey"))
+            if not (self.path.startswith("/scene/") and self.path.endswith("/stream")):
+                self.send_error(404)
+                return
+            start, end, code = 0, len(data) - 1, 200
+            rng = self.headers.get("Range", "")
+            if rng.startswith("bytes="):
+                a_, b_ = rng[6:].split("-")
+                start, end, code = int(a_ or 0), min(int(b_) if b_ else len(data) - 1, len(data) - 1), 206
+            self.send_response(code)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(end - start + 1))
+            if code == 206:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{len(data)}")
+            self.end_headers()
+            try:
+                self.wfile.write(data[start:end + 1])
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # FFmpeg closes early after a seek
+
+        def log_message(self, *a):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    server.requests = []
+    server.keys = []
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
@@ -259,6 +302,58 @@ def main():
         assert status["status"] == "done" and status["file"] == res["file"], status
         check_output(Path(res["file"]), total)
         print(f"ok  plugin render task -> {Path(res['file']).name} ({res['cached']} cached)")
+
+        # 5b) render on a PC: the Stash task only brokers, the helper claims the job and renders "remotely"
+        #      (here in-process, with the scenes read over HTTP from a fake Stash that checks the API key)
+        mod_spec = importlib.util.spec_from_file_location("pmv_backend_helper", BACKEND)
+        hb = importlib.util.module_from_spec(mod_spec)
+        mod_spec.loader.exec_module(hb)
+        hb.PLAIN_LOG = True
+        assert hb.map_path("/data/clips/a b.mp4", [{"from": "/data/", "to": "Y:\\"}, {"from": "/data/clips/", "to": "Z:\\c"}]) == "Z:\\c\\a b.mp4"
+        assert hb.map_path("/other/x.mp4", [{"from": "/data/", "to": "Y:\\"}]) is None
+        assert call({"op": "helper_progress", "jobId": "nope"}) == {"cancel": True}
+        call({"op": "helper_hello", "info": {"name": "TEST PC", "version": "t", "ffmpeg": FFMPEG, "defaultOutput": str(tmp / "pc-default")}})
+        helpers = call({"op": "helper_list"})
+        assert [h["id"] for h in helpers] == ["TEST_PC"] and helpers[0]["online"], helpers
+        call({"op": "helper_config", "name": "TEST_PC", "config": {"outputDir": str(tmp / "pc-out"), "mappings": [{"from": "/data/", "to": "Y:\\"}, {"from": "", "to": "x"}]}})
+        assert call({"op": "helper_list"})[0]["config"] == {"outputDir": str(tmp / "pc-out"), "mappings": [{"from": "/data/", "to": "Y:\\"}]}
+        stream = run_stream_server(a)
+        broker = subprocess.Popen([sys.executable, str(BACKEND)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        broker.stdin.write(json.dumps({"args": {"mode": "pc", "renderId": "render_pc", "helper": "TEST_PC", "plan": json.dumps(plan)}}))
+        broker.stdin.close()
+        try:
+            job = None
+            for _ in range(40):
+                job = call({"op": "helper_claim", "name": "TEST PC"})
+                if job:
+                    break
+                time.sleep(0.25)
+            assert job and job["jobId"] == "render_pc" and job["config"]["outputDir"] == str(tmp / "pc-out"), job
+            assert call({"op": "helper_claim", "name": "TEST PC"}) is None, "a job is claimed once"
+
+            class FakeClient:
+                base = f"http://127.0.0.1:{stream.server_port}"
+                api_key = "k3y"
+
+                def op(self, args):
+                    return call(args)
+
+            dirs = {"cache": tmp / "pc-cache", "work": tmp / "pc-work", "output": tmp / "pc-default"}
+            pc = hb.run_helper_job(job, FakeClient(), FFMPEG, dirs, jobs=3, stream_only=True)
+            out_text = broker.stdout.read()
+            broker.wait(timeout=60)
+        finally:
+            stream.shutdown()
+            if broker.poll() is None:
+                broker.kill()
+        assert broker.returncode == 0 and json.loads(out_text.strip().splitlines()[-1])["output"]["file"] == pc["file"], out_text
+        assert Path(pc["file"]).parent == tmp / "pc-out", pc
+        check_output(Path(pc["file"]), total)
+        status = call({"op": "render_result", "renderId": "render_pc"})
+        assert status["status"] == "done" and status["helper"] == "TEST_PC" and status["file"] == pc["file"], status
+        assert stream.requests and all(k == "k3y" for k in stream.keys), (stream.requests[:3], stream.keys[:3])
+        assert not list((data / "pc-jobs").glob("*")), "job files cleaned up"
+        print(f"ok  render on a PC: broker task + helper, {len(stream.requests)} stream requests with API key -> {Path(pc['file']).name}")
 
         # 6) a plan produced by the TypeScript frontend (multi-track, overlay, gap, transitions, speed)
         npx = shutil.which("npx")

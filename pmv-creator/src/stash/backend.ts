@@ -3,7 +3,7 @@ import type { PmvProject } from "../model/project";
 import type { RenderPlan } from "../export/renderPlan";
 import { t } from "../i18n";
 import { uid } from "../model/ids";
-import { gql } from "./graphql";
+import { gql, stashUrl } from "./graphql";
 
 export const PLUGIN_ID = "pmv-creator";
 export const RENDER_TASK = "Render PMV";
@@ -120,13 +120,53 @@ export interface RenderJob {
   renderId: string;
 }
 
-export async function startRender(plan: RenderPlan): Promise<RenderJob> {
+/** helper = id of a render helper on a PC: the Stash task then only hands the job to that PC. */
+export async function startRender(plan: RenderPlan, helper?: string): Promise<RenderJob> {
   const renderId = uid("render");
+  const args = helper ? { mode: "pc", helper, renderId, plan: JSON.stringify(plan) } : { mode: "render", renderId, plan: JSON.stringify(plan) };
   const data = await gql<{ runPluginTask: string }>(
     `mutation PmvRender($id: ID!, $task: String!, $args: Map) { runPluginTask(plugin_id: $id, task_name: $task, args_map: $args) }`,
-    { id: PLUGIN_ID, task: RENDER_TASK, args: { mode: "render", renderId, plan: JSON.stringify(plan) } },
+    { id: PLUGIN_ID, task: RENDER_TASK, args },
   );
   return { jobId: data.runPluginTask, renderId };
+}
+
+export interface HelperMapping {
+  from: string;
+  to: string;
+}
+
+export interface HelperConfig {
+  /** Folder on the PC; empty = the helper's default. */
+  outputDir: string;
+  /** Optional: Stash path prefix -> PC path (e.g. "/data/" -> "Y:\"); without one the PC reads over Stash. */
+  mappings: HelperMapping[];
+}
+
+/** A render helper on a PC (plugin/backend/pmv_backend.py in "helper" mode). */
+export interface RenderHelper {
+  id: string;
+  name: string;
+  online: boolean;
+  lastSeen: number;
+  version?: string;
+  ffmpeg?: string;
+  defaultOutput?: string;
+  config: HelperConfig;
+}
+
+export const listHelpers = () => runOp<RenderHelper[]>({ op: "helper_list" });
+export const setHelperConfig = (id: string, config: HelperConfig) => runOp<HelperConfig>({ op: "helper_config", name: id, config });
+
+/** The backend file with the Stash address (and API key) filled in – a double-click starts the helper. */
+export async function helperScript(apiKey: string): Promise<string> {
+  const res = await fetch(stashUrl(`/plugin/${PLUGIN_ID}/assets/helper/pmv_backend.py`), { credentials: "same-origin" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const src = await res.text();
+  const marker = "HELPER_DEFAULTS: Dict[str, str] = {}";
+  if (!src.includes(marker)) throw new Error("helper template not found");
+  const stash = stashUrl("/").replace(/\/$/, "");
+  return src.replace(marker, `HELPER_DEFAULTS: Dict[str, str] = ${JSON.stringify({ stash, apiKey: apiKey.trim() })}`);
 }
 
 export interface JobStatus {
@@ -153,6 +193,8 @@ export interface RenderResult {
   error?: string;
   /** Render succeeded, but e.g. the scan afterwards could not run. */
   warning?: string;
+  /** Rendered by the helper on this PC (file is a path on that PC). */
+  helper?: string;
   pieces?: number;
   cached?: number;
   seconds?: number;

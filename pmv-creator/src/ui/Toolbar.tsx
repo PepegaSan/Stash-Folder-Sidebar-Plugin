@@ -11,8 +11,9 @@ import { rememberAdvanced } from "../state/prefs";
 import { openProject, useEditor } from "../state/store";
 import { formatTime } from "../timeline/time";
 import type { EditMode } from "../timeline/ops";
-import { Menu } from "./common";
+import { Menu, Seg } from "./common";
 import { downloadText, safeName } from "./download";
+import { PcRender } from "./PcRender";
 import { RecordCancelled, type RecordProgress, recordSequence, recordingSupported } from "./preview/recorder";
 
 // label functions, not constants: t() needs the language, which is known only once the app runs
@@ -327,9 +328,31 @@ function OpenDialog({ onClose, onOpen }: { onClose: () => void; onOpen: (p: PmvP
   );
 }
 
+type RenderTarget = "server" | "pc";
+const LS_TARGET = "pmv-creator:render-target";
+
+function readTarget(): RenderTarget {
+  try {
+    return localStorage.getItem(LS_TARGET) === "pc" ? "pc" : "server";
+  } catch {
+    return "server";
+  }
+}
+
 function RenderDialog({ onClose }: { onClose: () => void }) {
   const { state, backend, ffmpegAvailable } = useEditor();
   const [{ plan, warnings }] = useState(() => buildRenderPlan(state.present));
+  // where it renders: in Stash (server) or on a PC with the render helper (opt-in, remembered per browser)
+  const [target, setTargetState] = useState<RenderTarget>(readTarget);
+  const [helper, setHelper] = useState<{ id: string; name: string } | null>(null);
+  const setTarget = (v: RenderTarget) => {
+    setTargetState(v);
+    try {
+      localStorage.setItem(LS_TARGET, v);
+    } catch {
+      /* private mode */
+    }
+  };
   const [job, setJob] = useState<{ jobId: string; renderId: string } | null>(null);
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [result, setResult] = useState<RenderResult | null>(null);
@@ -364,12 +387,13 @@ function RenderDialog({ onClose }: { onClose: () => void }) {
   const start = async () => {
     setError(null);
     try {
-      setJob(await startRender(plan));
+      setJob(await startRender(plan, target === "pc" ? helper?.id : undefined));
     } catch (e) {
       setError(String(e));
     }
   };
   const running = (!!job && !result) || recording;
+  const pc = target === "pc";
   const counts = plan.pieces.reduce<Record<string, number>>((acc, x) => ((acc[x.kind] = (acc[x.kind] ?? 0) + 1), acc), {});
   const yes = (b: boolean) => (b ? t("yes") : t("no"));
 
@@ -394,19 +418,32 @@ function RenderDialog({ onClose }: { onClose: () => void }) {
             ))}
           </ul>
         )}
+        <div className="pmv-row pmv-wrap">
+          <span className="pmv-gen-label">{t("Render on")}</span>
+          <Seg<RenderTarget>
+            value={target}
+            disabled={running}
+            onChange={setTarget}
+            options={[
+              ["server", t("Stash server"), t("FFmpeg in Stash renders the video into the output folder of the plugin settings")],
+              ["pc", t("My PC"), t("The render helper on your PC renders with the PC's FFmpeg and saves the video on the PC")],
+            ]}
+          />
+        </div>
+        {pc && backend === "online" && <PcRender disabled={running} onHelper={(id, name) => setHelper(id && name ? { id, name } : null)} />}
         {backend !== "online" && <div className="pmv-error">{t("Backend unreachable. Export the render plan and render with the CLI (see README).")}</div>}
-        {backend === "online" && !ffmpegAvailable && <div className="pmv-error">{t("FFmpeg was not found on the server – set its path in the plugin settings.")}</div>}
+        {!pc && backend === "online" && !ffmpegAvailable && <div className="pmv-error">{t("FFmpeg was not found on the server – set its path in the plugin settings.")}</div>}
         {status && !result && (
           <div className="pmv-progress">
             <div style={{ width: `${Math.round((status.progress ?? 0) * 100)}%` }} />
             <span>
-              {status.status} {Math.round((status.progress ?? 0) * 100)} %
+              {pc && !status.progress && status.status === "RUNNING" ? t("waiting for {pc}…", { pc: helper?.name ?? "PC" }) : `${status.status} ${Math.round((status.progress ?? 0) * 100)} %`}
             </span>
           </div>
         )}
         {result?.status === "done" && (
           <div className="pmv-success">
-            {t("Done:")} <code>{result.file}</code>
+            {result.helper ? t("Done on {pc}:", { pc: helper?.name ?? result.helper }) : t("Done:")} <code>{result.file}</code>
             <br />
             {t("{pieces} segments, {cached} from the cache, {seconds} s", { pieces: result.pieces ?? 0, cached: result.cached ?? 0, seconds: result.seconds?.toFixed(1) ?? "?" })}
           </div>
@@ -421,8 +458,8 @@ function RenderDialog({ onClose }: { onClose: () => void }) {
         {error && <div className="pmv-error">{error}</div>}
         <div className="pmv-row">
           {!running ? (
-            <button className="btn btn-sm btn-primary" disabled={backend !== "online" || !plan.pieces.length} onClick={() => void start()}>
-              {result ? t("Render again") : t("Start render")}
+            <button className="btn btn-sm btn-primary" disabled={backend !== "online" || !plan.pieces.length || (pc && !helper)} onClick={() => void start()}>
+              {pc && helper ? t("Render on {pc}", { pc: helper.name }) : result ? t("Render again") : t("Start render")}
             </button>
           ) : (
             <button className="btn btn-sm btn-danger" onClick={() => job && void stopJob(job.jobId)}>

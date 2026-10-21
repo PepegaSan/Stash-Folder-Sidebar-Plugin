@@ -1149,3 +1149,20 @@
 .pmv-gen.is-simple {
   max-width: 640px;
 }
+
+/* render on a PC */
+.pmv-pc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--pmv-border);
+  border-radius: 6px;
+}
+.pmv-ok-dot {
+  color: var(--pmv-ok);
+  font-size: 12px;
+}
+.pmv-pc-setup .pmv-help-steps {
+  margin: 4px 0;
+}
