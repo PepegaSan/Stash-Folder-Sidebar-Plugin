@@ -812,6 +812,7 @@
 .pmv-stage-empty {
   position: absolute;
   inset: 0;
+  z-index: 4; /* above the (transparent) players, which would swallow the clicks */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1082,4 +1083,69 @@
   filter: blur(14px) brightness(0.85);
   transform: scale(1.08);
   pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- simple mode: start panel, "More…" blocks */
+.pmv-more {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pmv-more-head {
+  align-self: flex-start;
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  color: var(--pmv-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.pmv-more-head:hover {
+  color: var(--pmv-text);
+}
+.pmv-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--pmv-border);
+}
+.pmv-start {
+  max-width: 560px;
+  max-height: 100%;
+  overflow: auto;
+  padding: 18px 22px;
+  border-radius: 8px;
+  background: var(--pmv-panel);
+  color: var(--pmv-text);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  cursor: default;
+}
+.pmv-start-title {
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.pmv-start-steps {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pmv-start-steps li.is-done::marker {
+  color: var(--pmv-ok);
+}
+.pmv-start-h {
+  font-weight: 600;
+}
+.pmv-start .pmv-row {
+  margin-top: 4px;
+}
+.pmv-adv {
+  margin-left: 4px;
+}
+.pmv-gen.is-simple {
+  max-width: 640px;
 }

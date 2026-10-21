@@ -7,6 +7,7 @@ import { uid } from "../model/ids";
 import { type PmvProject, createProject, migrateProject } from "../model/project";
 import { type JobStatus, type ProjectSummary, type RecordingResult, type RenderResult, deleteProject, ffmpegScript, findJob, listProjects, renderResult, saveRecording, startRender, stopJob, uploadFile } from "../stash/backend";
 import { useScenes } from "../stash/sceneCache";
+import { rememberAdvanced } from "../state/prefs";
 import { openProject, useEditor } from "../state/store";
 import { formatTime } from "../timeline/time";
 import type { EditMode } from "../timeline/ops";
@@ -132,31 +133,35 @@ export function Toolbar() {
         </button>
       </div>
 
-      <select className="form-control form-control-sm pmv-select" value={ui.editMode} onChange={(e) => dispatch({ type: "ui", patch: { editMode: e.target.value as EditMode } })} title={MODES.find((m) => m[0] === ui.editMode)?.[2]}>
-        {MODES.map(([id, label, hint]) => (
-          <option key={id} value={id} title={hint}>
-            {label}
-          </option>
-        ))}
-      </select>
-      <label className="pmv-check" title={t("Snap to the grid, clip edges, markers and the playhead (Shift while dragging = off)")}>
-        <input type="checkbox" checked={ui.snap} onChange={(e) => dispatch({ type: "ui", patch: { snap: e.target.checked } })} /> {t("Snap")}
-      </label>
-      <select className="form-control form-control-sm pmv-select" value={ui.snapDivision} onChange={(e) => dispatch({ type: "ui", patch: { snapDivision: +e.target.value } })}>
-        {divisions().map(([v, label]) => (
-          <option key={v} value={v}>
-            {label}
-          </option>
-        ))}
-      </select>
-      <label className="pmv-check" title={t("Clips dropped from the selection get a length in whole grid steps")}>
-        <input type="checkbox" checked={ui.quantizeDrops} onChange={(e) => dispatch({ type: "ui", patch: { quantizeDrops: e.target.checked } })} /> {t("Quantize length")}
-      </label>
+      {ui.advanced && (
+        <>
+          <select className="form-control form-control-sm pmv-select" value={ui.editMode} onChange={(e) => dispatch({ type: "ui", patch: { editMode: e.target.value as EditMode } })} title={MODES.find((m) => m[0] === ui.editMode)?.[2]}>
+            {MODES.map(([id, label, hint]) => (
+              <option key={id} value={id} title={hint}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <label className="pmv-check" title={t("Snap to the grid, clip edges, markers and the playhead (Shift while dragging = off)")}>
+            <input type="checkbox" checked={ui.snap} onChange={(e) => dispatch({ type: "ui", patch: { snap: e.target.checked } })} /> {t("Snap")}
+          </label>
+          <select className="form-control form-control-sm pmv-select" value={ui.snapDivision} onChange={(e) => dispatch({ type: "ui", patch: { snapDivision: +e.target.value } })}>
+            {divisions().map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <label className="pmv-check" title={t("Clips dropped from “My clips” get a length in whole grid steps")}>
+            <input type="checkbox" checked={ui.quantizeDrops} onChange={(e) => dispatch({ type: "ui", patch: { quantizeDrops: e.target.checked } })} /> {t("Quantize length")}
+          </label>
+        </>
+      )}
 
       <span className="pmv-spacer" />
 
       <button className="btn btn-sm btn-primary" title={t("Pick clips by criteria and cut them to the beat automatically – editable afterwards")} onClick={() => dispatch({ type: "ui", patch: { generator: {} } })}>
-        ⚡ {t("Generator")}
+        ⚡ {t("Generate PMV")}
       </button>
       <Menu label={t("Export")} className="is-right">
         {(close) => (
@@ -185,6 +190,17 @@ export function Toolbar() {
       <button className="btn btn-sm btn-primary" onClick={() => setRenderOpen(true)}>
         {t("Render")}
       </button>
+      <label className="pmv-check pmv-adv" title={t("Show all settings and tools")}>
+        <input
+          type="checkbox"
+          checked={ui.advanced}
+          onChange={(e) => {
+            rememberAdvanced(e.target.checked);
+            dispatch({ type: "ui", patch: { advanced: e.target.checked } });
+          }}
+        />{" "}
+        {t("Advanced")}
+      </label>
       <button className="btn btn-sm btn-secondary" title={t("Help: controls and shortcuts")} onClick={() => setHelpOpen(true)}>
         ?
       </button>

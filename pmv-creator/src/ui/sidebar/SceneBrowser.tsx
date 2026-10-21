@@ -95,14 +95,14 @@ export function SceneBrowser() {
         </button>
         {poolOpen && (
           <ul className="pmv-list">
-            {pool.length === 0 && <li className="pmv-empty">{t("No scenes yet. Search below and add them with +.")}</li>}
+            {pool.length === 0 && <li className="pmv-empty">{t("No scenes yet. Search below and add them with + – or let the generator pick them.")}</li>}
             {pool.map((s) => (
               <li key={s.sceneId} className="pmv-list-item" onClick={() => open(s.sceneId)}>
                 <div className="pmv-li-main">
                   <div className="pmv-li-title">{s.title}</div>
                   <div className="pmv-li-meta">
                     {formatTime(s.duration)} · {s.width}×{s.height}
-                    {project.bin.some((b) => b.sceneId === s.sceneId) && ` · ${tn(project.bin.filter((b) => b.sceneId === s.sceneId).length, "{n} snippets", "1 snippet")}`}
+                    {project.bin.some((b) => b.sceneId === s.sceneId) && ` · ${tn(project.bin.filter((b) => b.sceneId === s.sceneId).length, "{n} clips", "1 clip")}`}
                   </div>
                 </div>
                 {!isSourceUsed(project, s.sceneId) && (
@@ -157,9 +157,11 @@ export function SceneBrowser() {
           <RefPicker placeholder={t("Tags (all)")} value={tags} onChange={setTags} search={searchTags} />
           <RefPicker placeholder={t("Performers (all)")} value={performers} onChange={setPerformers} search={searchPerformers} />
           <div className="pmv-row">
-            <label className="pmv-check">
-              <input type="checkbox" checked={hasMarkers} onChange={(e) => setHasMarkers(e.target.checked)} /> {t("with markers only")}
-            </label>
+            {state.ui.advanced && (
+              <label className="pmv-check">
+                <input type="checkbox" checked={hasMarkers} onChange={(e) => setHasMarkers(e.target.checked)} /> {t("with markers only")}
+              </label>
+            )}
             <select className="form-control form-control-sm" value={sort} onChange={(e) => setSort(e.target.value as SceneSort)}>
               <option value="date">{t("Date")}</option>
               <option value="created_at">{t("Added")}</option>

@@ -7,6 +7,7 @@
  */
 import { type GenerationResult, applyGeneration } from "../generator/generate";
 import type { ClipSource } from "../generator/material";
+import { readAdvanced } from "./prefs";
 import type { AudioTrack, BeatGrid, Clip, Exclusion, OutputSettings, PmvProject, Snippet, SourceMedia, TimelineMarker, Track } from "../model/project";
 import {
   type ClipPatch,
@@ -188,6 +189,8 @@ export interface UiState {
   saveState: SaveState;
   /** Open generator dialog (optionally preset to a clip source), null = closed. */
   generator: { source?: ClipSource } | null;
+  /** All settings and tools visible (off = simple mode). */
+  advanced: boolean;
 }
 
 export interface EditorState {
@@ -222,6 +225,7 @@ export const DEFAULT_UI: UiState = {
   markerDefaultLength: 8,
   saveState: "saved",
   generator: null,
+  advanced: readAdvanced(),
 };
 
 export function initialEditorState(project: PmvProject, ui: Partial<UiState> = {}): EditorState {

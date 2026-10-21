@@ -129,14 +129,14 @@ describe("PMV Creator UI (mocked Stash)", () => {
   it("loads the last project from the backend", async () => {
     await waitFor(() => $$(".pmv-clip").length === 3);
     expect(($(".pmv-name") as HTMLInputElement).value).toBe("Smoke");
-    expect(container.textContent).toContain("Beat grid");
+    expect(container.textContent).toContain("Detect BPM");
   });
 
   it("selects, deletes and restores a clip", async () => {
     const clip = $$(".pmv-clip")[0];
     await fire(clip, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
     await fire(window, new MouseEvent("pointerup", { bubbles: true }));
-    expect(container.textContent).toContain("In (source)");
+    expect(container.textContent).toContain("Framing");
     await fire(document.body, new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
     expect($$(".pmv-clip")).toHaveLength(2);
     await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
@@ -158,7 +158,7 @@ describe("PMV Creator UI (mocked Stash)", () => {
 
   it("appends a bin snippet at the playhead", async () => {
     await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await fire(byText("Selection")!, new MouseEvent("click", { bubbles: true }));
+    await fire(byText("My clips")!, new MouseEvent("click", { bubbles: true }));
     expect(container.textContent).toContain("Snippet One");
     await fire($$("button").find((b) => b.title === "Insert at the playhead")!, new MouseEvent("click", { bubbles: true }));
     expect($$(".pmv-clip")).toHaveLength(4);
@@ -168,9 +168,9 @@ describe("PMV Creator UI (mocked Stash)", () => {
     await fire(byText("Scenes")!, new MouseEvent("click", { bubbles: true }));
     await fire($$(".pmv-list-item")[0], new MouseEvent("click", { bubbles: true }));
     await waitFor(() => container.textContent!.includes("Marker A"));
-    await fire($$("button").find((b) => b.title === "Select")!, new MouseEvent("click", { bubbles: true }));
+    await fire($$("button").find((b) => b.title === "Add to “My clips”")!, new MouseEvent("click", { bubbles: true }));
     await fire(byText("← back")!, new MouseEvent("click", { bubbles: true }));
-    await fire(byText("Selection")!, new MouseEvent("click", { bubbles: true }));
+    await fire(byText("My clips")!, new MouseEvent("click", { bubbles: true }));
     expect(container.textContent).toContain("Marker A");
   });
 
@@ -210,7 +210,7 @@ describe("PMV Creator UI (mocked Stash)", () => {
 
   it("generates a PMV into the timeline as one undo step", async () => {
     const before = $$(".pmv-clip").length;
-    await fire(byText("⚡ Generator")!, new MouseEvent("click", { bubbles: true }));
+    await fire(byText("⚡ Generate PMV")!, new MouseEvent("click", { bubbles: true }));
     expect($(".pmv-gen")).not.toBeNull();
     await fire($$(".pmv-gen .pmv-seg button").find((b) => b.textContent === "Project scenes")!, new MouseEvent("click", { bubbles: true }));
     await fire(byText("⚡ Generate")!, new MouseEvent("click", { bubbles: true }));

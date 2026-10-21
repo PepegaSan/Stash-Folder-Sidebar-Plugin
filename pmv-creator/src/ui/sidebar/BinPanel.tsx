@@ -33,20 +33,20 @@ export function BinPanel() {
     <div className="pmv-panel">
       <div className="pmv-row">
         <span className="pmv-li-meta">
-          {tn(project.bin.length, "{n} snippets", "1 snippet")} · {formatTime(total)}
+          {tn(project.bin.length, "{n} clips", "1 clip")} · {formatTime(total)}
         </span>
         <span className="pmv-spacer" />
         <button
           className="btn btn-sm btn-secondary"
           disabled={!project.bin.length}
-          title={t("Open the generator with these snippets as its source")}
+          title={t("Open the generator with these clips as its source")}
           onClick={() => dispatch({ type: "ui", patch: { generator: { source: "bin" } } })}
         >
-          ⚡ {t("Generate")}
+          ⚡ {t("Generate from these")}
         </button>
       </div>
       <ul className="pmv-list">
-        {project.bin.length === 0 && <li className="pmv-empty">{t("Empty. Pick markers or ranges in a scene with +.")}</li>}
+        {project.bin.length === 0 && <li className="pmv-empty">{t("Empty. Open a scene under “Scenes” and pick markers (+) or ranges (I/O, Shift+drag).")}</li>}
         {project.bin.map((s, i) => {
           const scene = scenes[s.sceneId];
           const excluded = overlapsExclusion(project.exclusions, s.sceneId, s.in, s.out);

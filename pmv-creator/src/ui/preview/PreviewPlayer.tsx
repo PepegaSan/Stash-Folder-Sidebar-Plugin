@@ -6,6 +6,7 @@ import { useEditor } from "../../state/store";
 import { flattenTimeline, resolveTransitions } from "../../timeline/flatten";
 import { formatBarBeat, formatTime } from "../../timeline/time";
 import { useTransportPlaying, useTransportTime } from "../hooks";
+import { StartPanel } from "../StartPanel";
 import { PreviewEngine } from "./engine";
 
 export function PreviewPlayer() {
@@ -57,7 +58,11 @@ export function PreviewPlayer() {
         <video ref={aRef} muted playsInline preload="auto" />
         <video ref={bRef} muted playsInline preload="auto" />
         <div ref={overlayRef} className="pmv-stage-overlay" />
-        {segs.length === 0 && <div className="pmv-stage-empty">{t("The timeline is empty")}</div>}
+        {!tracks.some((tr) => tr.clips.length) && (
+          <div className="pmv-stage-empty" title={t("The timeline is empty")}>
+            <StartPanel />
+          </div>
+        )}
       </div>
       <div className="pmv-transport">
         <button className="btn btn-sm btn-secondary" title={t("Previous cut")} onClick={() => jump(-1)}>

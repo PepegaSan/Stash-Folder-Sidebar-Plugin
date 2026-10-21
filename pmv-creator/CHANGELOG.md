@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 (2026-10-21)
+
+- **Simple mode** (default): the editor shows what a PMV needs – music, "Generate PMV", clip start/duration/speed/framing, format – everything else sits behind **Advanced** (toolbar) or in "More…" blocks. The generator dialog shrinks to mood, clip source, tags, performers and count.
+- **Start panel** while the timeline is empty: a PMV in three steps (upload song → generate → fine-tune & render), with the song upload right there; BPM is detected automatically when a song is added.
+- Plain words: "My clips" instead of "Selection"/snippets, "Start clip here" / "Use this scene here" in the scene view, mood descriptions in the generator, a hint on how to pick a range.
+
 ## 0.3.3 (2026-10-21)
 
 - Framing "Fit (blurred edges)": the whole picture over a blurred, filled copy of itself – like the PMV Generator; portrait clips stay complete in a 16:9 video. Default for new projects; per project and per clip. Preview, quick record and the FFmpeg render all do it (segment cache invalidated).

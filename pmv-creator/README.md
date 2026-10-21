@@ -51,6 +51,8 @@ The interface is English. It switches to German when Stash's interface language 
 
 ## Workflow
 
+The editor starts in **simple mode**: while the timeline is empty, the preview shows the three steps (upload the song → Generate PMV → fine-tune & render), and the panels show only what a PMV needs. **Advanced** (toolbar, top right) reveals everything else – edit modes, snapping, the marker search, every generator option, keyframes, exclusions and the "More…" blocks in the inspector. The choice is remembered per browser.
+
 1. **Music**: in the inspector (nothing selected) upload the file or enter a path on the server. Then *Detect BPM*, if needed ×2/÷2 or *Tap*, *Offset = playhead*.
 2. **Culling** in the sidebar
    * *Scenes*: search and add to the project pool with **+**, or directly by **scene id / Stash link** (`123, 456` or `http://stash:9999/scenes/123`, button **+ ID**). Clicking a scene opens the drill-down. Markers: **+** (select), **⊘** (exclude), **✂** (take as a range). Ranges via **I/O** or Shift+drag on the scrub bar. *Load keyframes* shows the I-frames.

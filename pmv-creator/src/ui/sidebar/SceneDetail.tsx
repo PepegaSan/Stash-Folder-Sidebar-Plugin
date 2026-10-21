@@ -264,12 +264,13 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
           {muted ? "🔇" : "🔊"}
         </button>
         <span className="pmv-mono">{formatTime(time)}</span>
-        <button className="btn btn-sm btn-secondary" title={t("Set in point")} onClick={() => setSel((s) => ({ in: pick(time), out: Math.max(pick(time) + 0.1, s?.out ?? pick(time) + ui.markerDefaultLength) }))}>
+        <button className="btn btn-sm btn-secondary" title={t("Range starts here (in point)")} onClick={() => setSel((s) => ({ in: pick(time), out: Math.max(pick(time) + 0.1, s?.out ?? pick(time) + ui.markerDefaultLength) }))}>
           I
         </button>
-        <button className="btn btn-sm btn-secondary" title={t("Set out point")} onClick={() => setSel((s) => ({ in: Math.min(s?.in ?? Math.max(0, pick(time) - ui.markerDefaultLength), pick(time) - 0.1), out: pick(time) }))}>
+        <button className="btn btn-sm btn-secondary" title={t("Range ends here (out point)")} onClick={() => setSel((s) => ({ in: Math.min(s?.in ?? Math.max(0, pick(time) - ui.markerDefaultLength), pick(time) - 0.1), out: pick(time) }))}>
           O
         </button>
+        {!sel && <span className="pmv-li-meta">{t("I / O or Shift+drag on the bar picks a range")}</span>}
       </div>
 
       {selected && (
@@ -279,19 +280,19 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
             {linked ? ` · ${t("source {from} – {to}", { from: formatTime(clipIn), to: formatTime(clipIn + clipLen) })}` : ` · ${t("comes from “{title}”", { title: project.sources[selected.sceneId]?.title ?? selected.sceneId })}`}
           </div>
           <div className="pmv-row pmv-wrap">
-            {linked && (
-              <button className="btn btn-sm btn-secondary" title={t("Player to the start of the clip")} onClick={() => seek(linked.sourceIn)}>
-                ▶ {t("Clip in")}
-              </button>
-            )}
             <button
-              className="btn btn-sm btn-secondary"
+              className="btn btn-sm btn-primary"
               title={linked ? t("The clip starts at the player position – place and length on the timeline stay") : t("Put this scene from the player position into the clip – place and length on the timeline stay")}
               onClick={() => setSource({ sourceIn: pick(time), markerId: null, label: linked ? undefined : sceneTitle(scene) })}
             >
-              {linked ? t("Clip in = player") : t("Insert from player")}
+              {linked ? t("Start clip here") : t("Use this scene here")}
             </button>
-            {sel && (
+            {linked && (
+              <button className="btn btn-sm btn-secondary" title={t("Player to the start of the clip")} onClick={() => seek(linked.sourceIn)}>
+                ▶ {t("Jump to clip start")}
+              </button>
+            )}
+            {sel && ui.advanced && (
               <button
                 className="btn btn-sm btn-secondary"
                 title={t("The clip starts at the beginning of the range, speed stays – place and length on the timeline stay")}
@@ -322,10 +323,10 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
             <span className="pmv-li-meta">{Math.abs(sel.out - sel.in).toFixed(2)} s</span>
           </div>
           <div className="pmv-row">
-            <button className="btn btn-sm btn-primary" onClick={selectionToBin}>
-              + {t("Selection")}
+            <button className="btn btn-sm btn-primary" onClick={selectionToBin} title={t("Keep this range under “My clips”")}>
+              + {t("My clips")}
             </button>
-            <button className="btn btn-sm btn-secondary" onClick={selectionToTimeline} title={t("Take as a snippet and insert at the playhead")}>
+            <button className="btn btn-sm btn-secondary" onClick={selectionToTimeline} title={t("Put this range onto the timeline at the playhead")}>
               → {t("Timeline")}
             </button>
             <button className="btn btn-sm btn-danger" onClick={() => dispatch({ type: "exclusion/add", exclusion: exclusionFromRange(sceneId, sel.in, sel.out), sources })}>
@@ -338,20 +339,22 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
         </div>
       )}
 
-      <div className="pmv-row">
-        <button className="btn btn-sm btn-secondary" disabled={backend !== "online"} onClick={() => void loadKeyframes()} title={t("I-frames via ffprobe (backend)")}>
-          {t("Load keyframes")}
-        </button>
-        <label className="pmv-check">
-          <input type="checkbox" checked={snapKf} disabled={!keyframes} onChange={(e) => setSnapKf(e.target.checked)} /> {t("Snap I/O")}
-        </label>
-        {kfState && <span className="pmv-li-meta">{kfState}</span>}
-      </div>
+      {ui.advanced && (
+        <div className="pmv-row">
+          <button className="btn btn-sm btn-secondary" disabled={backend !== "online"} onClick={() => void loadKeyframes()} title={t("I-frames via ffprobe (backend)")}>
+            {t("Load keyframes")}
+          </button>
+          <label className="pmv-check">
+            <input type="checkbox" checked={snapKf} disabled={!keyframes} onChange={(e) => setSnapKf(e.target.checked)} /> {t("Snap I/O")}
+          </label>
+          {kfState && <span className="pmv-li-meta">{kfState}</span>}
+        </div>
+      )}
 
       <div className="pmv-section-head is-static">
         {t("Markers")} ({markers.length})
         <span className="pmv-spacer" />
-        <NumField value={ui.markerDefaultLength} onCommit={(v) => dispatch({ type: "ui", patch: { markerDefaultLength: v } })} min={0.5} max={120} step={0.5} digits={1} suffix="s" title={t("Length for markers without an end")} />
+        {ui.advanced && <NumField value={ui.markerDefaultLength} onCommit={(v) => dispatch({ type: "ui", patch: { markerDefaultLength: v } })} min={0.5} max={120} step={0.5} digits={1} suffix="s" title={t("Length for markers without an end")} />}
         <button className="btn btn-sm btn-secondary" disabled={!markers.length} onClick={() => dispatch({ type: "bin/add", snippets: markers.filter((m) => !isMarkerExcluded(project, m.id)).map((m) => snippetFromMarker(m, sceneId, duration, ui.markerDefaultLength)), sources })}>
           {t("All")} +
         </button>
@@ -374,15 +377,19 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
                 </div>
               </div>
               <div className="pmv-li-actions" onClick={(e) => e.stopPropagation()}>
-                <button className={`btn btn-sm ${inBin ? "btn-success" : "btn-secondary"}`} disabled={inBin || excluded} title={t("Select")} onClick={() => addMarker(m)}>
+                <button className={`btn btn-sm ${inBin ? "btn-success" : "btn-secondary"}`} disabled={inBin || excluded} title={t("Add to “My clips”")} onClick={() => addMarker(m)}>
                   {inBin ? "✓" : "+"}
                 </button>
-                <button className={`btn btn-sm ${excluded ? "btn-danger" : "btn-secondary"}`} title={excluded ? t("Include again") : t("Exclude")} onClick={() => toggleExclude(m)}>
-                  ⊘
-                </button>
-                <button className="btn btn-sm btn-secondary" title={t("Take as the range to cut")} onClick={() => setSel({ in: a, out: b })}>
-                  ✂
-                </button>
+                {(ui.advanced || excluded) && (
+                  <button className={`btn btn-sm ${excluded ? "btn-danger" : "btn-secondary"}`} title={excluded ? t("Include again") : t("Exclude")} onClick={() => toggleExclude(m)}>
+                    ⊘
+                  </button>
+                )}
+                {ui.advanced && (
+                  <button className="btn btn-sm btn-secondary" title={t("Take as the range to cut")} onClick={() => setSel({ in: a, out: b })}>
+                    ✂
+                  </button>
+                )}
                 {selected && (
                   <button
                     className="btn btn-sm btn-secondary"

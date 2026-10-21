@@ -264,12 +264,16 @@ export function Timeline() {
         <span className="pmv-mono">{formatTime(now)}</span>
         <span className="pmv-mono pmv-dim">{formatBarBeat(now, project.beatGrid)}</span>
         <span className="pmv-spacer" />
-        <button className="btn btn-sm btn-secondary" title={t("Timeline marker at the playhead")} onClick={() => dispatch({ type: "marker/add", marker: { id: uid("mrk"), time: transport.time, label: `M${project.markers.length + 1}` } })}>
-          ◆ {t("Marker")}
-        </button>
-        <button className="btn btn-sm btn-secondary" onClick={() => dispatch({ type: "track/add" })}>
-          + {t("Track")}
-        </button>
+        {ui.advanced && (
+          <>
+            <button className="btn btn-sm btn-secondary" title={t("Timeline marker at the playhead")} onClick={() => dispatch({ type: "marker/add", marker: { id: uid("mrk"), time: transport.time, label: `M${project.markers.length + 1}` } })}>
+              ◆ {t("Marker")}
+            </button>
+            <button className="btn btn-sm btn-secondary" onClick={() => dispatch({ type: "track/add" })}>
+              + {t("Track")}
+            </button>
+          </>
+        )}
         <button className="btn btn-sm btn-secondary" title={t("Zoom out")} onClick={() => dispatch({ type: "ui", patch: { zoom: clamp(zoom / 1.5, 4, 1000) } })}>
           −
         </button>

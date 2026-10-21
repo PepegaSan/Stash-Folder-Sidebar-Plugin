@@ -1,25 +1,36 @@
-/** Right-hand panel: numeric fine-tuning of the selected clip, otherwise project/music/grid settings. */
+/**
+ * Right-hand panel: the selected clip, otherwise music / beat grid / output. Simple mode shows what a PMV
+ * needs; everything else sits in "More…" blocks (open by default in advanced mode).
+ */
 import React, { useRef, useState } from "react";
 import { detectTempo } from "../audio/analysis";
 import { t } from "../i18n";
-import { type FitMode, TRANSITION_TYPES, type TransitionType, VIDEO_CODECS, type VideoCodec, clipEnd, clipSourceOut, createAudioTrack } from "../model/project";
-import { importAudio, uploadAudio } from "../stash/backend";
+import { type FitMode, TRANSITION_TYPES, type TransitionType, VIDEO_CODECS, type VideoCodec, clipEnd, clipSourceOut } from "../model/project";
 import { useEditor } from "../state/store";
 import { type ClipLocation, type SpeedKeep, findClip } from "../timeline/ops";
 import { beatLength, formatBarBeat, nearestGridTime } from "../timeline/time";
-import { NumField } from "./common";
-import { getAudioAnalysis, useAudioAnalysis } from "./hooks";
+import { More, NumField } from "./common";
+import { useAudioAnalysis } from "./hooks";
+import { useMusic } from "./music";
 
 export function Inspector() {
   const { state } = useEditor();
   const loc = state.ui.selectedClipId ? findClip(state.present, state.ui.selectedClipId) : null;
-  return <div className="pmv-inspector">{loc ? <ClipInspector loc={loc} /> : <ProjectInspector />}</div>;
+  // keyed by the mode: "More…" blocks open up when advanced is switched on
+  return (
+    <div className="pmv-inspector" key={String(state.ui.advanced)}>
+      {loc ? <ClipInspector loc={loc} /> : <ProjectInspector />}
+    </div>
+  );
 }
+
+const fitLabel = (fit: FitMode) => (fit === "cover" ? t("Fill (crop)") : fit === "contain" ? t("Fit (bars)") : t("Fit (blurred edges)"));
 
 function ClipInspector({ loc }: { loc: ClipLocation }) {
   const { state, dispatch, transport } = useEditor();
   const project = state.present;
   const ui = state.ui;
+  const adv = ui.advanced;
   const { clip, track } = loc;
   const [keep, setKeep] = useState<SpeedKeep>("duration");
   const src = project.sources[clip.sceneId];
@@ -56,85 +67,95 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
       <div className="pmv-grid2">
         <label>{t("Start")}</label>
         <NumField value={clip.start} min={0} onCommit={(v) => dispatch({ type: "clip/move", clipId: id, trackId: track.id, start: v, mode })} suffix="s" />
-        <label />
-        <span className="pmv-li-meta">{t("Bar {pos}", { pos: formatBarBeat(clip.start, project.beatGrid) })}</span>
         <label>{t("Duration")}</label>
         <NumField value={clip.duration} min={0.01} onCommit={(v) => dispatch({ type: "clip/trim", clipId: id, edge: "end", time: clip.start + v, mode })} suffix="s" />
-        <label>{t("Duration")}</label>
-        <NumField value={clip.duration / beat} min={0.0625} step={0.25} onCommit={(v) => dispatch({ type: "clip/trim", clipId: id, edge: "end", time: clip.start + v * beat, mode })} suffix={t("beats")} />
-        <label>{t("In (source)")}</label>
-        <NumField value={clip.sourceIn} min={0} onCommit={(v) => dispatch({ type: "clip/slip", clipId: id, sourceIn: v })} suffix="s" title={t("Another part of the scene – position and length on the timeline stay")} />
-        <label>{t("Out (source)")}</label>
-        <NumField
-          value={clipSourceOut(clip)}
-          min={clip.duration * clip.speed}
-          onCommit={(v) => dispatch({ type: "clip/slip", clipId: id, sourceIn: v - clip.duration * clip.speed })}
-          suffix="s"
-          title={t("Another part of the scene – position and length on the timeline stay (change the length with “Duration”)")}
-        />
         <label>{t("Speed")}</label>
         <span className="pmv-row">
           <NumField value={clip.speed} min={0.1} max={10} step={0.05} onCommit={(v) => dispatch({ type: "clip/speed", clipId: id, speed: v, keep, mode })} suffix="×" />
-          <select className="form-control form-control-sm" value={keep} onChange={(e) => setKeep(e.target.value as SpeedKeep)} title={t("What a speed change keeps: the duration on the timeline (beat-safe) or the source range")}>
-            <option value="duration">{t("Keep duration")}</option>
-            <option value="range">{t("Keep range")}</option>
-          </select>
-        </span>
-        <label>{t("Clip audio")}</label>
-        <span className="pmv-row">
-          <input type="range" min={0} max={2} step={0.05} value={clip.volume} onChange={(e) => dispatch({ type: "clip/update", clipId: id, patch: { volume: +e.target.value } })} />
-          <span className="pmv-mono">{Math.round(clip.volume * 100)}%</span>
-        </span>
-        <label>{t("Transition")}</label>
-        <span className="pmv-row">
-          <select
-            className="form-control form-control-sm"
-            value={clip.transitionIn?.type ?? ""}
-            onChange={(e) => {
-              const type = e.target.value as TransitionType | "";
-              dispatch({ type: "clip/update", clipId: id, patch: { transitionIn: type ? { type, duration: clip.transitionIn?.duration ?? Math.min(0.5, beat / 2) } : null } });
-            }}
-          >
-            <option value="">{t("Hard cut")}</option>
-            {TRANSITION_TYPES.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </select>
-          {clip.transitionIn && (
-            <NumField value={clip.transitionIn.duration} min={0.02} max={10} onCommit={(v) => dispatch({ type: "clip/update", clipId: id, patch: { transitionIn: { ...clip.transitionIn!, duration: v } } })} suffix="s" />
+          {adv && (
+            <select className="form-control form-control-sm" value={keep} onChange={(e) => setKeep(e.target.value as SpeedKeep)} title={t("What a speed change keeps: the duration on the timeline (beat-safe) or the source range")}>
+              <option value="duration">{t("Keep duration")}</option>
+              <option value="range">{t("Keep range")}</option>
+            </select>
           )}
         </span>
         <label>{t("Framing")}</label>
         <select className="form-control form-control-sm" value={clip.fit ?? ""} onChange={(e) => dispatch({ type: "clip/update", clipId: id, patch: { fit: (e.target.value || null) as FitMode | null } })}>
           <option value="">{t("Project ({fit})", { fit: fitLabel(project.output.fit) })}</option>
+          <option value="blur">{t("Fit (blurred edges)")}</option>
           <option value="cover">{t("Fill (crop)")}</option>
           <option value="contain">{t("Fit (bars)")}</option>
-          <option value="blur">{t("Fit (blurred edges)")}</option>
         </select>
       </div>
+      <div className="pmv-li-meta">{t("Another part of the scene never changes the clip's place on the timeline: open the source and drag the orange range.")}</div>
+
+      <More defaultOpen={adv}>
+        <div className="pmv-grid2">
+          <label />
+          <span className="pmv-li-meta">{t("Bar {pos}", { pos: formatBarBeat(clip.start, project.beatGrid) })}</span>
+          <label>{t("Duration")}</label>
+          <NumField value={clip.duration / beat} min={0.0625} step={0.25} onCommit={(v) => dispatch({ type: "clip/trim", clipId: id, edge: "end", time: clip.start + v * beat, mode })} suffix={t("beats")} />
+          <label>{t("In (source)")}</label>
+          <NumField value={clip.sourceIn} min={0} onCommit={(v) => dispatch({ type: "clip/slip", clipId: id, sourceIn: v })} suffix="s" title={t("Another part of the scene – position and length on the timeline stay")} />
+          <label>{t("Out (source)")}</label>
+          <NumField
+            value={clipSourceOut(clip)}
+            min={clip.duration * clip.speed}
+            onCommit={(v) => dispatch({ type: "clip/slip", clipId: id, sourceIn: v - clip.duration * clip.speed })}
+            suffix="s"
+            title={t("Another part of the scene – position and length on the timeline stay (change the length with “Duration”)")}
+          />
+          <label>{t("Clip audio")}</label>
+          <span className="pmv-row">
+            <input type="range" min={0} max={2} step={0.05} value={clip.volume} onChange={(e) => dispatch({ type: "clip/update", clipId: id, patch: { volume: +e.target.value } })} />
+            <span className="pmv-mono">{Math.round(clip.volume * 100)}%</span>
+          </span>
+          <label>{t("Transition")}</label>
+          <span className="pmv-row">
+            <select
+              className="form-control form-control-sm"
+              value={clip.transitionIn?.type ?? ""}
+              onChange={(e) => {
+                const type = e.target.value as TransitionType | "";
+                dispatch({ type: "clip/update", clipId: id, patch: { transitionIn: type ? { type, duration: clip.transitionIn?.duration ?? Math.min(0.5, beat / 2) } : null } });
+              }}
+            >
+              <option value="">{t("Hard cut")}</option>
+              {TRANSITION_TYPES.map((x) => (
+                <option key={x} value={x}>
+                  {x}
+                </option>
+              ))}
+            </select>
+            {clip.transitionIn && (
+              <NumField value={clip.transitionIn.duration} min={0.02} max={10} onCommit={(v) => dispatch({ type: "clip/update", clipId: id, patch: { transitionIn: { ...clip.transitionIn!, duration: v } } })} suffix="s" />
+            )}
+          </span>
+        </div>
+        <div className="pmv-row pmv-wrap">
+          <button
+            className="btn btn-sm btn-secondary"
+            title={t("Put start and end on the snap grid")}
+            onClick={() => {
+              const s = nearestGridTime(clip.start, project.beatGrid, ui.snapDivision);
+              const e = Math.max(s + step, nearestGridTime(clipEnd(clip), project.beatGrid, ui.snapDivision));
+              dispatch({ type: "clip/move", clipId: id, trackId: track.id, start: s, mode });
+              dispatch({ type: "clip/trim", clipId: id, edge: "end", time: e, mode });
+            }}
+          >
+            ⌗ {t("To the grid")}
+          </button>
+          <button className="btn btn-sm btn-secondary" onClick={() => dispatch({ type: "clip/split", clipId: id, time: transport.time })} title={t("Split at the playhead (S)")}>
+            ✂ {t("Split")}
+          </button>
+          <button className="btn btn-sm btn-secondary" disabled={!ui.selectedSnippetId} onClick={() => ui.selectedSnippetId && dispatch({ type: "clip/replace", clipId: id, snippetId: ui.selectedSnippetId })} title={t("Replace with the clip selected under “My clips” (R)")}>
+            ⇄ {t("Replace")}
+          </button>
+        </div>
+      </More>
 
       <div className="pmv-row pmv-wrap">
-        <button
-          className="btn btn-sm btn-secondary"
-          title={t("Put start and end on the snap grid")}
-          onClick={() => {
-            const s = nearestGridTime(clip.start, project.beatGrid, ui.snapDivision);
-            const e = Math.max(s + step, nearestGridTime(clipEnd(clip), project.beatGrid, ui.snapDivision));
-            dispatch({ type: "clip/move", clipId: id, trackId: track.id, start: s, mode });
-            dispatch({ type: "clip/trim", clipId: id, edge: "end", time: e, mode });
-          }}
-        >
-          ⌗ {t("To the grid")}
-        </button>
-        <button className="btn btn-sm btn-secondary" onClick={() => dispatch({ type: "clip/split", clipId: id, time: transport.time })} title={t("Split at the playhead (S)")}>
-          ✂ {t("Split")}
-        </button>
-        <button className="btn btn-sm btn-secondary" disabled={!ui.selectedSnippetId} onClick={() => ui.selectedSnippetId && dispatch({ type: "clip/replace", clipId: id, snippetId: ui.selectedSnippetId })} title={t("Replace with the selected snippet (R)")}>
-          ⇄ {t("Replace")}
-        </button>
-        <button className="btn btn-sm btn-secondary" onClick={() => dispatch({ type: "ui", patch: { activeSceneId: clip.sceneId, activeSceneSeek: clip.sourceIn } })}>
+        <button className="btn btn-sm btn-primary" onClick={() => dispatch({ type: "ui", patch: { activeSceneId: clip.sceneId, activeSceneSeek: clip.sourceIn } })} title={t("Shows the scene on the left – pick another spot or marker for this clip there")}>
           {t("Open source")}
         </button>
         <button className="btn btn-sm btn-danger" onClick={() => dispatch({ type: "clip/delete", clipId: id, ripple: false })} title={t("Del · Shift+Del = ripple")}>
@@ -157,6 +178,7 @@ const RESOLUTIONS: Array<[number, number, string]> = [
 
 function ProjectInspector() {
   const { state, dispatch } = useEditor();
+  const adv = state.ui.advanced;
   const o = state.present.output;
   const res = RESOLUTIONS.find(([w, h]) => w === o.width && h === o.height);
   return (
@@ -181,137 +203,117 @@ function ProjectInspector() {
             </option>
           ))}
         </select>
-        <label>FPS</label>
-        <select className="form-control form-control-sm" value={o.fps} onChange={(e) => dispatch({ type: "output/update", patch: { fps: +e.target.value } })}>
-          {FPS_PRESETS.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
         <label>{t("Framing")}</label>
         <select className="form-control form-control-sm" value={o.fit} onChange={(e) => dispatch({ type: "output/update", patch: { fit: e.target.value as FitMode } })}>
+          <option value="blur">{t("Fit (blurred edges)")}</option>
           <option value="cover">{t("Fill (crop)")}</option>
           <option value="contain">{t("Fit (bars)")}</option>
-          <option value="blur">{t("Fit (blurred edges)")}</option>
-        </select>
-        <label>{t("Codec")}</label>
-        <select className="form-control form-control-sm" value={o.videoCodec} onChange={(e) => dispatch({ type: "output/update", patch: { videoCodec: e.target.value as VideoCodec } })}>
-          {VIDEO_CODECS.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <label>{t("Quality (CRF/CQ)")}</label>
-        <NumField value={o.crf} min={0} max={51} step={1} digits={0} onCommit={(v) => dispatch({ type: "output/update", patch: { crf: Math.round(v) } })} />
-        <label>{t("Preset")}</label>
-        <select className="form-control form-control-sm" value={o.preset} onChange={(e) => dispatch({ type: "output/update", patch: { preset: e.target.value } })}>
-          {["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"].map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-        <label>{t("Audio bitrate")}</label>
-        <select className="form-control form-control-sm" value={o.audioBitrate} onChange={(e) => dispatch({ type: "output/update", patch: { audioBitrate: e.target.value } })}>
-          {["128k", "192k", "256k", "320k"].map((b) => (
-            <option key={b} value={b}>
-              {b}
-            </option>
-          ))}
         </select>
       </div>
+      <More defaultOpen={adv}>
+        <div className="pmv-grid2">
+          <label>FPS</label>
+          <select className="form-control form-control-sm" value={o.fps} onChange={(e) => dispatch({ type: "output/update", patch: { fps: +e.target.value } })}>
+            {FPS_PRESETS.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+          <label>{t("Codec")}</label>
+          <select className="form-control form-control-sm" value={o.videoCodec} onChange={(e) => dispatch({ type: "output/update", patch: { videoCodec: e.target.value as VideoCodec } })}>
+            {VIDEO_CODECS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <label>{t("Quality (CRF/CQ)")}</label>
+          <NumField value={o.crf} min={0} max={51} step={1} digits={0} onCommit={(v) => dispatch({ type: "output/update", patch: { crf: Math.round(v) } })} />
+          <label>{t("Preset")}</label>
+          <select className="form-control form-control-sm" value={o.preset} onChange={(e) => dispatch({ type: "output/update", patch: { preset: e.target.value } })}>
+            {["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"].map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          <label>{t("Audio bitrate")}</label>
+          <select className="form-control form-control-sm" value={o.audioBitrate} onChange={(e) => dispatch({ type: "output/update", patch: { audioBitrate: e.target.value } })}>
+            {["128k", "192k", "256k", "320k"].map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+        </div>
+      </More>
     </div>
   );
 }
 
-const fitLabel = (fit: FitMode) => (fit === "cover" ? t("Fill (crop)") : fit === "contain" ? t("Fit (bars)") : t("Fit (blurred edges)"));
-
 function AudioSection() {
-  const { state, dispatch, backend } = useEditor();
-  const audio = state.present.audio;
-  const [status, setStatus] = useState<string | null>(null);
+  const { state, dispatch } = useEditor();
+  const adv = state.ui.advanced;
+  const music = useMusic();
+  const audio = music.audio;
   const [serverPath, setServerPath] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const { error } = useAudioAnalysis(audio?.url);
-
-  const adopt = async (name: string, path: string, url: string, probed?: number | null) => {
-    setStatus(t("Analysing…"));
-    const a = await getAudioAnalysis(url);
-    // the render uses the file on the server, so its length (ffprobe) wins when the browser decoded less
-    const duration = Math.max(a.duration, probed ?? 0);
-    dispatch({ type: "audio/set", audio: { ...createAudioTrack(name, path, url, duration), ...(audio ? { start: audio.start, gainDb: audio.gainDb, fadeIn: audio.fadeIn, fadeOut: audio.fadeOut } : {}) } });
-    setStatus(probed && Math.abs(probed - a.duration) > 1 ? t("The browser decoded {a} s of a {b} s file – the timeline uses {b} s; waveform and BPM come from the decoded part.", { a: a.duration.toFixed(1), b: probed.toFixed(1) }) : null);
-  };
-  const onFile = async (f: File) => {
-    try {
-      setStatus(t("Upload {pct} %", { pct: 0 }));
-      const r = await uploadAudio(f, (p) => setStatus(t("Upload {pct} %", { pct: Math.round(p * 100) })));
-      await adopt(r.name, r.path, r.url, r.duration);
-    } catch (e) {
-      setStatus(t("Error: {error}", { error: String(e) }));
-    }
-  };
-  const onPath = async () => {
-    try {
-      setStatus(t("Importing…"));
-      const r = await importAudio(serverPath.trim());
-      await adopt(r.name, r.path, r.url, r.duration);
-    } catch (e) {
-      setStatus(t("Error: {error}", { error: String(e) }));
-    }
-  };
 
   return (
     <>
       <div className="pmv-section-head is-static">{t("Music")}</div>
       {audio ? (
-        <div className="pmv-grid2">
-          <label>{t("File")}</label>
-          <span className="pmv-li-meta" title={audio.path ?? ""}>
-            {audio.name} ({audio.duration.toFixed(1)} s)
-          </span>
-          <label>{t("Start (timeline)")}</label>
-          <NumField value={audio.start} min={0} onCommit={(v) => dispatch({ type: "audio/update", patch: { start: v } })} suffix="s" />
-          <label>{t("From (in file)")}</label>
-          <NumField value={audio.sourceIn} min={0} max={audio.duration} onCommit={(v) => dispatch({ type: "audio/update", patch: { sourceIn: v } })} suffix="s" />
-          <label>{t("Level")}</label>
-          <NumField value={audio.gainDb} min={-60} max={24} step={0.5} digits={1} onCommit={(v) => dispatch({ type: "audio/update", patch: { gainDb: v } })} suffix="dB" />
-          <label>{t("Fade-in / -out")}</label>
-          <span className="pmv-row">
-            <NumField value={audio.fadeIn} min={0} max={30} step={0.1} digits={2} onCommit={(v) => dispatch({ type: "audio/update", patch: { fadeIn: v } })} suffix="s" />
-            <NumField value={audio.fadeOut} min={0} max={30} step={0.1} digits={2} onCommit={(v) => dispatch({ type: "audio/update", patch: { fadeOut: v } })} suffix="s" />
-          </span>
+        <div className="pmv-li-meta" title={audio.path ?? ""}>
+          ♪ {audio.name} ({audio.duration.toFixed(1)} s)
         </div>
       ) : (
-        <div className="pmv-li-meta">{t("No music yet. Upload a file or enter a path on the Stash server.")}</div>
+        <div className="pmv-li-meta">{t("No music yet – upload the song here.")}</div>
       )}
       {error && <div className="pmv-error">{t("Audio can't be loaded: {error}", { error })}</div>}
       <div className="pmv-row pmv-wrap">
-        <input ref={fileRef} type="file" accept="audio/*" className="pmv-hidden" onChange={(e) => e.target.files?.[0] && void onFile(e.target.files[0])} />
-        <button className="btn btn-sm btn-secondary" disabled={backend !== "online"} onClick={() => fileRef.current?.click()}>
-          {t("Upload file…")}
+        <input ref={fileRef} type="file" accept="audio/*" className="pmv-hidden" onChange={(e) => e.target.files?.[0] && void music.upload(e.target.files[0])} />
+        <button className={`btn btn-sm ${audio ? "btn-secondary" : "btn-primary"}`} disabled={!music.online} onClick={() => fileRef.current?.click()}>
+          {audio ? t("Other song…") : t("Upload song…")}
         </button>
         {audio && (
-          <button className="btn btn-sm btn-link" onClick={() => dispatch({ type: "audio/set", audio: null })}>
+          <button className="btn btn-sm btn-link" onClick={music.remove}>
             {t("Remove")}
           </button>
         )}
       </div>
-      <div className="pmv-row">
-        <input className="form-control form-control-sm" placeholder="/path/on/the/server/track.mp3" value={serverPath} onChange={(e) => setServerPath(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
-        <button className="btn btn-sm btn-secondary" disabled={backend !== "online" || !serverPath.trim()} onClick={() => void onPath()}>
-          {t("Use")}
-        </button>
-      </div>
-      {status && <div className="pmv-li-meta">{status}</div>}
+      {music.status && <div className="pmv-li-meta">{music.status}</div>}
+      <More defaultOpen={adv}>
+        <div className="pmv-row">
+          <input className="form-control form-control-sm" placeholder={t("Path of a file on the Stash server")} value={serverPath} onChange={(e) => setServerPath(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+          <button className="btn btn-sm btn-secondary" disabled={!music.online || !serverPath.trim()} onClick={() => void music.usePath(serverPath)}>
+            {t("Use")}
+          </button>
+        </div>
+        {audio && (
+          <div className="pmv-grid2">
+            <label>{t("Start (timeline)")}</label>
+            <NumField value={audio.start} min={0} onCommit={(v) => dispatch({ type: "audio/update", patch: { start: v } })} suffix="s" />
+            <label>{t("From (in file)")}</label>
+            <NumField value={audio.sourceIn} min={0} max={audio.duration} onCommit={(v) => dispatch({ type: "audio/update", patch: { sourceIn: v } })} suffix="s" />
+            <label>{t("Level")}</label>
+            <NumField value={audio.gainDb} min={-60} max={24} step={0.5} digits={1} onCommit={(v) => dispatch({ type: "audio/update", patch: { gainDb: v } })} suffix="dB" />
+            <label>{t("Fade-in / -out")}</label>
+            <span className="pmv-row">
+              <NumField value={audio.fadeIn} min={0} max={30} step={0.1} digits={2} onCommit={(v) => dispatch({ type: "audio/update", patch: { fadeIn: v } })} suffix="s" />
+              <NumField value={audio.fadeOut} min={0} max={30} step={0.1} digits={2} onCommit={(v) => dispatch({ type: "audio/update", patch: { fadeOut: v } })} suffix="s" />
+            </span>
+          </div>
+        )}
+      </More>
     </>
   );
 }
 
 function GridSection() {
   const { state, dispatch, transport } = useEditor();
+  const adv = state.ui.advanced;
   const p = state.present;
   const g = p.beatGrid;
   const { analysis } = useAudioAnalysis(p.audio?.url);
@@ -344,7 +346,7 @@ function GridSection() {
 
   return (
     <>
-      <div className="pmv-section-head is-static">{t("Beat grid")}</div>
+      <div className="pmv-section-head is-static">{t("Beat")}</div>
       <div className="pmv-grid2">
         <label>BPM</label>
         <span className="pmv-row">
@@ -356,25 +358,29 @@ function GridSection() {
             ×2
           </button>
         </span>
-        <label>{t("Offset")}</label>
-        <span className="pmv-row">
-          <NumField value={g.offset} min={0} step={0.005} onCommit={(v) => dispatch({ type: "grid/update", patch: { offset: v } })} suffix="s" />
-          <button className="btn btn-sm btn-secondary" title={t("Put a beat on the playhead")} onClick={() => dispatch({ type: "grid/update", patch: { offset: norm(transport.time) } })}>
-            = {t("Playhead")}
-          </button>
-        </span>
-        <label>{t("Beats per bar")}</label>
-        <NumField value={g.beatsPerBar} min={1} max={16} step={1} digits={0} onCommit={(v) => dispatch({ type: "grid/update", patch: { beatsPerBar: Math.round(v) } })} />
       </div>
-      <div className="pmv-row">
-        <button className="btn btn-sm btn-secondary" disabled={!analysis} onClick={detect}>
+      <div className="pmv-row pmv-wrap">
+        <button className="btn btn-sm btn-secondary" disabled={!analysis} onClick={detect} title={t("Detects the tempo from the song; was done automatically when the song was added")}>
           {t("Detect BPM")}
         </button>
-        <button className="btn btn-sm btn-secondary" onClick={tap}>
+        <button className="btn btn-sm btn-secondary" onClick={tap} title={t("Tap four times to the beat")}>
           {t("Tap")}
         </button>
         {info && <span className="pmv-li-meta">{info}</span>}
       </div>
+      <More defaultOpen={adv}>
+        <div className="pmv-grid2">
+          <label>{t("Offset")}</label>
+          <span className="pmv-row">
+            <NumField value={g.offset} min={0} step={0.005} onCommit={(v) => dispatch({ type: "grid/update", patch: { offset: v } })} suffix="s" />
+            <button className="btn btn-sm btn-secondary" title={t("Put a beat on the playhead")} onClick={() => dispatch({ type: "grid/update", patch: { offset: norm(transport.time) } })}>
+              = {t("Playhead")}
+            </button>
+          </span>
+          <label>{t("Beats per bar")}</label>
+          <NumField value={g.beatsPerBar} min={1} max={16} step={1} digits={0} onCommit={(v) => dispatch({ type: "grid/update", patch: { beatsPerBar: Math.round(v) } })} />
+        </div>
+      </More>
     </>
   );
 }

@@ -51,6 +51,8 @@ Die Oberfläche ist englisch und wechselt auf Deutsch, wenn Stashs Oberflächens
 
 ## Arbeitsablauf
 
+Der Editor startet im **Einfach-Modus**: Solange die Timeline leer ist, zeigt die Vorschau die drei Schritte (Song hochladen → PMV erzeugen → Nachjustieren & rendern), und die Panels zeigen nur, was ein PMV braucht. **Erweitert** (Toolbar, oben rechts) blendet den Rest ein – Bearbeitungsmodi, Einrasten, die Marker-Suche, alle Generator-Optionen, Keyframes, Ausschlüsse und die „Mehr…“-Blöcke im Inspector. Die Wahl wird pro Browser gemerkt.
+
 1. **Musik**: Im Inspector (nichts ausgewählt) die Datei hochladen oder einen Server-Pfad angeben. Danach *BPM erkennen*, bei Bedarf ×2/÷2 oder *Tap*, *Versatz = Playhead*.
 2. **Culling** in der Seitenleiste
    * *Szenen*: suchen und mit **+** in den Projekt-Pool, oder direkt per **Szenen-ID / Stash-Link** (`123, 456` bzw. `http://stash:9999/scenes/123`, Button **+ ID**). Anklicken öffnet den Drill-Down. Marker **+** (auswählen), **⊘** (ausschließen), **✂** (als Bereich übernehmen). Bereiche per **I/O** oder Shift+Ziehen auf der Scrub-Bar. *Keyframes laden* zeigt die I-Frames.

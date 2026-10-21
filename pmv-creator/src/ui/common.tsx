@@ -170,6 +170,19 @@ export function RefPicker({ placeholder, value, onChange, search }: { placeholde
   );
 }
 
+/** Collapsible "More…" block for settings that the everyday workflow does not need. */
+export function More({ label, children, defaultOpen = false }: { label?: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="pmv-more">
+      <button type="button" className="pmv-more-head" onClick={() => setOpen(!open)}>
+        {open ? "▾" : "▸"} {label ?? t("More…")}
+      </button>
+      {open && <div className="pmv-more-body">{children}</div>}
+    </div>
+  );
+}
+
 /** Segmented control (one of a few options). */
 export function Seg<T extends string | number>({ value, options, onChange, disabled }: { value: T; options: Array<[T, string, string?]>; onChange: (v: T) => void; disabled?: boolean }) {
   return (
