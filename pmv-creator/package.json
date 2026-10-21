@@ -1,0 +1,33 @@
+{
+  "name": "pmv-creator",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Stash plugin: deterministic PMV editor (culling, beat-grid timeline, generator, FFmpeg render, EDL/OTIO export)",
+  "license": "MIT",
+  "author": "PepegaSan",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:backend": "python tests/backend_e2e.py",
+    "i18n:check": "node tools/i18n-check.mjs",
+    "release": "node tools/release.mjs",
+    "deploy": "node build.mjs --out ../plugins/pmv-creator"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.1",
+    "esbuild": "^0.25.0",
+    "jsdom": "^25.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}

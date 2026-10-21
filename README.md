@@ -2,7 +2,7 @@
 
 Community plugins for [Stash](https://github.com/stashapp/stash), installable via [source URL](#installation-from-stash-plugin-source-url) or manual copy from `plugins/<id>/`.
 
-**Jump to:** [Folder Sidebar](#folder-sidebar) · [Quick Markers](#quick-markers) · [Bracket Tags](#bracket-tags) · [Tag Performers](#tag-performers) · [Tag Categories](#tag-categories)
+**Jump to:** [Folder Sidebar](#folder-sidebar) · [Quick Markers](#quick-markers) · [Bracket Tags](#bracket-tags) · [Tag Performers](#tag-performers) · [Tag Categories](#tag-categories) · [PMV Creator](#pmv-creator)
 
 | Plugin | Description |
 |--------|-------------|
@@ -11,6 +11,7 @@ Community plugins for [Stash](https://github.com/stashapp/stash), installable vi
 | [Bracket Tags](#bracket-tags) | Tags from `[brackets]` in filenames |
 | [Tag Performers](#tag-performers) | Add performers to scenes that have a tag with their name |
 | [Tag Categories](#tag-categories) | Browse scenes by named categories (any matching tag or performer) |
+| [PMV Creator](#pmv-creator) | Deterministic PMV editor: beat grid, generator, FFmpeg render, EDL/OTIO export |
 
 ---
 
@@ -565,7 +566,55 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.10.1`.
 
 ---
 
+# PMV Creator
+
+Deterministic PMV (music video) editor inside Stash: pick scenes and markers, arrange them on a beat grid, fine-tune every
+clip and render frame-exactly with FFmpeg (or record the preview in the browser), or hand the cut to DaVinci Resolve & Co.
+as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the timeline by criteria; everything stays editable.
+Works in classic Stash and in Stash UI.
+
+![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
+![Version](https://img.shields.io/badge/version-0.3.0-informational)
+
+![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
+
+## Features
+
+- **Culling sidebar** — scenes (search, tags, performers, by id or Stash link), markers across the library, a bin of snippets; exclude ranges
+- **Beat-grid timeline** — BPM detection/tap, snap, ripple/overwrite modes, trim/slip/split, transitions, speed with beat-safe duration
+- **Ground rule** — another part of the scene never changes a clip's place on the timeline
+- **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"
+- **Render** — deterministic FFmpeg pipeline as a Stash task (segment cache, exact CFR), plus **Quick record** (real-time WebM in the browser, no server FFmpeg needed)
+- **Exports** — project JSON, CMX3600 EDL, OpenTimelineIO, render plan, FFmpeg scripts; CLI render without Stash
+- English interface, German when Stash (or Stash UI) is set to German
+
+## Requirements
+
+- Stash with the plugin UI API (tested with 0.31)
+- On the Stash server: Python ≥ 3.8 (*Settings → System → Python path*) and FFmpeg ≥ 4.4 (the one Stash ships is found automatically)
+
+## Installation
+
+Install from the [plugin source URL](#installation-from-stash-plugin-source-url) (**PMV Creator** in the list), or copy `plugins/pmv-creator/` manually:
+
+| OS | Path |
+|----|------|
+| Windows | `%USERPROFILE%\.stash\plugins\pmv-creator\` |
+| Linux / macOS / Docker | `~/.stash/plugins/pmv-creator/` (the config volume's `plugins/`) |
+
+Then **Settings → Plugins → Reload plugins**; the page is at `/pmv-creator` (navbar button) or, in Stash UI, under **Watch → PMV Creator**.
+
+## Documentation
+
+Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.md](pmv-creator/README.md) ([deutsch](pmv-creator/README.de.md)). Architecture: [pmv-creator/docs/KONZEPT.md](pmv-creator/docs/KONZEPT.md). Source and tests live in `pmv-creator/` (`npm install`, `npm run deploy` builds into `plugins/pmv-creator/`).
+
+---
+
 ## Changelog
+
+### PMV Creator 0.3.0
+
+- New plugin: deterministic PMV editor with culling sidebar, beat-grid timeline, generator, FFmpeg render task, browser quick record, EDL/OTIO/FFmpeg-script exports; classic Stash and Stash UI; English/German
 
 ### Tag Performers 1.0.0
 

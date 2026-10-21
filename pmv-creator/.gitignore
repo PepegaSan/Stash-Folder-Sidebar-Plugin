@@ -1,0 +1,8 @@
+node_modules/
+dist/
+data/
+plugin/assets/media/
+__pycache__/
+*.pyc
+.tmp-e2e/
+release/
