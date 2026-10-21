@@ -189,6 +189,24 @@ describe("motion analysis (experimental modes)", () => {
     expect(r.clips[1].sourceIn).toBe(20);
     expect(r.clips[1].speed).toBeCloseTo(0.94);
   });
+
+  it("beat sync is idempotent and matches the period on the timeline (speed ≠ 1)", () => {
+    const rh = { period: 0.53, half: null, turn: 9.2, q: 0.8 };
+    const c1 = clip("1", 0, 1, { sourceIn: 10 });
+    const first = applyBeatSync([c1], { [c1.id]: rh }, 120, () => 100, () => false).clips[0];
+    expect(first).not.toBe(c1);
+    // same measurement again (remembered at the new start): nothing moves
+    const again = applyBeatSync([first], { [first.id]: rh }, 120, () => 100, () => false);
+    expect(again.clips[0]).toBe(first);
+    expect(again.synced).toBe(1);
+    // a clip at 1.5×: the motion period on the timeline (source period / speed) is what has to fit the beat
+    // 0.8 s in the source at 1.5× = 0.533 s on the timeline → +6.7 % = one pulse per 0.5-s beat
+    const slow = { period: 0.8, half: null, turn: 10.4, q: 0.8 };
+    const c2 = clip("2", 0, 1, { sourceIn: 10, speed: 1.5 });
+    const fast = applyBeatSync([c2], { [c2.id]: slow }, 120, () => 100, () => false).clips[0];
+    expect(fast.speed).toBeCloseTo(1.6, 3);
+    expect(slow.period / fast.speed).toBeCloseTo(0.5, 3);
+  });
 });
 
 describe("Stash filters (ported from Pepega's buildFilter)", () => {

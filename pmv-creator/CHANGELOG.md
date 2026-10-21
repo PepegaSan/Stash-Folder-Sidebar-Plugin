@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 (2026-10-21)
+
+- "Motion on the beat" (generator checkbox): 32 clips per backend call instead of 8 – far fewer plugin processes on slow servers.
+- "Motion on the beat" now matches the motion period on the timeline, so clips with a speed other than 1× (speed ramps, style speed) are put on the beat correctly.
+
 ## 0.4.0 (2026-10-21)
 
 - **Simple mode** (default): the editor shows what a PMV needs – music, "Generate PMV", clip start/duration/speed/framing, format – everything else sits behind **Advanced** (toolbar) or in "More…" blocks. The generator dialog shrinks to mood, clip source, tags, performers and count.

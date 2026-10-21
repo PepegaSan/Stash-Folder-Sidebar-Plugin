@@ -203,23 +203,27 @@ export function buildGeneration(p: PmvProject, s: GeneratorSettings, range: { fr
 /**
  * Experimental "motion on the beat": each clip whose motion rhythm fits the tempo (±12 %) gets that speed
  * factor, and non-marker clips start on a turn of the motion – the turn lands on the cut, i.e. on a beat.
+ * The rate is taken relative to the clip's current speed (the motion period *on the timeline* is matched),
+ * so applying it again to a clip that is already on the beat changes nothing.
  */
 export function applyBeatSync(clips: Clip[], rhythms: Record<string, Rhythm | null>, bpm: number, fileDuration: (sceneId: string) => number, fixedStart: (c: Clip) => boolean): { clips: Clip[]; synced: number } {
   let synced = 0;
   const out = clips.map((c) => {
     const r = rhythms[c.id];
     if (!r) return c;
-    const rate = beatFit(r.period, bpm) ?? (r.half ? beatFit(r.half, bpm) : null);
+    const rate = beatFit(r.period / c.speed, bpm) ?? (r.half ? beatFit(r.half / c.speed, bpm) : null);
+    const speed = rate != null && Math.abs(rate - 1) > 0.002 ? Math.round(c.speed * rate * 1e4) / 1e4 : c.speed;
     const step = r.half || r.period;
     let sourceIn = c.sourceIn;
     if (!fixedStart(c)) {
-      const turn = r.turn - Math.floor((r.turn - c.sourceIn) / step) * step; // first turn at/after the start
+      // first turn at/after the start (the epsilon keeps a clip that already starts on a turn where it is)
+      const turn = r.turn - Math.floor((r.turn - c.sourceIn) / step + 1e-6) * step;
       const dur = fileDuration(c.sceneId);
-      if (!(dur > 0) || turn + c.duration * c.speed * (rate ?? 1) < dur - 0.05) sourceIn = turn;
+      if (Math.abs(turn - c.sourceIn) > 1e-3 && (!(dur > 0) || turn + c.duration * speed < dur - 0.05)) sourceIn = Math.round(turn * 1e6) / 1e6;
     }
     if (rate == null && sourceIn === c.sourceIn) return c;
     synced++;
-    return { ...c, sourceIn, speed: rate ? Math.round(c.speed * rate * 1e4) / 1e4 : c.speed };
+    return speed === c.speed && sourceIn === c.sourceIn ? c : { ...c, sourceIn, speed };
   });
   return { clips: out, synced };
 }

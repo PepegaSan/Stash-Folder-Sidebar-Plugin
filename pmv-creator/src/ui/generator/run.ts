@@ -108,7 +108,9 @@ const RHYTHM_WINDOW = 2.0;
 
 const RHYTHM_V = 1;
 /** A measured spot is remembered per browser (scene + start), so the same seed – or the same spot in another run – costs nothing again. */
-const rhythmKey = (c: Clip) => `pmv-creator:rhythm:${RHYTHM_V}:${c.sceneId}:${(Math.round(c.sourceIn * 20) / 20).toFixed(2)}`;
+const rhythmKey = (c: Pick<Clip, "sceneId" | "sourceIn">) => `pmv-creator:rhythm:${RHYTHM_V}:${c.sceneId}:${(Math.round(c.sourceIn * 20) / 20).toFixed(2)}`;
+/** Clips per backend call (the backend allows 32; each call is one plugin process). */
+const RHYTHM_BATCH = 32;
 
 /** Motion rhythm at the start of each clip (2 s of its source at 30 fps). */
 export async function measureRhythms(clips: Clip[], sources: Record<string, SourceMedia>, status: Status): Promise<Record<string, Rhythm | null>> {
@@ -119,9 +121,9 @@ export async function measureRhythms(clips: Clip[], sources: Record<string, Sour
     if (hit === null) todo.push(c);
     else out[c.id] = JSON.parse(hit) as Rhythm | null;
   }
-  for (let i = 0; i < todo.length; i += 8) {
+  for (let i = 0; i < todo.length; i += RHYTHM_BATCH) {
     status(t("Motion on the beat: {i}/{n} clips measured…", { i, n: todo.length }));
-    const batch = todo.slice(i, i + 8);
+    const batch = todo.slice(i, i + RHYTHM_BATCH);
     const res = await grayFrames(batch.map((c) => ({ key: c.id, path: sources[c.sceneId].path, start: c.sourceIn, duration: RHYTHM_WINDOW, fps: 30 })));
     for (const c of batch) {
       const r = res[c.id];
