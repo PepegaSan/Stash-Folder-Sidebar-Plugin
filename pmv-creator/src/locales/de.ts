@@ -168,6 +168,7 @@ const de: Record<string, string> = {
   "Project ({fit})": "Projekt ({fit})",
   "Fill (crop)": "Füllen (beschneiden)",
   "Fit (bars)": "Einpassen (Balken)",
+  "Fit (blurred edges)": "Einpassen (unscharfer Rand)",
   "Put start and end on the snap grid": "Anfang und Ende auf das Raster legen",
   "To the grid": "Auf das Raster",
   "Split at the playhead (S)": "Am Playhead teilen (S)",

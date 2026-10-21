@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3 (2026-10-21)
+
+- Framing "Fit (blurred edges)": the whole picture over a blurred, filled copy of itself – like the PMV Generator; portrait clips stay complete in a 16:9 video. Default for new projects; per project and per clip. Preview, quick record and the FFmpeg render all do it (segment cache invalidated).
+
 ## 0.3.2 (2026-10-21)
 
 - Clicking a clip shows it in the player: the playhead jumps to the clip unless it is already inside it.

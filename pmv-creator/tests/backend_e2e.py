@@ -138,12 +138,12 @@ def main():
         pieces = [
             {"kind": "xfade", "frames": 10, "transition": "fadeblack", "a": None, "b": src(a, 1.0, volume=1.0)},
             {"kind": "clip", "frames": 35, "src": src(a, 1.333, volume=1.0)},
-            {"kind": "xfade", "frames": 12, "transition": "fade", "a": src(a, 2.5, volume=1.0), "b": src(b, 1.8, has_audio=False)},
+            {"kind": "xfade", "frames": 12, "transition": "fade", "a": src(a, 2.5, volume=1.0), "b": src(b, 1.8, has_audio=False, fit="blur")},
             {"kind": "clip", "frames": 40, "src": src(b, 2.0, speed=2.0, has_audio=False)},
             {"kind": "black", "frames": 15},
             {"kind": "clip", "frames": 30, "src": src(c, 0.5, speed=0.5, fit="contain")},
             {"kind": "xfade", "frames": 8, "transition": "wipeleft", "a": src(c, 1.5), "b": src(a, 9.0)},
-            {"kind": "clip", "frames": 30, "src": src(a, 9.5, speed=1.5)},
+            {"kind": "clip", "frames": 30, "src": src(a, 9.5, speed=1.5, fit="blur")},
             # only 0.5 s of material left -> the renderer must pad to the exact frame count
             {"kind": "clip", "frames": 30, "src": src(b, 9.5, has_audio=False)},
         ]

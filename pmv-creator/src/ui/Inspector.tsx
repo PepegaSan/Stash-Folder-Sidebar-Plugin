@@ -108,9 +108,10 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
         </span>
         <label>{t("Framing")}</label>
         <select className="form-control form-control-sm" value={clip.fit ?? ""} onChange={(e) => dispatch({ type: "clip/update", clipId: id, patch: { fit: (e.target.value || null) as FitMode | null } })}>
-          <option value="">{t("Project ({fit})", { fit: project.output.fit })}</option>
+          <option value="">{t("Project ({fit})", { fit: fitLabel(project.output.fit) })}</option>
           <option value="cover">{t("Fill (crop)")}</option>
           <option value="contain">{t("Fit (bars)")}</option>
+          <option value="blur">{t("Fit (blurred edges)")}</option>
         </select>
       </div>
 
@@ -192,6 +193,7 @@ function ProjectInspector() {
         <select className="form-control form-control-sm" value={o.fit} onChange={(e) => dispatch({ type: "output/update", patch: { fit: e.target.value as FitMode } })}>
           <option value="cover">{t("Fill (crop)")}</option>
           <option value="contain">{t("Fit (bars)")}</option>
+          <option value="blur">{t("Fit (blurred edges)")}</option>
         </select>
         <label>{t("Codec")}</label>
         <select className="form-control form-control-sm" value={o.videoCodec} onChange={(e) => dispatch({ type: "output/update", patch: { videoCodec: e.target.value as VideoCodec } })}>
@@ -223,6 +225,8 @@ function ProjectInspector() {
     </div>
   );
 }
+
+const fitLabel = (fit: FitMode) => (fit === "cover" ? t("Fill (crop)") : fit === "contain" ? t("Fit (bars)") : t("Fit (blurred edges)"));
 
 function AudioSection() {
   const { state, dispatch, backend } = useEditor();

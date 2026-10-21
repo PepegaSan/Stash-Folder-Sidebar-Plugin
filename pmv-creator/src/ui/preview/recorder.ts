@@ -74,7 +74,7 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
   const g = canvas.getContext("2d")!;
   const engine = new PreviewEngine(videos, overlay);
   const segs = flattenTimeline(project);
-  engine.setTimeline({ segs, trans: resolveTransitions(project, segs), fps, scenes });
+  engine.setTimeline({ segs, trans: resolveTransitions(project, segs), fps, scenes, fit });
 
   // audio: music (also to the speakers, as always) + the hidden players' clip audio (recording only)
   const ctx = (audioCtx ??= new AudioContext());
@@ -97,7 +97,16 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
       const alpha = Number(v.style.opacity || 0);
       if (alpha <= 0 || v.readyState < 2 || !v.videoWidth) continue;
       g.globalAlpha = alpha;
-      const scale = fit === "contain" ? Math.min(width / v.videoWidth, height / v.videoHeight) : Math.max(width / v.videoWidth, height / v.videoHeight);
+      // the engine marks each slot with the clip's framing
+      const clipFit: typeof fit = v.classList.contains("is-blur") ? "blur" : v.classList.contains("is-contain") ? "contain" : "cover";
+      const cover = Math.max(width / v.videoWidth, height / v.videoHeight);
+      const contain = Math.min(width / v.videoWidth, height / v.videoHeight);
+      if (clipFit === "blur") {
+        g.filter = `blur(${Math.round(Math.min(width, height) / 40)}px) brightness(0.85)`;
+        g.drawImage(v, (width - v.videoWidth * cover) / 2, (height - v.videoHeight * cover) / 2, v.videoWidth * cover, v.videoHeight * cover);
+        g.filter = "none";
+      }
+      const scale = clipFit === "cover" ? cover : contain;
       const w = v.videoWidth * scale;
       const h = v.videoHeight * scale;
       g.drawImage(v, (width - w) / 2, (height - h) / 2, w, h);

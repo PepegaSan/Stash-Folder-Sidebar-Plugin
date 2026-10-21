@@ -16,6 +16,7 @@ export function PreviewPlayer() {
   const aRef = useRef<HTMLVideoElement>(null);
   const bRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const blurRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<PreviewEngine | null>(null);
 
   // only what the sequence depends on – culling in the sidebar must not re-cue the players
@@ -26,7 +27,7 @@ export function PreviewPlayer() {
   const fps = project.output.fps;
 
   useEffect(() => {
-    const engine = new PreviewEngine([aRef.current!, bRef.current!], overlayRef.current!);
+    const engine = new PreviewEngine([aRef.current!, bRef.current!], overlayRef.current!, blurRef.current);
     engineRef.current = engine;
     const off = transport.subscribe(() => engine.render(transport.time, transport.playing));
     return () => {
@@ -35,10 +36,11 @@ export function PreviewPlayer() {
     };
   }, [transport]);
 
+  const fit = project.output.fit;
   useEffect(() => {
-    engineRef.current?.setTimeline({ segs, trans, fps, scenes });
+    engineRef.current?.setTimeline({ segs, trans, fps, scenes, fit });
     engineRef.current?.render(transport.time, transport.playing);
-  }, [segs, trans, fps, scenes, transport]);
+  }, [segs, trans, fps, scenes, fit, transport]);
 
   const cuts = useMemo(() => segs.map((s) => s.startFrame / fps), [segs, fps]);
   const jump = (dir: 1 | -1) => {
@@ -51,8 +53,9 @@ export function PreviewPlayer() {
   return (
     <div className="pmv-preview">
       <div className="pmv-stage" style={{ ["--pmv-ar" as string]: project.output.width / project.output.height }} onClick={() => transport.toggle()}>
-        <video ref={aRef} className={project.output.fit === "contain" ? "is-contain" : ""} muted playsInline preload="auto" />
-        <video ref={bRef} className={project.output.fit === "contain" ? "is-contain" : ""} muted playsInline preload="auto" />
+        <canvas ref={blurRef} className="pmv-stage-blur" />
+        <video ref={aRef} muted playsInline preload="auto" />
+        <video ref={bRef} muted playsInline preload="auto" />
         <div ref={overlayRef} className="pmv-stage-overlay" />
         {segs.length === 0 && <div className="pmv-stage-empty">{t("The timeline is empty")}</div>}
       </div>

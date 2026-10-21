@@ -40,11 +40,11 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-VERSION = "0.3.2"
+VERSION = "0.3.3"
 PLUGIN_ID = "pmv-creator"
 PLAN_VERSION = 1
 # Bump when piece_command() changes, invalidates cached pieces.
-PIECE_VERSION = 2
+PIECE_VERSION = 3
 # Intermediate container: MOV keeps an exact per-frame timescale (MKV rounds to 1 ms -> VFR jitter).
 PIECE_EXT = ".mov"
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
@@ -280,7 +280,7 @@ class Out:
         self.h = int(o["height"]) // 2 * 2
         self.fps = float(o["fps"])
         self.rate = fps_expr(self.fps)
-        self.fit = "contain" if o.get("fit") == "contain" else "cover"
+        self.fit = norm_fit(o.get("fit"))
         self.codec = o.get("videoCodec") or "libx264"
         if self.codec not in ("libx264", "libx265", "h264_nvenc", "hevc_nvenc"):
             raise ValueError(f"unsupported codec: {self.codec}")
@@ -317,9 +317,26 @@ def f6(x: float) -> str:
     return f"{x:.6f}"
 
 
-def fit_filter(out: Out, fit: str) -> str:
+FITS = ("cover", "contain", "blur")
+
+
+def norm_fit(value: Any) -> str:
+    return value if value in FITS else "cover"
+
+
+def fit_filter(out: Out, fit: str, tag: str = "f") -> str:
+    """Filter text that continues a chain. `blur` branches (split) and needs labels unique per chain -> tag."""
     if fit == "contain":
         return f"scale={out.w}:{out.h}:force_original_aspect_ratio=decrease:flags=bicubic,pad={out.w}:{out.h}:(ow-iw)/2:(oh-ih)/2:color=black"
+    if fit == "blur":
+        # whole picture centred over a blurred, slightly darkened copy that fills the frame (like the PMV Generator)
+        r = max(2, min(out.w, out.h) // 24)
+        return (
+            f"split[{tag}bg][{tag}fg];"
+            f"[{tag}bg]scale={out.w}:{out.h}:force_original_aspect_ratio=increase:flags=bilinear,crop={out.w}:{out.h},boxblur={r}:2,eq=brightness=-0.08[{tag}bb];"
+            f"[{tag}fg]scale={out.w}:{out.h}:force_original_aspect_ratio=decrease:flags=bicubic[{tag}ff];"
+            f"[{tag}bb][{tag}ff]overlay=(W-w)/2:(H-h)/2:format=auto"
+        )
     return f"scale={out.w}:{out.h}:force_original_aspect_ratio=increase:flags=bicubic,crop={out.w}:{out.h}"
 
 
@@ -368,9 +385,9 @@ def piece_command(ff: str, piece: Dict[str, Any], out: Out, clip_audio: bool, de
         n_inputs += 1
         # input seeking (fast) + re-encode = frame accurate; -t limits decoding to what we need
         inputs.extend(["-ss", f6(max(0.0, float(src["in"]))), "-t", f6(dur * speed + 1.0), "-i", str(src["path"])])
-        fit = "contain" if src.get("fit") == "contain" else "cover"
+        fit = norm_fit(src.get("fit"))
         graph.append(
-            f"[{idx}:v:0]setpts=(PTS-STARTPTS)/{speed:.6f},fps={out.rate},{fit_filter(out, fit)},setsar=1,format=yuv420p,"
+            f"[{idx}:v:0]setpts=(PTS-STARTPTS)/{speed:.6f},fps={out.rate},{fit_filter(out, fit, vlabel)},setsar=1,format=yuv420p,"
             f"tpad=stop_mode=clone:stop_duration={f6(dur)},trim=end_frame={frames},setpts=PTS-STARTPTS[{vlabel}]"
         )
         if not clip_audio:

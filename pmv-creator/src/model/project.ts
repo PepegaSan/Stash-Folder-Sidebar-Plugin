@@ -30,7 +30,8 @@ export interface Transition {
   duration: Seconds;
 }
 
-export type FitMode = "cover" | "contain";
+/** cover = crop to the frame, contain = bars, blur = whole picture over a blurred, filled copy of itself. */
+export type FitMode = "cover" | "contain" | "blur";
 
 export const VIDEO_CODECS = ["libx264", "libx265", "h264_nvenc", "hevc_nvenc"] as const;
 export type VideoCodec = (typeof VIDEO_CODECS)[number];
@@ -171,7 +172,7 @@ export const DEFAULT_OUTPUT: OutputSettings = {
   width: 1920,
   height: 1080,
   fps: 30,
-  fit: "cover",
+  fit: "blur",
   videoCodec: "libx264",
   crf: 18,
   preset: "medium",

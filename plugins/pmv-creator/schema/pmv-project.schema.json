@@ -71,7 +71,7 @@
       }
     },
 
-    "fit": { "enum": ["cover", "contain"], "description": "cover = auf Zielformat beschneiden, contain = Letterbox/Pillarbox." },
+    "fit": { "enum": ["cover", "contain", "blur"], "description": "cover = crop to the frame, contain = letterbox/pillarbox, blur = whole picture over a blurred, filled copy of itself." },
 
     "audio": {
       "type": "object",

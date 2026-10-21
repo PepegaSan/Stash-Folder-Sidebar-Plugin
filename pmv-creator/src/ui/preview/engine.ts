@@ -3,6 +3,7 @@
  * the next segment, so a cut is just a visibility swap. Picture follows the transport clock; drift
  * above a threshold triggers a seek. Transitions are approximated with opacity/colour overlays.
  */
+import type { FitMode } from "../../model/project";
 import { type ResolvedTransition, type Segment, segmentIndexAt, sourceTimeAt } from "../../timeline/flatten";
 import { VideoSlot } from "../../stash/streams";
 import type { StashScene } from "../../stash/types";
@@ -13,9 +14,13 @@ export interface PreviewTimeline {
   trans: Array<ResolvedTransition | null>;
   fps: number;
   scenes: Record<string, StashScene>;
+  /** The project's framing; a clip's own `fit` overrides it. */
+  fit: FitMode;
 }
 
 const DRIFT_PLAYING = 0.15;
+/** Low-res copy of the picture behind a "blur" clip; the CSS blur does the rest. */
+const BLUR_W = 160;
 
 export class PreviewEngine {
   private slots: VideoSlot[];
@@ -26,8 +31,48 @@ export class PreviewEngine {
   constructor(
     els: [HTMLVideoElement, HTMLVideoElement],
     private overlay: HTMLElement,
+    private blur: HTMLCanvasElement | null = null,
   ) {
     this.slots = els.map((el) => new VideoSlot(el));
+    // paused: nothing re-renders when the picture arrives later – redraw the backdrop then
+    for (const el of els) for (const ev of ["loadeddata", "seeked"]) el.addEventListener(ev, this.onPicture);
+  }
+
+  private blurTarget: HTMLVideoElement | null = null;
+  private onPicture = (e: Event) => {
+    if (e.currentTarget === this.blurTarget) this.drawBlur(this.blurTarget);
+  };
+
+  /** Framing of a segment's clip, as classes on the slot (the recorder reads them too). */
+  private applyFit(el: HTMLVideoElement, seg: Segment): FitMode {
+    const fit = seg.clip?.fit ?? this.tl!.fit;
+    el.classList.toggle("is-contain", fit !== "cover");
+    el.classList.toggle("is-blur", fit === "blur");
+    return fit;
+  }
+
+  /** Blurred backdrop: a small cover-cropped copy of the active frame (CSS blurs and scales it). */
+  private drawBlur(el: HTMLVideoElement | null): void {
+    const c = this.blur;
+    if (!c) return;
+    if (!el || el.readyState < 2 || !el.videoWidth) {
+      c.style.opacity = "0";
+      return;
+    }
+    const ar = c.clientWidth && c.clientHeight ? c.clientWidth / c.clientHeight : 16 / 9;
+    const w = BLUR_W;
+    const h = Math.max(2, Math.round(BLUR_W / ar));
+    if (c.width !== w || c.height !== h) {
+      c.width = w;
+      c.height = h;
+    }
+    const g = c.getContext("2d");
+    if (!g) return;
+    const s = Math.max(w / el.videoWidth, h / el.videoHeight);
+    const dw = el.videoWidth * s;
+    const dh = el.videoHeight * s;
+    g.drawImage(el, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    c.style.opacity = "1";
   }
 
   setTimeline(tl: PreviewTimeline): void {
@@ -37,7 +82,10 @@ export class PreviewEngine {
   }
 
   dispose(): void {
-    this.slots.forEach((s) => s.dispose());
+    this.slots.forEach((s) => {
+      for (const ev of ["loadeddata", "seeked"]) s.el.removeEventListener(ev, this.onPicture);
+      s.dispose();
+    });
   }
 
   render(t: number, playing: boolean): void {
@@ -107,6 +155,10 @@ export class PreviewEngine {
     this.overlay.style.background = overlayColor;
     this.overlay.style.opacity = String(overlayAlpha);
     this.bound = want;
+    // backdrop for "blur" framing: the topmost visible slot
+    const top = [...this.slots].filter((s) => Number(s.el.style.opacity) > 0 && s.el.classList.contains("is-blur")).sort((a, b) => Number(b.el.style.zIndex) - Number(a.el.style.zIndex))[0];
+    this.blurTarget = top?.el ?? null;
+    this.drawBlur(this.blurTarget);
   }
 
   private nextClip(i: number): number {
@@ -131,6 +183,7 @@ export class PreviewEngine {
     if (!scene || !seg.clip) return;
     const slot = this.slots[slotIdx];
     const src = sourceTimeAt(seg, frame, this.tl!.fps);
+    this.applyFit(slot.el, seg);
     if (slot.sceneId !== scene.id) slot.assign(scene, src);
     const rate = clamp(seg.clip.speed, 0.0625, 16);
     if (slot.el.playbackRate !== rate) slot.el.playbackRate = rate;
@@ -151,6 +204,7 @@ export class PreviewEngine {
     if (!scene) return;
     const slot = this.slots[slotIdx];
     const src = sourceTimeAt(seg, frame, this.tl!.fps);
+    this.applyFit(slot.el, seg);
     if (slot.sceneId !== scene.id) slot.assign(scene, src);
     else if (Math.abs(slot.time - src) > 0.05) slot.seek(src);
     if (!slot.el.paused) slot.el.pause();
