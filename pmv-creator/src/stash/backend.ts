@@ -42,7 +42,10 @@ export interface MediaResult {
   path: string;
   url: string;
   name: string;
-  duration?: number;
+  /** Length as ffprobe sees the file on the server (null/absent without ffprobe). */
+  duration?: number | null;
+  /** Bytes on the server – compared with the uploaded file. */
+  size?: number;
 }
 
 const CHUNK = 3 * 1024 * 1024;
@@ -65,6 +68,7 @@ export async function uploadFile(file: Blob, name: string, onProgress: (p: numbe
     onProgress((index + 1) / total);
   }
   if (!result?.done) throw new Error(t("Upload incomplete"));
+  if (result.size != null && result.size !== file.size) throw new Error(t("Upload incomplete: {got} of {size} bytes arrived on the server", { got: result.size, size: file.size }));
   return result;
 }
 

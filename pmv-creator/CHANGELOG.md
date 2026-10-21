@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 (2026-10-21)
+
+- Clicking a clip shows it in the player: the playhead jumps to the clip unless it is already inside it.
+- Music upload: the server's file length (ffprobe) is used when the browser decodes less, with a notice; a truncated upload is reported instead of silently shortening the song.
+
 ## 0.3.1 (2026-10-21)
 
 - Help dialog (? in the toolbar): workflow in five steps and all shortcuts.

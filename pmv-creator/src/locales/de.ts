@@ -24,6 +24,8 @@ const de: Record<string, string> = {
 
   // --- stash/backend.ts
   "Upload incomplete": "Upload unvollständig",
+  "Upload incomplete: {got} of {size} bytes arrived on the server": "Upload unvollständig: {got} von {size} Bytes sind auf dem Server angekommen",
+  "The browser decoded {a} s of a {b} s file – the timeline uses {b} s; waveform and BPM come from the decoded part.": "Der Browser hat {a} s einer {b} s langen Datei dekodiert – die Timeline nutzt {b} s; Waveform und BPM stammen aus dem dekodierten Teil.",
 
   // --- stashui.tsx
   "Open in PMV Creator": "Im PMV Creator öffnen",

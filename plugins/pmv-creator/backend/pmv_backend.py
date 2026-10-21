@@ -40,7 +40,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 PLUGIN_ID = "pmv-creator"
 PLAN_VERSION = 1
 # Bump when piece_command() changes, invalidates cached pieces.
@@ -633,7 +633,12 @@ def op_upload_chunk(ctx: Context, args: dict) -> dict:
         return {"done": False}
     final = unique_path(ctx.media, safe_filename(str(args.get("name") or "audio"), "audio"))
     os.replace(part, final)
-    return {"done": True, "path": str(final), "url": MEDIA_URL + urllib.parse.quote(final.name), "name": final.name}
+    out = {"done": True, "path": str(final), "url": MEDIA_URL + urllib.parse.quote(final.name), "name": final.name, "size": final.stat().st_size}
+    # the server's view of the length – the browser's decoder may stop early on odd files
+    ffprobe = ctx.try_tool("ffprobe")
+    if ffprobe and not final.suffix.lower() == ".webm":
+        out["duration"] = probe_duration(ffprobe, str(final))
+    return out
 
 
 def op_import_audio(ctx: Context, args: dict) -> dict:

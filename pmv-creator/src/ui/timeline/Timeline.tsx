@@ -13,7 +13,7 @@ import type { StashScene } from "../../stash/types";
 import { type EditAction, applyEdit } from "../../state/reducer";
 import { useEditor } from "../../state/store";
 import { clipFromSnippet } from "../../timeline/ops";
-import { beatLength, clamp, formatBarBeat, formatTime, snapRange, snapTime } from "../../timeline/time";
+import { EPS, beatLength, clamp, formatBarBeat, formatTime, snapRange, snapTime } from "../../timeline/time";
 import { SpriteThumb, sceneHue } from "../common";
 import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions } from "../editing";
 import { useAudioAnalysis, useSprites, useTransportTime } from "../hooks";
@@ -171,11 +171,17 @@ export function Timeline() {
     setPending(action);
   };
 
+  // A plain click shows the clip in the player: the playhead jumps to its start unless it is already inside.
+  const showClip = (c: Clip) => {
+    if (transport.time < c.start - EPS || transport.time >= clipEnd(c) - EPS) transport.seek(c.start);
+  };
+
   const onUp = () => {
     window.removeEventListener("pointermove", onMove);
     const d = dragRef.current;
     dragRef.current = null;
     if (d?.moved && pendingRef.current) dispatch(pendingRef.current);
+    else if (d && !d.moved && d.kind === "move") showClip(d.clip);
     setPending(null);
   };
 
@@ -184,7 +190,10 @@ export function Timeline() {
     e.stopPropagation();
     e.preventDefault();
     dispatch({ type: "ui", patch: { selectedClipId: clip.id } });
-    if (track.locked) return;
+    if (track.locked) {
+      showClip(clip);
+      return;
+    }
     dragRef.current = { kind: kind === "move" && e.altKey ? "slip" : kind, clip, trackId: track.id, x0: e.clientX, y0: e.clientY, moved: false };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp, { once: true });

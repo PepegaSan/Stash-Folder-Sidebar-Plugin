@@ -232,17 +232,19 @@ function AudioSection() {
   const fileRef = useRef<HTMLInputElement>(null);
   const { error } = useAudioAnalysis(audio?.url);
 
-  const adopt = async (name: string, path: string, url: string) => {
+  const adopt = async (name: string, path: string, url: string, probed?: number | null) => {
     setStatus(t("Analysing…"));
     const a = await getAudioAnalysis(url);
-    dispatch({ type: "audio/set", audio: { ...createAudioTrack(name, path, url, a.duration), ...(audio ? { start: audio.start, gainDb: audio.gainDb, fadeIn: audio.fadeIn, fadeOut: audio.fadeOut } : {}) } });
-    setStatus(null);
+    // the render uses the file on the server, so its length (ffprobe) wins when the browser decoded less
+    const duration = Math.max(a.duration, probed ?? 0);
+    dispatch({ type: "audio/set", audio: { ...createAudioTrack(name, path, url, duration), ...(audio ? { start: audio.start, gainDb: audio.gainDb, fadeIn: audio.fadeIn, fadeOut: audio.fadeOut } : {}) } });
+    setStatus(probed && Math.abs(probed - a.duration) > 1 ? t("The browser decoded {a} s of a {b} s file – the timeline uses {b} s; waveform and BPM come from the decoded part.", { a: a.duration.toFixed(1), b: probed.toFixed(1) }) : null);
   };
   const onFile = async (f: File) => {
     try {
       setStatus(t("Upload {pct} %", { pct: 0 }));
       const r = await uploadAudio(f, (p) => setStatus(t("Upload {pct} %", { pct: Math.round(p * 100) })));
-      await adopt(r.name, r.path, r.url);
+      await adopt(r.name, r.path, r.url, r.duration);
     } catch (e) {
       setStatus(t("Error: {error}", { error: String(e) }));
     }
@@ -251,7 +253,7 @@ function AudioSection() {
     try {
       setStatus(t("Importing…"));
       const r = await importAudio(serverPath.trim());
-      await adopt(r.name, r.path, r.url);
+      await adopt(r.name, r.path, r.url, r.duration);
     } catch (e) {
       setStatus(t("Error: {error}", { error: String(e) }));
     }
