@@ -1,7 +1,8 @@
 /**
  * Stash UI extension module (Extension API v2). Stash UI imports /plugin/pmv-creator/assets/stashui.js
  * and calls setup(): a "PMV Creator" entry under Watch, the editor as a full-screen overlay page, and
- * entry points in the player's gear menu, its info bar and the selection bar of scene lists.
+ * entry points in the player's gear menu, its info bar, the selection bar of scene lists and the headers of
+ * performer and tag pages ("PMV with …").
  * This bundle carries its own React – Stash UI has no PluginApi.
  */
 import React from "react";
@@ -36,6 +37,7 @@ interface StashUI {
 interface SlotCtx {
   kind?: string;
   id?: string | number;
+  item?: { name?: string };
   time?: () => number;
   ids?: () => Array<string | number>;
 }
@@ -111,6 +113,23 @@ export default function setup(stashui: StashUI): void {
       },
     });
   }
+  // performer / tag pages: a new PMV with them – the generator opens with them as its filter
+  for (const [slot, param, text] of [
+    ["performer.header", "performer", () => t("PMV with this performer")],
+    ["tag.header", "tag", () => t("PMV with this tag")],
+  ] as const) {
+    if (!stashui.has(`slot:${slot}`)) continue;
+    stashui.addSlot(slot, {
+      id: "pmv",
+      mount(el, ctx) {
+        lang();
+        const b = button(text(), () => open({ [param]: String(ctx.id) }), "kb-btn is-ghost");
+        b.title = t("A new PMV project: the generator picks clips with {name}", { name: ctx.item?.name ?? "" });
+        el.appendChild(b);
+      },
+    });
+  }
+
   // scene lists: the selection goes into the project pool
   if (stashui.has("slot:bulk.actions")) {
     stashui.addSlot("bulk.actions", {

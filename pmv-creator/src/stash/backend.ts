@@ -79,6 +79,8 @@ export interface RecordingResult {
   file: string;
   seconds?: number;
   warning?: string;
+  /** Stash got a scan of the output folder (plugin setting "Scan after rendering"). */
+  scanned?: boolean;
 }
 
 /** Moves an uploaded browser recording into the output folder (remuxed by FFmpeg when available) and scans it. */
@@ -86,6 +88,31 @@ export const saveRecording = (path: string, name: string) => runOp<RecordingResu
 
 /** Uses a file that already exists on the server (copied into the media folder for the preview). */
 export const importAudio = (path: string) => runOp<MediaResult>({ op: "import_audio", path });
+
+export interface LibrarySong {
+  name: string;
+  path: string;
+  url: string;
+  size: number;
+  /** Seconds since the epoch. */
+  mtime: number;
+}
+
+/** The song library: songs uploaded before (the media folder on the server), newest first. */
+export const listMedia = () => runOp<LibrarySong[]>({ op: "list_media" });
+
+/** The sound of a video on the server as a song in the media folder (another PMV whose cuts are taken over). */
+export const extractAudio = (path: string, name: string) => runOp<MediaResult>({ op: "extract_audio", path, name });
+
+export interface PresetEntry {
+  name: string;
+  settings: Record<string, unknown>;
+}
+
+/** Saved generator settings, kept on the server (every browser of this Stash sees them). */
+export const listPresets = () => runOp<PresetEntry[]>({ op: "list_presets" });
+export const savePreset = (name: string, settings: Record<string, unknown>) => runOp<PresetEntry[]>({ op: "save_preset", name, settings });
+export const deletePreset = (name: string) => runOp<PresetEntry[]>({ op: "delete_preset", name });
 
 export const probeKeyframes = (path: string) => runOp<number[]>({ op: "keyframes", path });
 
@@ -197,6 +224,10 @@ export interface RenderResult {
   warning?: string;
   /** Rendered by the helper on this PC (file is a path on that PC). */
   helper?: string;
+  /** Stash got a scan of the output folder (plugin setting "Scan after rendering"). */
+  scanned?: boolean;
+  /** PC render into a mapped folder: the file as Stash sees it. */
+  stashFile?: string;
   pieces?: number;
   cached?: number;
   seconds?: number;

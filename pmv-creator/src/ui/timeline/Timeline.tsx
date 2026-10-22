@@ -15,7 +15,7 @@ import { useEditor } from "../../state/store";
 import { clipFromSnippet, findClip } from "../../timeline/ops";
 import { EPS, beatLength, clamp, formatBarBeat, formatTime, snapRange, snapTime } from "../../timeline/time";
 import { SpriteThumb, sceneHue, transitionLabel } from "../common";
-import { ReplaceAllButton, SourceToggle } from "../monitor";
+import { ClipActions, ClipNotice, ReplaceAllButton, SourceToggle } from "../monitor";
 import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions } from "../editing";
 import { useAudioAnalysis, useSprites, useTransportTime } from "../hooks";
 import { Waveform } from "./Waveform";
@@ -268,6 +268,7 @@ export function Timeline() {
         <span className="pmv-spacer" />
         <SourceToggle />
         <ReplaceAllButton />
+        <ClipActions />
         <span className="pmv-spacer" />
         {ui.advanced && (
           <>
@@ -297,6 +298,7 @@ export function Timeline() {
           {t("Fit")}
         </button>
       </div>
+      <ClipNotice />
 
       <div
         className="pmv-tl-scroll"
@@ -469,13 +471,14 @@ const ClipBlock = memo(function ClipBlock({ clip, track, zoom, scene, sourceTitl
     t("Source {from} – {to}", { from: formatTime(clip.sourceIn), to: formatTime(clipSourceOut(clip)) }),
     clip.speed !== 1 ? t("Speed {speed}×", { speed: clip.speed }) : "",
     excluded ? t("⚠ overlaps an excluded range") : "",
+    clip.pinned ? t("📌 kept when generating again") : "",
     t("Drag: move · edges: trim · Alt+drag: slip · Shift: no snapping · double-click: edit the source"),
   ]
     .filter(Boolean)
     .join("\n");
   return (
     <div
-      className={`pmv-clip ${selected ? "is-selected" : ""} ${sameScene ? "is-same-scene" : ""} ${ghost ? "is-ghost" : ""} ${excluded ? "is-excluded" : ""} ${missing ? "is-missing" : ""}`}
+      className={`pmv-clip ${selected ? "is-selected" : ""} ${sameScene ? "is-same-scene" : ""} ${ghost ? "is-ghost" : ""} ${excluded ? "is-excluded" : ""} ${missing ? "is-missing" : ""} ${clip.pinned ? "is-pinned" : ""}`}
       style={{ left: clip.start * zoom, width, ["--hue" as string]: sceneHue(clip.sceneId) }}
       title={title}
       onPointerDown={(e) => onPointerDown(e, clip, track, "move")}
@@ -487,6 +490,7 @@ const ClipBlock = memo(function ClipBlock({ clip, track, zoom, scene, sourceTitl
         </div>
       )}
       <div className="pmv-clip-label">
+        {clip.pinned && <span className="pmv-badge">📌</span>}
         {clip.speed !== 1 && <span className="pmv-badge">{Number(clip.speed.toFixed(2))}×</span>}
         {clip.label || sourceTitle || clip.sceneId}
       </div>

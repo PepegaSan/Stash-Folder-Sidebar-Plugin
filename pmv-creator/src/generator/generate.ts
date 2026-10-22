@@ -5,13 +5,14 @@
  */
 import { overlapsExclusion } from "../culling/culling";
 import type { Clip, PmvProject, Snippet, SourceMedia } from "../model/project";
-import { audioEnd } from "../model/project";
+import { audioEnd, clipEnd } from "../model/project";
 import { carve } from "../timeline/ops";
 import { EPS, beatLength, nearestGridTime } from "../timeline/time";
 import { type FillContext, type FillOptions, type OffsetMode, type PickOrder, type TransitionPolicy, fillSlots } from "./assemble";
 import type { ClipOptions, MaterialItem } from "./material";
 import { type Rhythm, beatFit } from "./motion";
 import { type CutOptions, type EnergyFn, analyzeBeats, assignStages, planCuts } from "./rhythm";
+import { templateShift, templateSlots } from "./template";
 
 export type Mood = "classic" | "maximal" | "hypno" | "clean" | "custom";
 export type RangeMode = "song" | "playhead" | "bars";
@@ -102,7 +103,8 @@ export function defaultSettings(trackId: string): GeneratorSettings {
 export function applyMood(s: GeneratorSettings, mood: Mood): GeneratorSettings {
   if (mood === "custom") return { ...s, mood };
   const m = MOODS[mood];
-  return { ...s, mood, cut: { ...s.cut, ...m.cut }, style: { ...s.style, ...m.style } };
+  // cuts taken over from another PMV stay – the mood then only sets the style
+  return { ...s, mood, cut: s.cut.mode === "template" ? s.cut : { ...s.cut, ...m.cut }, style: { ...s.style, ...m.style } };
 }
 
 /** Generated range: the song, from the (bar-snapped) playhead to its end, or N bars from the playhead. */
@@ -128,6 +130,8 @@ export interface GenerationResult {
   snippets: Snippet[];
   sources: SourceMedia[];
   seed: number;
+  /** The settings of this run – remembered in the project for re-rolling single clips. */
+  settings: GeneratorSettings;
 }
 
 export interface GenerationStats {
@@ -175,11 +179,18 @@ export function buildGeneration(p: PmvProject, s: GeneratorSettings, range: { fr
   const all = usable.flat();
   const pools = usable.map((pool) => (pool.length ? pool : all));
 
+  const tpl = s.cut.mode === "template" ? p.cutTemplate : null;
+  const shift = tpl ? templateShift(tpl, p.audio, range.from) : 0;
+  if (tpl) range = { ...range, to: Math.min(range.to, shift + tpl.duration) };
   const beats = analyzeBeats(p.beatGrid, range.from, range.to, input.energy);
-  const slots = all.length ? planCuts(beats, p.beatGrid, range.from, range.to, s.cut) : [];
+  const slots = !all.length
+    ? []
+    : tpl
+      ? templateSlots(beats, p.beatGrid, range.from, range.to, tpl.cuts.map((c) => c + shift), tpl.flashes.map((f) => f + shift))
+      : planCuts(beats, p.beatGrid, range.from, range.to, s.cut.mode === "template" ? { ...s.cut, mode: "auto" } : s.cut);
   const stages = assignStages(slots, pools.length, beatLength(p.beatGrid));
   const fill: FillOptions = { seed: s.seed, ...s.select, ...s.style };
-  let clips = fillSlots(withSources, slots, stages, pools, fill, input.context);
+  let clips = fillSlots(withSources, slots, stages, pools, fill, input.context, pinnedClips(p, s.target.trackId));
 
   const used = new Set(clips.map((c) => c.snippetId));
   const snippets = s.target.addToBin ? all.map((it) => it.snippet).filter((sn) => used.has(sn.id)) : [];
@@ -195,6 +206,7 @@ export function buildGeneration(p: PmvProject, s: GeneratorSettings, range: { fr
       snippets,
       sources: input.sources.filter((x) => scenes.has(x.sceneId)),
       seed: s.seed,
+      settings: s,
     },
     stats: { clips: clips.length, scenes: scenes.size, candidates: all.length, drops: beats.filter((b) => b.drop).length, stages: pools.length },
   };
@@ -228,7 +240,10 @@ export function applyBeatSync(clips: Clip[], rhythms: Record<string, Rhythm | nu
   return { clips: out, synced };
 }
 
-/** Reducer side: one atomic edit – sources, bin (de-duplicated), track content. */
+/** Pinned clips of a track – the generator keeps them and fills around them. */
+export const pinnedClips = (p: PmvProject, trackId: string): Clip[] => p.tracks.find((t) => t.id === trackId)?.clips.filter((c) => c.pinned) ?? [];
+
+/** Reducer side: one atomic edit – sources, bin (de-duplicated), track content, the run's settings. */
 export function applyGeneration(p: PmvProject, r: GenerationResult): PmvProject {
   const idx = p.tracks.findIndex((t) => t.id === r.trackId);
   if (idx < 0 || p.tracks[idx].locked || !r.clips.length) return p;
@@ -242,10 +257,15 @@ export function applyGeneration(p: PmvProject, r: GenerationResult): PmvProject 
     if (existing) remap.set(sn.id, existing.id);
     else bin.push(sn);
   }
-  const clips = r.clips.map((c) => (c.snippetId && remap.has(c.snippetId) ? { ...c, snippetId: remap.get(c.snippetId)! } : c));
-  const end = Math.max(...clips.map((c) => c.start + c.duration));
-  const kept = r.replaceTrack ? [] : carve(p.tracks[idx].clips, r.from, Math.max(r.to, end), 1 / p.output.fps);
+  const minDur = 1 / p.output.fps;
+  const pins = p.tracks[idx].clips.filter((c) => c.pinned);
+  // pinned clips stay (also with "clear the track first"); new clips give way to them
+  let clips = r.clips.map((c) => (c.snippetId && remap.has(c.snippetId) ? { ...c, snippetId: remap.get(c.snippetId)! } : c));
+  for (const pin of pins) clips = carve(clips, pin.start, clipEnd(pin), minDur);
+  const end = Math.max(...r.clips.map((c) => c.start + c.duration));
+  const others = p.tracks[idx].clips.filter((c) => !c.pinned);
+  const kept = r.replaceTrack ? [] : carve(others, r.from, Math.max(r.to, end), minDur);
   const tracks = p.tracks.slice();
-  tracks[idx] = { ...tracks[idx], clips: [...kept, ...clips].sort((a, b) => a.start - b.start) };
-  return { ...p, sources, bin, tracks };
+  tracks[idx] = { ...tracks[idx], clips: [...kept, ...pins, ...clips].sort((a, b) => a.start - b.start) };
+  return { ...p, sources, bin, tracks, generator: { settings: r.settings, from: r.from, to: r.to } };
 }

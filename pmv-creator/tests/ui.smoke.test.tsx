@@ -38,6 +38,7 @@ function fixtureProject() {
 }
 
 const saved: unknown[] = [];
+const tagged: unknown[] = [];
 
 function graphql(body: { query: string; variables?: Record<string, any> }) {
   const q = body.query;
@@ -47,6 +48,8 @@ function graphql(body: { query: string; variables?: Record<string, any> }) {
       ping: { version: "test", ffmpeg: "ffmpeg", ffprobe: "ffprobe", python: "3" },
       load_project: fixtureProject(),
       list_projects: [],
+      list_presets: [{ name: "Hypno Mia", settings: { mood: "hypno", clips: { source: "project" } } }],
+      list_media: [{ name: "Neon Nights.mp3", path: "/media/neon.mp3", url: "/plugin/pmv-creator/assets/media/neon.mp3", size: 4000000, mtime: 1792000000 }],
     };
     if (args.op === "save_project") saved.push(args.project);
     return { runPluginOperation: out[args.op] ?? { path: "/x" } };
@@ -59,6 +62,11 @@ function graphql(body: { query: string; variables?: Record<string, any> }) {
     return { findScenes: { count: scenes.length, scenes } };
   }
   if (q.includes("findTags")) return { findTags: { tags: [] } };
+  if (q.includes("tagCreate")) return { tagCreate: { id: "77" } };
+  if (q.includes("bulkSceneUpdate")) {
+    tagged.push(body.variables?.input);
+    return { bulkSceneUpdate: [{ id: "1" }] };
+  }
   if (q.includes("PmvLang")) return { configuration: { interface: { language: "en-US" } } };
   return {};
 }
@@ -304,9 +312,75 @@ describe("PMV Creator UI (mocked Stash)", () => {
     expect($$(".pmv-clip").length).toBe(after);
   });
 
+  it("applies a preset, offers the cuts of another PMV and lists the song library", async () => {
+    await fire(byText("⚡ Generate PMV")!, new MouseEvent("click", { bubbles: true }));
+    const select = $$(".pmv-gen select").find((s) => s.querySelector("option[value='Hypno Mia']")) as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "Hypno Mia");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const on = () => $$(".pmv-gen .pmv-seg button.is-on").map((b) => b.textContent);
+    expect(on()).toContain("Hypno");
+    expect(on()).toContain("Project scenes");
+    // cuts like another PMV: the PMVs of the library to pick from; without one, nothing to generate yet
+    await fire($$(".pmv-gen .pmv-seg button").find((b) => b.textContent === "Like another PMV")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => $$(".pmv-gen-pmv").length > 0);
+    expect(byText("⚡ Generate")!.hasAttribute("disabled")).toBe(true);
+    await fire($$(".pmv-gen .pmv-seg button").find((b) => b.textContent === "To the music")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-gen-template")).toBeNull();
+    expect(byText("⚡ Generate")!.hasAttribute("disabled")).toBe(false);
+    await fire(byText("Close")!, new MouseEvent("click", { bubbles: true }));
+    // the song library next to the upload (inspector, nothing selected)
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await fire(byText("🎵 From the library…")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-songs")?.textContent?.includes("Neon Nights.mp3"));
+    await fire($$(".pmv-songs button").find((b) => b.textContent === "✕")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-songs")).toBeNull();
+  });
+
+  it("re-rolls, keeps and takes a scene out from the bar above the timeline", async () => {
+    const v1Lane = () => $$(".pmv-lane[data-track-id]")[1];
+    const first = () => Array.from(v1Lane().querySelectorAll<HTMLElement>(".pmv-clip")).find((el) => el.style.left === "0px")!;
+    const scene = () => first().title.split("\n")[0];
+    const button = (text: string) => $$(".pmv-tl-toolbar button").find((b) => b.textContent?.startsWith(text)) ?? null;
+    await fire(first(), new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await fire(window, new MouseEvent("pointerup", { bubbles: true }));
+    // 📌 keep (P toggles it, the clip shows it)
+    await fire(document.body, new KeyboardEvent("keydown", { key: "p", bubbles: true }));
+    expect(first().classList.contains("is-pinned")).toBe(true);
+    expect(button("📌 Kept")).not.toBeNull();
+    await fire(button("📌 Kept")!, new MouseEvent("click", { bubbles: true }));
+    expect(first().classList.contains("is-pinned")).toBe(false);
+    // 🎲 another clip: the other project scene, same place and length, one undo step
+    const before = { scene: scene(), left: first().style.left, width: first().style.width };
+    await fire(button("🎲 Another clip")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !$(".pmv-tl-notice"));
+    expect(scene()).not.toBe(before.scene);
+    expect([first().style.left, first().style.width]).toEqual([before.left, before.width]);
+    await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    expect(scene()).toBe(before.scene);
+    // ⊘ scene out: every clip of it gets the other scene; then the Stash tag for good
+    const count = (title: string) => $$(".pmv-clip").filter((el) => el.title.startsWith(title)).length;
+    const other = before.scene === "Scene One" ? "Scene Two" : "Scene One";
+    const total = count(before.scene) + count(other);
+    await fire(button("⊘ Scene out")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-tl-notice")?.textContent?.includes("is out of this PMV"));
+    expect(count(before.scene)).toBe(0);
+    expect(count(other)).toBe(total);
+    await fire($$(".pmv-tl-notice button").find((b) => b.textContent === "Never use it again")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-tl-notice")?.textContent?.includes("is never used again"));
+    expect(tagged).toEqual([{ ids: [expect.any(String)], tag_ids: { ids: ["77"], mode: "ADD" } }]);
+    await fire($$(".pmv-tl-notice button").find((b) => b.title === "Close")!, new MouseEvent("click", { bubbles: true }));
+    await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    expect(count(before.scene)).toBeGreaterThan(0);
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
   it("opens the render dialog with a plan summary", async () => {
     await fire(byText("Render")!, new MouseEvent("click", { bubbles: true }));
     expect($(".pmv-modal")?.textContent).toMatch(/\d+ segments/);
+    expect($(".pmv-modal")?.textContent).toContain("Label it in Stash");
     await fire($$(".pmv-modal button").find((b) => b.textContent === "✕")!, new MouseEvent("click", { bubbles: true }));
   });
 

@@ -7,8 +7,10 @@
  */
 import { type GenerationResult, applyGeneration } from "../generator/generate";
 import type { ClipSource } from "../generator/material";
+import type { StashRef } from "../stash/types";
+import { type MaterialChange, applyMaterial } from "../generator/reroll";
 import { readAdvanced } from "./prefs";
-import type { AudioTrack, BeatGrid, Clip, Exclusion, OutputSettings, PmvProject, Snippet, SourceMedia, TimelineMarker, Track, Transition } from "../model/project";
+import type { AudioTrack, BeatGrid, Clip, CutTemplate, Exclusion, OutputSettings, PmvProject, Snippet, SourceMedia, TimelineMarker, Track, Transition } from "../model/project";
 import {
   type ClipPatch,
   type ClipSourceInput,
@@ -45,6 +47,10 @@ export type EditAction =
   /** Every clip of scene `from` gets scene `to` (same relative spot, places and lengths stay). */
   | { type: "scene/swap"; from: string; to: string; label: string; sources: SourceMedia[] }
   | { type: "clip/replace"; clipId: string; snippetId: string }
+  /** New material for clips, places and lengths stay ("another clip"); `exclusions` are added in the same step. */
+  | { type: "clips/material"; changes: MaterialChange[]; sources: SourceMedia[]; exclusions?: Exclusion[] }
+  /** Pinned clips stay when the generator runs again. */
+  | { type: "clips/pin"; clipIds: string[]; pinned: boolean }
   /** New material for the same slot (start/duration stay); fit = play exactly the given range. */
   | { type: "clip/source"; clipId: string; source: ClipSourceInput; fit: boolean; sources: SourceMedia[] }
   | { type: "clip/split"; clipId: string; time: number }
@@ -67,7 +73,9 @@ export type EditAction =
   | { type: "project/rename"; name: string }
   | { type: "marker/add"; marker: TimelineMarker }
   | { type: "marker/remove"; markerId: string }
-  | { type: "generate/apply"; result: GenerationResult };
+  | { type: "generate/apply"; result: GenerationResult }
+  /** Another PMV whose cuts the generator takes over (null = none). */
+  | { type: "template/set"; template: CutTemplate | null };
 
 const addSources = (p: PmvProject, sources: SourceMedia[]): PmvProject =>
   sources.length ? { ...p, sources: { ...p.sources, ...Object.fromEntries(sources.map((s) => [s.sceneId, s])) } } : p;
@@ -96,6 +104,29 @@ export function applyEdit(p: PmvProject, a: EditAction): PmvProject {
     case "clip/replace": {
       const s = p.bin.find((x) => x.id === a.snippetId);
       return s ? replaceClip(p, a.clipId, s) : p;
+    }
+    case "clips/material": {
+      if (!a.changes.length && !a.exclusions?.length) return p;
+      const withSources = addSources(p, a.sources);
+      return applyMaterial(a.exclusions?.length ? { ...withSources, exclusions: [...p.exclusions, ...a.exclusions] } : withSources, a.changes);
+    }
+    case "clips/pin": {
+      const ids = new Set(a.clipIds);
+      let changed = false;
+      const tracks = p.tracks.map((t) =>
+        t.clips.some((c) => ids.has(c.id) && !!c.pinned !== a.pinned)
+          ? {
+              ...t,
+              clips: t.clips.map((c) => {
+                if (!ids.has(c.id) || !!c.pinned === a.pinned) return c;
+                changed = true;
+                const { pinned: _old, ...rest } = c;
+                return a.pinned ? { ...rest, pinned: true } : rest;
+              }),
+            }
+          : t,
+      );
+      return changed ? { ...p, tracks } : p;
     }
     case "clip/source": {
       const withSources = addSources(p, a.sources);
@@ -158,6 +189,8 @@ export function applyEdit(p: PmvProject, a: EditAction): PmvProject {
       return { ...p, markers: p.markers.filter((m) => m.id !== a.markerId) };
     case "generate/apply":
       return applyGeneration(p, a.result);
+    case "template/set":
+      return { ...p, cutTemplate: a.template };
   }
 }
 
@@ -194,6 +227,12 @@ export interface UiState {
   sceneRequest: number;
   /** Picking the scene that replaces every clip of this scene (scene list on the left), null = not picking. */
   swapFrom: string | null;
+  /** Status of "another clip" / "scene out" (they ask Stash for candidates first), null = idle. */
+  clipTask: { text: string; error: boolean } | null;
+  /** A scene was just taken out of the PMV – the bar above the timeline offers to skip it for good. */
+  sceneOut: { sceneId: string; title: string; replaced: number; tagged: boolean } | null;
+  /** "PMV with this performer/tag" from Stash: the generator opens with these filters (once). */
+  clipPreset: { performers: StashRef[]; tags: StashRef[]; label: string } | null;
   sidebarTab: SidebarTab;
   /** Pixels per second. */
   zoom: number;
@@ -238,6 +277,9 @@ export const DEFAULT_UI: UiState = {
   sceneInPlayer: true,
   sceneRequest: 0,
   swapFrom: null,
+  clipTask: null,
+  sceneOut: null,
+  clipPreset: null,
   sidebarTab: "scenes",
   zoom: 60,
   editMode: "clamp",
@@ -273,7 +315,7 @@ export function editorReducer(state: EditorState, action: Action, now: number = 
       return { ...state, past: [...state.past, state.present], present, future, lastEdit: null, ui: fixSelection(state.ui, present) };
     }
     case "project/load":
-      return initialEditorState(action.project, { ...state.ui, selectedClipId: null, selectedSnippetId: null, activeSceneId: null, swapFrom: null, saveState: "saved" });
+      return initialEditorState(action.project, { ...state.ui, selectedClipId: null, selectedSnippetId: null, activeSceneId: null, swapFrom: null, clipTask: null, sceneOut: null, saveState: "saved" });
     case "ui": {
       const ui = { ...state.ui, ...action.patch };
       // opening a scene (from anywhere) shows it in the main player

@@ -1283,6 +1283,81 @@
   cursor: help;
 }
 
+/* generator: "like another PMV" (pick a PMV, its cuts) and the presets */
+.pmv-gen-template {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--pmv-border);
+  border-radius: 4px;
+  background: var(--pmv-panel-2);
+  font-size: 12px;
+}
+.pmv-gen-pmvs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+}
+.pmv-gen-pmv {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid var(--pmv-border);
+  border-radius: 4px;
+  background: var(--pmv-panel);
+  color: inherit;
+  text-align: left;
+  font-size: 11px;
+}
+.pmv-gen-pmv:hover:not(:disabled) {
+  border-color: var(--pmv-accent);
+}
+.pmv-gen-pmv img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 3px;
+}
+.pmv-gen-pmv span {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pmv-gen-pmv b {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pmv-gen-preset {
+  width: auto;
+  max-width: 260px;
+}
+.pmv-songs {
+  width: min(520px, 92vw);
+}
+.pmv-songs .pmv-list {
+  max-height: 55vh;
+  overflow: auto;
+}
+
+/* status of 🎲 / ⊘ and the "never use it again" offer, under the bar above the timeline */
+.pmv-tl-notice {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--pmv-border);
+  background: var(--pmv-panel-2);
+  font-size: 12px;
+}
+.pmv-clip.is-pinned {
+  box-shadow: inset 0 -3px 0 var(--pmv-warn);
+}
+
 /* "Edit source" / "Back to the PMV" in the middle of the bar above the timeline */
 .pmv-source-toggle {
   min-width: 180px;

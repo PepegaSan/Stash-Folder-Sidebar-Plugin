@@ -155,6 +155,16 @@ export async function findTags(q: string): Promise<StashRef[]> {
   return data.findTags.tags;
 }
 
+/** A performer / tag by id (deep links "PMV with …"), null when Stash doesn't know it. */
+export async function performerRef(id: string): Promise<StashRef | null> {
+  const data = await gql<{ findPerformer: StashRef | null }>(`query PmvPerformer($id: ID!) { findPerformer(id: $id) { id name } }`, { id });
+  return data.findPerformer;
+}
+export async function tagRef(id: string): Promise<StashRef | null> {
+  const data = await gql<{ findTag: StashRef | null }>(`query PmvTag($id: ID!) { findTag(id: $id) { id name } }`, { id });
+  return data.findTag;
+}
+
 export async function findPerformers(q: string): Promise<StashRef[]> {
   const data = await gql<{ findPerformers: { performers: StashRef[] } }>(
     `query PmvPerformers($filter: FindFilterType) { findPerformers(filter: $filter) { performers { id name } } }`,

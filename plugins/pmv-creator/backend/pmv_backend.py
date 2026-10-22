@@ -47,7 +47,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-VERSION = "0.7.2"
+VERSION = "0.8.0"
 PLUGIN_ID = "pmv-creator"
 PLAN_VERSION = 1
 # Bump when piece_command() changes, invalidates cached pieces.
@@ -627,7 +627,7 @@ def op_ping(ctx: Context, args: dict) -> dict:
 def op_save_project(ctx: Context, args: dict) -> dict:
     project = as_json(args.get("project"))
     if not isinstance(project, dict):
-        raise ValueError("project fehlt")
+        raise ValueError("project missing")
     pid = require_id(project.get("id"), "project id")
     path = ctx.projects / f"{pid}.pmv.json"
     atomic_write(path, json.dumps(project, ensure_ascii=False, indent=1).encode("utf-8"))
@@ -691,6 +691,67 @@ def op_import_audio(ctx: Context, args: dict) -> dict:
     return {"path": str(src), "url": MEDIA_URL + urllib.parse.quote(preview.name), "name": src.name, "duration": probe_duration(ffprobe, str(src)) if ffprobe else None}
 
 
+SONG_EXT = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".oga", ".opus", ".wma", ".aif", ".aiff"}
+
+
+def op_list_media(ctx: Context, args: dict) -> list:
+    """The song library: songs uploaded (or extracted) before, in the media folder – newest first."""
+    out = []
+    if ctx.media.is_dir():
+        for f in ctx.media.iterdir():
+            if f.is_file() and f.suffix.lower() in SONG_EXT and not f.name.startswith("."):
+                st = f.stat()
+                out.append({"name": f.name, "path": str(f), "url": MEDIA_URL + urllib.parse.quote(f.name), "size": st.st_size, "mtime": st.st_mtime})
+    return sorted(out, key=lambda x: x["mtime"], reverse=True)
+
+
+def op_extract_audio(ctx: Context, args: dict) -> dict:
+    """The sound of a video (another PMV whose cuts are taken over) as a song in the media folder (AAC, .m4a).
+    The same name again reuses the file that is already there."""
+    src = Path(str(args.get("path") or ""))
+    if not src.is_file():
+        raise FileNotFoundError(f"file not found: {src}")
+    ctx.media.mkdir(parents=True, exist_ok=True)
+    dest = ctx.media / f"{safe_filename(str(args.get('name') or src.stem), 'audio')}.m4a"
+    if not (dest.is_file() and dest.stat().st_size > 0):
+        tmp = dest.with_name(f".{dest.name}.tmp.m4a")
+        r = subprocess.run([ctx.tool("ffmpeg"), "-v", "error", "-nostdin", "-y", "-i", str(src), "-map", "0:a:0", "-vn", "-c:a", "aac", "-b:a", "256k", str(tmp)],
+                           capture_output=True, text=True, timeout=900)
+        if r.returncode != 0 or not tmp.is_file():
+            tmp.unlink(missing_ok=True)
+            raise RuntimeError(f"the video has no usable sound track: {r.stderr.strip()[-300:]}")
+        os.replace(tmp, dest)
+    ffprobe = ctx.try_tool("ffprobe")
+    return {"path": str(dest), "url": MEDIA_URL + urllib.parse.quote(dest.name), "name": dest.name, "duration": probe_duration(ffprobe, str(dest)) if ffprobe else None}
+
+
+def _presets_file(ctx: Context) -> Path:
+    return ctx.base / "presets.json"
+
+
+def op_list_presets(ctx: Context, args: dict) -> list:
+    """Saved generator settings (shared by every browser of this Stash)."""
+    items = _read_json(_presets_file(ctx), [])
+    return [p for p in items if isinstance(p, dict) and p.get("name")] if isinstance(items, list) else []
+
+
+def op_save_preset(ctx: Context, args: dict) -> list:
+    name = str(args.get("name") or "").strip()[:80]
+    settings = as_json(args.get("settings"))
+    if not name or not isinstance(settings, dict):
+        raise ValueError("a preset needs a name and settings")
+    items = [p for p in op_list_presets(ctx, {}) if p["name"] != name] + [{"name": name, "settings": settings}]
+    items.sort(key=lambda p: p["name"].lower())
+    atomic_write(_presets_file(ctx), json.dumps(items, ensure_ascii=False, indent=1).encode("utf-8"))
+    return items
+
+
+def op_delete_preset(ctx: Context, args: dict) -> list:
+    items = [p for p in op_list_presets(ctx, {}) if p["name"] != str(args.get("name") or "")]
+    atomic_write(_presets_file(ctx), json.dumps(items, ensure_ascii=False, indent=1).encode("utf-8"))
+    return items
+
+
 def op_save_recording(ctx: Context, args: dict) -> dict:
     """A browser recording (WebM from MediaRecorder) uploaded via upload_chunk: into the output folder, scanned like a render.
     MediaRecorder files carry no duration/cues; a copy remux through FFmpeg fixes that when FFmpeg is around."""
@@ -718,10 +779,7 @@ def op_save_recording(ctx: Context, args: dict) -> dict:
     ffprobe = ctx.try_tool("ffprobe")
     if ffprobe:
         result["seconds"] = probe_duration(ffprobe, str(dest))
-    if ctx.settings.get("scanAfterRender") and ctx.stash:
-        warning = scan_output(ctx, dest.parent)
-        if warning:
-            result["warning"] = warning
+    scan_into(ctx, dest.parent, result)
     log_info(f"Recording saved: {dest}")
     return result
 
@@ -847,13 +905,21 @@ def task_render(ctx: Context, args: dict) -> dict:
         shutil.rmtree(ctx.work / render_id, ignore_errors=True)
     if ctx.settings.get("clearCache"):
         op_clear_cache(ctx, {})
-    if ctx.settings.get("scanAfterRender") and ctx.stash:
-        warning = scan_output(ctx, dest.parent)
-        if warning:
-            result["warning"] = warning
+    scan_into(ctx, dest.parent, result)
     atomic_write(status_file, json.dumps({"status": "done", **result}).encode())
     log_info(f"Done: {result['file']}")
     return result
+
+
+def scan_into(ctx: Context, folder: Path, result: Dict[str, Any]) -> None:
+    """Scan after rendering (plugin setting): result["scanned"] = True once Stash got the scan, otherwise a warning."""
+    if not (ctx.settings.get("scanAfterRender") and ctx.stash):
+        return
+    warning = scan_output(ctx, folder)
+    if warning:
+        result["warning"] = warning
+    else:
+        result["scanned"] = True
 
 
 def scan_output(ctx: Context, folder: Path) -> Optional[str]:
@@ -1048,6 +1114,12 @@ def task_pc_render(ctx: Context, args: dict) -> dict:
                     raise RuntimeError(f"The render helper on {helper} stopped responding")
             elif status == "done":
                 result = {**(job.get("result") or {}), "helper": helper}
+                # saved in a folder Stash sees too (a mapped one, e.g. Y:\PMVs = /data/PMVs): scan it there
+                cfg = (_read_json(_helpers_dir(ctx) / f"{helper}.json", {}) or {}).get("config") or {}
+                stash_file = unmap_path(str(result.get("file") or ""), cfg.get("mappings") or [])
+                if stash_file:
+                    result["stashFile"] = stash_file
+                    scan_into(ctx, Path(stash_file).parent, result)
                 atomic_write(status_file, json.dumps({"status": "done", **result}).encode())
                 log_info(f"Done on {helper}: {result.get('file')}")
                 return result
@@ -1108,6 +1180,26 @@ def map_path(path: str, mappings: List[Dict[str, str]]) -> Optional[str]:
     rest = path[len(best[0]):].lstrip("/\\")
     sep = "\\" if ("\\" in best[1] or re.match(r"^[A-Za-z]:", best[1])) else "/"
     return best[1].rstrip("/\\") + sep + rest.replace("/", sep).replace("\\", sep)
+
+
+def unmap_path(path: str, mappings: List[Dict[str, str]]) -> Optional[str]:
+    """The other way round: a path on the PC ("Y:\\PMVs\\a.mp4") as Stash sees it ("/data/PMVs/a.mp4"), None outside every mapping.
+    Drive letters and separators are compared loosely (Windows)."""
+    norm = path.replace("\\", "/")
+    best = None
+    for m in mappings or []:
+        src, dst = str(m.get("from") or ""), str(m.get("to") or "").replace("\\", "/").rstrip("/")
+        if not src or not dst:
+            continue
+        loose = bool(re.match(r"^[A-Za-z]:", dst)) or "\\" in str(m.get("to"))
+        head = norm[: len(dst)]
+        if (head.lower() == dst.lower() if loose else head == dst) and norm[len(dst):][:1] in ("/", "") and (best is None or len(dst) > len(best[1])):
+            best = (src, dst)
+    if not best:
+        return None
+    rest = norm[len(best[1]):].lstrip("/")
+    sep = "\\" if ("\\" in best[0] or re.match(r"^[A-Za-z]:", best[0])) else "/"
+    return best[0].rstrip("/\\") + sep + rest.replace("/", sep)
 
 
 def find_ffmpeg() -> Optional[str]:
@@ -1467,6 +1559,11 @@ OPS: Dict[str, Callable[[Context, dict], Any]] = {
     "delete_project": op_delete_project,
     "upload_chunk": op_upload_chunk,
     "import_audio": op_import_audio,
+    "list_media": op_list_media,
+    "extract_audio": op_extract_audio,
+    "list_presets": op_list_presets,
+    "save_preset": op_save_preset,
+    "delete_preset": op_delete_preset,
     "save_recording": op_save_recording,
     "keyframes": op_keyframes,
     "gray_frames": op_gray_frames,

@@ -37,7 +37,10 @@ Ist das Plugin [Stash UI](https://github.com/anonym88312/stash-pmv-plugins) inst
 
 - im Menü unter **Watch → PMV Creator**: der Editor öffnet als Vollbild-Seite im Look von Stash UI (Farben, Schrift), × oben rechts schließt ihn;
 - in der **Infoleiste des Players** (Taste I): „Im PMV Creator öffnen“ nimmt die Szene an der aktuellen Stelle mit;
-- in der **Auswahlleiste der Szenenliste**: „PMV Creator“ legt alle markierten Szenen ins Projekt.
+- in der **Auswahlleiste der Szenenliste**: „PMV Creator“ legt alle markierten Szenen ins Projekt;
+- im **Kopf von Performer- und Tag-Seiten**: „PMV mit diesem Performer/Tag“ legt ein neues Projekt an, und der Generator wählt Clips mit genau diesem Performer bzw. Tag.
+
+Im klassischen Stash steht dasselbe auf der Performer-Seite als **⚡ PMV: <Name>**.
 
 Projekte sind dieselben wie in der klassischen Oberfläche (gleiches Backend, gleicher Browser-Speicher). Der klassische Weg (`/pmv-creator`, Navbar-Button) bleibt daneben erhalten, auch mit Stash UIs Theme für klassisches Stash. Getestet mit Stash UI 3.95.1.
 
@@ -53,7 +56,7 @@ Die Oberfläche ist englisch und wechselt auf Deutsch, wenn Stashs Oberflächens
 
 Der Editor startet im **Einfach-Modus**: Solange die Timeline leer ist, zeigt die Vorschau die drei Schritte (Song hochladen → PMV erzeugen → Nachjustieren & rendern), und die Panels zeigen nur, was ein PMV braucht. **Erweitert** (Toolbar, oben rechts) blendet den Rest ein – Bearbeitungsmodi, Einrasten, die Marker-Suche, alle Generator-Optionen, Keyframes, Ausschlüsse und die „Mehr…“-Blöcke im Inspector. Die Wahl wird pro Browser gemerkt.
 
-1. **Musik**: Im Inspector (nichts ausgewählt) die Datei hochladen oder einen Server-Pfad angeben. Danach *BPM erkennen*, bei Bedarf ×2/÷2 oder *Tap*, *Versatz = Playhead*.
+1. **Musik**: Im Inspector (nichts ausgewählt) die Datei hochladen oder einen Server-Pfad angeben – oder **🎵 Aus der Bibliothek…**: Jeder einmal hochgeladene Song liegt auf dem Server und lässt sich ohne neuen Upload wieder wählen. Die BPM werden automatisch erkannt, bei Bedarf ×2/÷2 oder *Tap*, *Versatz = Playhead*.
 2. **Culling** in der Seitenleiste
    * *Szenen*: suchen und mit **+** in den Projekt-Pool, oder direkt per **Szenen-ID / Stash-Link** (`123, 456` bzw. `http://stash:9999/scenes/123`, Button **+ ID**). Anklicken öffnet die Szene im **Hauptplayer** (Reiter *PMV-Vorschau* / *Szene* darüber; **Esc** oder **← Zurück zum PMV** mittig in der Leiste über der Timeline führt zurück); die Seitenleiste behält Infos und Marker. Marker **+** (auswählen), **⊘** (ausschließen), **✂** (als Bereich übernehmen). Bereiche per **I/O** (Buttons oder Tasten) oder Shift+Ziehen auf der Scrub-Bar unter dem Player. *Keyframes laden* zeigt die I-Frames.
    * *Marker*: bibliotheksweit nach Marker-Tags suchen und gesammelt übernehmen.
@@ -61,11 +64,21 @@ Der Editor startet im **Einfach-Modus**: Solange die Timeline leer ist, zeigt di
 3. **Arrangieren**: von Hand oder mit dem **⚡ Generator** (Toolbar; in der *Auswahl* mit den Schnipseln als Quelle). Er funktioniert wie ein PMV-Generator, angelehnt an den Pepega PMV Generator: Clips nach Tags (alle/eines/ohne, Haupt-Tags), Performern, Bewertung, Länge, Auflösung, Format, Pfad, Favoriten oder „Meistgesehen“, wahlweise als Marker. Dazu Tag-Stufen über den Song, Abwechslung, „Dem Verlauf der Szenen folgen“, Schnitt automatisch nach Musikenergie (Tempo Langsam/Normal/Schnell), Drops mit Blitz und Tempo-Rampen. Experimentell: *Clip-Tempo folgt der Musik* und *Bewegung auf den Beat* (siehe [KONZEPT](docs/KONZEPT.md#generator)). Das Ergebnis landet als normale Clips auf der Spur (ein Undo-Schritt). Gleicher Seed ergibt dasselbe PMV, 🎲 würfelt neu.
 
    ![Generator](docs/screenshots/generator.png)
+
+   **Meine Vorlagen**: **💾 Speichern als…** legt die aktuellen Generator-Einstellungen (Stimmung, Clips mit Tags/Performern, Schnitt, Stil) unter einem Namen ab, etwa „Mia – Hypno“. Sie liegen auf dem Server, jeder Browser dieses Stash sieht sie; die Auswahlliste lädt sie wieder, ✕ löscht.
+
+   **Schnitte: Wie ein anderes PMV** (wie „PMV as template“ im PMV Generator): Ein PMV aus der Bibliothek wählen (Szenen mit dem Tag „PMV“ oder „PMV Creator“ zuerst, sonst suchen). Das Plugin misst seine Schnitte und Blitze – das Backend liefert kleine Graustufenbilder, die Erkennung folgt Pepegas Regeln – und der Generator wechselt die Clips genau dort, wo das Original schneidet; Blitze werden zu weißen Blitzen. Mit **Auch seine Musik übernehmen** (Standard) wird sein Ton zum Song des Projekts, dann sitzen die Schnitte exakt auf der Musik; mit eigenem Song beginnen sie mit dem Song. Stimmungen ändern dann nur den Stil. Split-Screens des Originals werden nicht nachgebaut, nur dessen Timing.
+
+   **Nachbessern** – in der Leiste über der Timeline, sobald ein Clip gewählt ist:
+   * **🎲 Anderer Clip** (Taste **N**): Der Clip bekommt neues Material, ausgewählt wie vom Generator (dieselben Tags, Performer und Stufen wie beim letzten Lauf, keine Szene, die gleich daneben läuft). Platz, Länge, Tempo und Übergang bleiben. Nochmal drücken geht zu weiteren Szenen statt zurück.
+   * **📌 Behalten** (Taste **P**): „Erneut erzeugen“ und „Andere Variante“ lassen den Clip stehen und füllen drumherum – gute Treffer festhalten, den Rest neu würfeln. Der Generator-Dialog zeigt, wie viele Clips behalten sind (*Alle freigeben* löst sie).
+   * **⊘ Szene raus**: Alle Clips dieser Szene bekommen einen anderen Clip, und der Generator lässt sie in diesem Projekt aus (ein Rückgängig-Schritt). Danach bietet die Leiste **Nie wieder verwenden** an: Die Szene bekommt in Stash den Tag `PMV Creator: skip` und kommt in keinem PMV mehr vor; in der Szenen-Ansicht nimmt *Wieder erlauben* ihn ab.
 4. **Feinjustieren**: Clip anklicken, dann im Inspector Start, Dauer (s/Beats), Quell-In/-Out, Geschwindigkeit, Übergang, Clip-Ton, Bildausschnitt. **⇉ Übergang für alle Clips** gibt allen Clips denselben Übergang (ein Rückgängig-Schritt); die Vorschau zeigt Wischen, Schieben, Kreis und Zoom wie der Render. Bildausschnitt (pro Projekt unter *Ausgabe*, pro Clip im Inspector): **Einpassen (unscharfer Rand)** zeigt das ganze Bild über einer unscharfen, bildfüllenden Kopie (Standard, wie im PMV Generator – Hochkant-Clips bleiben im 16:9-Video komplett), **Füllen (beschneiden)** füllt das Bild und schneidet die Ränder ab, **Einpassen (Balken)** setzt schwarze Balken.
    Grundregel: **Ein anderer Bereich der Szene ändert nie den Platz auf der Timeline.** Der Clip läuft weiter von A nach B, nur mit anderem Material. Das gilt für Quell-In/-Out im Inspector, Alt+Ziehen und ⇄ Ersetzen. Es gilt auch für die Szenen-Ansicht (Doppelklick auf den Clip oder **✎ Quelle bearbeiten** über der Timeline): Die Szene öffnet sich im Hauptplayer, der Clip erscheint als oranger Bereich auf der Leiste und lässt sich verschieben. Dazu gibt es „Clip hier starten“, pro Marker „↦“ (Clip auf diesen Marker legen) und mit einer I/O-Auswahl „Bereich übernehmen“ (Geschwindigkeit bleibt) oder „Bereich einpassen“ (genau dieser Bereich, Geschwindigkeit passt sich an). **Andere Szene…** führt zurück zur Szenenliste; in der danach geöffneten Szene setzt „Diese Szene hier einsetzen“ deren Material in denselben Slot – oder **⇄ In allen N Clips dieser Szene einsetzen** gibt allen Clips der alten Szene auf einmal die neue (schneller: **⇄ Alle N ersetzen…** über der Timeline, dann links die neue Szene anklicken) (jeder an derselben relativen Stelle, Plätze und Längen bleiben, ein Rückgängig-Schritt; die übrigen Clips der Szene des gewählten Clips sind auf der Timeline gestrichelt umrandet). Länge und Position ändert man nur auf der Timeline selbst (Ränder ziehen, Verschieben, „Dauer“).
 
    ![Clip in der Szene verschieben](docs/screenshots/clip-link.png)
 5. **Rendern** (Stash-Task mit Fortschritt) oder **Export** → OTIO / EDL / FFmpeg-Skript / Renderplan / Projektdatei.
+   **🏷 In Stash beschriften** (Häkchen im Render-Dialog, an): Sobald Stash das fertige Video gescannt hat, bekommt die Szene den Projektnamen als Titel, eine kurze Beschreibung (Song, Anzahl Clips), alle Performer der verwendeten Szenen, die Tags, die mindestens ein Viertel davon gemeinsam haben, und den Tag `PMV Creator`. Voraussetzung: *Nach dem Rendern scannen* in den Plugin-Einstellungen und ein Ausgabeordner in einer Library (beim Rendern auf dem PC: ein Ordner, der einer Stash-Library zugeordnet ist, z. B. `Y:\PMVs` = `/data/PMVs`). Wird der Editor vorher geschlossen, holt er es beim nächsten Öffnen nach.
    Der Render-Dialog bietet zusätzlich **Schnellaufnahme (Browser)**: Die Sequenz läuft einmal im Browser und wird als WebM aufgenommen (MediaRecorder), dann in den Ausgabeordner gelegt und gescannt. Dauert genau so lang wie der Song und braucht kein FFmpeg auf dem Server – praktisch auf einer schwachen NAS –, ist aber Echtzeit und nicht frame-genau: ein Ruckler oder ein langsamer Stream landet im Video. Der FFmpeg-Render ist der exakte Weg.
 
 Bearbeitungsmodi (Toolbar): **An Nachbarn stoppen** (Standard) · **Ripple** (Folgeclips rücken mit) · **Überschreiben** (überlappte Clips werden getrimmt/geteilt).
@@ -81,12 +94,13 @@ Bearbeitungsmodi (Toolbar): **An Nachbarn stoppen** (Standard) · **Ripple** (Fo
 | Frame ± / Beat ± | ← → / Shift+← → |
 | Gewählten Clip um Frame/Beat schieben | Alt+← → / Alt+Shift+← → |
 | Teilen am Playhead · Ersetzen durch gewählten Schnipsel | S · R |
+| Anderer Clip für den gewählten · beim erneuten Erzeugen behalten | N · P |
 | Löschen · Ripple-Löschen | Entf · Shift+Entf |
 | Timeline-Marker | M (Doppelklick im Lineal entfernt ihn) |
 | Undo / Redo | Strg+Z / Strg+Y (Strg+Shift+Z) |
 | Zoom | Strg+Mausrad, + / − · Mausrad = horizontal scrollen |
 
-Deep-Link: `/pmv-creator?scenes=12,34,56` legt Szenen direkt in den Projekt-Pool, `?project=<id>` öffnet ein Projekt.
+Deep-Link: `/pmv-creator?scenes=12,34,56` legt Szenen direkt in den Projekt-Pool, `?project=<id>` öffnet ein Projekt, `?performer=<id>` bzw. `?tag=<id>` beginnt ein neues PMV mit diesem Performer/Tag.
 
 ## Auf dem eigenen PC rendern (optional)
 

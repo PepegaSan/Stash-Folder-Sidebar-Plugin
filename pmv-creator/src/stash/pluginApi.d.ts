@@ -12,7 +12,7 @@ declare global {
     };
     register: { route(path: string, component: ReactNS.ComponentType): void };
     patch: {
-      before(component: string, fn: (props: { children?: ReactNS.ReactNode }) => unknown[]): void;
+      before<P = { children?: ReactNS.ReactNode }>(component: string, fn: (props: P) => unknown[]): void;
     };
     [key: string]: unknown;
   }

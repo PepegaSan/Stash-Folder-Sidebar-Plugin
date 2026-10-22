@@ -3,6 +3,7 @@ import React, { useRef } from "react";
 import { t, tn } from "../i18n";
 import { useEditor } from "../state/store";
 import { useMusic } from "./music";
+import { SongLibraryButton } from "./SongLibrary";
 
 export function StartPanel() {
   const { state, dispatch } = useEditor();
@@ -28,6 +29,7 @@ export function StartPanel() {
             <button className={`btn btn-sm ${p.audio ? "btn-secondary" : "btn-primary"}`} disabled={!music.online} onClick={() => fileRef.current?.click()}>
               {p.audio ? t("Other song…") : t("Upload song…")}
             </button>
+            {music.online && <SongLibraryButton current={p.audio?.name} onPick={(s) => void music.adoptSong(s)} />}
             {music.status && <span className="pmv-li-meta">{music.status}</span>}
           </div>
           {!music.online && <div className="pmv-li-meta">{t("Backend unreachable – Stash needs Python for this plugin (Settings → System → Python path).")}</div>}
@@ -39,6 +41,7 @@ export function StartPanel() {
             <button className={`btn btn-sm ${p.audio ? "btn-primary" : "btn-secondary"}`} onClick={() => dispatch({ type: "ui", patch: { generator: {} } })}>
               ⚡ {t("Generate PMV")}
             </button>
+            {state.ui.clipPreset && <span className="pmv-li-meta">{t("with {name}", { name: state.ui.clipPreset.label })}</span>}
             {scenes > 0 && <span className="pmv-li-meta">{tn(scenes, "{n} scenes in the project", "1 scene in the project")}</span>}
           </div>
         </li>

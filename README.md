@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.7.2-informational)
+![Version](https://img.shields.io/badge/version-0.8.0-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -584,8 +584,11 @@ Works in classic Stash and in Stash UI.
 - **Beat-grid timeline** — BPM detection/tap, snap, ripple/overwrite modes, trim/slip/split, transitions, speed with beat-safe duration
 - **Scene view in the main player** — a scene opens big in place of the preview (tabs *PMV preview* / *Scene*): pick ranges, move a clip to another spot or put another scene into it
 - **Ground rule** — another part of the scene never changes a clip's place on the timeline
-- **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"
-- **Render** — deterministic FFmpeg pipeline as a Stash task (segment cache, exact CFR), plus **Quick record** (real-time WebM in the browser, no server FFmpeg needed)
+- **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"; **presets** saved on the server
+- **Cuts like another PMV** — pick a PMV from the library: its cuts and flashes (and its music, if you like) are measured and the generator cuts your clips at exactly those moments
+- **Touching up** — 🎲 another clip for one spot (N), 📌 keep the good ones when generating again (P), ⊘ take a scene out of the PMV (optionally for good, via a Stash tag)
+- **Song library** — songs uploaded once can be picked again without a new upload; **PMV with this performer/tag** right from the performer/tag page
+- **Render** — deterministic FFmpeg pipeline as a Stash task (segment cache, exact CFR), plus **Quick record** (real-time WebM in the browser, no server FFmpeg needed); the finished PMV is **labeled in Stash** (title, performers, shared tags, tag "PMV Creator")
 - **Render on your PC** (optional) — a render helper on a PC renders with its own FFmpeg and saves to any folder on the PC; set up once in the render dialog. While it runs, the preview plays the videos of its mapped folders from the PC (also HEVC/MPEG-4, converted by the PC instead of the NAS)
 - **Exports** — project JSON, CMX3600 EDL, OpenTimelineIO, render plan, FFmpeg scripts; CLI render without Stash
 - English interface, German when Stash (or Stash UI) is set to German
@@ -613,6 +616,13 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.8.0
+
+- **🎲 Another clip** (N), **📌 Keep** (P) and **⊘ Scene out** in the bar above the timeline: reroll one spot by the last generator run's rules, keep good clips when generating again, take a scene out of the PMV (**Never use it again** = Stash tag `PMV Creator: skip`)
+- **Cuts: Like another PMV** in the generator: a PMV from the library as template – its cuts and flashes become the cut points, optionally with its music
+- **My presets** (generator settings on the server), **🎵 song library**, **PMV with this performer/tag** (Stash UI: performer/tag page header; classic: performer page)
+- **🏷 Label it in Stash** after rendering: title, description, performers, shared tags, tag `PMV Creator` (also for PC renders saved into a folder mapped to a Stash library)
 
 ### PMV Creator 0.7.2
 

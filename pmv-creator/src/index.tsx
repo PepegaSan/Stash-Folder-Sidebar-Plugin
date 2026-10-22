@@ -17,6 +17,29 @@ function ClassicPage() {
 
 api.register.route(ROUTE, ClassicPage);
 
+// Performer page: "⚡ PMV: <name>" opens a new project with the generator set to this performer. (The label has no
+// words: the editor's language is only known once it runs.)
+api.patch.before<{ children?: React.ReactNode; performer?: { id: string; name: string } }>("PerformerDetailsPanel.DetailGroup", (props) => {
+  const performer = props.performer;
+  if (!performer) return [props];
+  const { Link } = api.libraries.ReactRouterDOM;
+  return [
+    {
+      ...props,
+      children: (
+        <>
+          {props.children}
+          <div className="detail-item pmv-performer-link">
+            <Link to={`${ROUTE}?performer=${performer.id}`} className="btn btn-sm btn-secondary" title={`PMV Creator: ${performer.name}`}>
+              ⚡ PMV: {performer.name}
+            </Link>
+          </div>
+        </>
+      ),
+    },
+  ];
+});
+
 api.patch.before("MainNavBar.UtilityItems", (props) => {
   const { Link } = api.libraries.ReactRouterDOM;
   return [

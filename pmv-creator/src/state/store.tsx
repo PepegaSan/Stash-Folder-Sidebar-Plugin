@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useHost } from "../host";
 import { t } from "../i18n";
 import { type PmvProject, createProject, migrateProject, projectDuration } from "../model/project";
@@ -10,6 +10,8 @@ export type BackendState = "checking" | "online" | "offline";
 
 interface EditorContextValue {
   state: EditorState;
+  /** The current state also after an await (async actions must not work on a stale render's state). */
+  getState: () => EditorState;
   dispatch: React.Dispatch<Action>;
   transport: Transport;
   backend: BackendState;
@@ -68,6 +70,9 @@ const reducer = (s: EditorState, a: Action) => editorReducer(s, a);
 export function EditorProvider({ children }: { children: React.ReactNode }) {
   const host = useHost();
   const [state, dispatch] = useReducer(reducer, undefined, () => initialEditorState(createProject()));
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const getState = useCallback(() => stateRef.current, []);
   const transport = useMemo(() => new Transport(), []);
   const [backend, setBackend] = useState<BackendState>("checking");
   const [ffmpegAvailable, setFfmpeg] = useState(false);
@@ -153,7 +158,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     if (!loading) host.setProjectParam?.(project.id);
   }, [project.id, loading, host]);
 
-  const value = useMemo(() => ({ state, dispatch, transport, backend, ffmpegAvailable }), [state, transport, backend, ffmpegAvailable]);
+  const value = useMemo(() => ({ state, getState, dispatch, transport, backend, ffmpegAvailable }), [state, getState, transport, backend, ffmpegAvailable]);
   if (loading) return <div className="pmv-loading">{t("PMV Creator is loading…")}</div>;
   return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;
 }

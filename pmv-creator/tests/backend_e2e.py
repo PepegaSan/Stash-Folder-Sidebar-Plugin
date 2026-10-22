@@ -280,7 +280,17 @@ def main():
             raise AssertionError("path traversal not rejected")
         except AssertionError as e:
             assert "invalid" in str(e), e
-        print(f"ok  plugin ops (projects, chunked upload, recording saved, {len(kf)} keyframes, id validation)")
+        # another PMV's sound becomes a song (reused when asked again); the song library lists songs, not recordings
+        song = call({"op": "extract_audio", "path": str(a), "name": "Other PMV"})
+        assert song["name"] == "Other PMV.m4a" and song.get("duration") and abs(song["duration"] - 12) < 0.3, song
+        assert call({"op": "extract_audio", "path": str(a), "name": "Other PMV"})["path"] == song["path"]
+        assert [x["name"] for x in call({"op": "list_media"})] == ["Other PMV.m4a", "my track.wav"]
+        # generator presets: saved on the server, the same name overwrites, sorted by name
+        call({"op": "save_preset", "name": "b fast", "settings": {"mood": "maximal"}})
+        call({"op": "save_preset", "name": "A slow", "settings": {"mood": "hypno"}})
+        assert call({"op": "save_preset", "name": "b fast", "settings": {"mood": "clean"}}) == [{"name": "A slow", "settings": {"mood": "hypno"}}, {"name": "b fast", "settings": {"mood": "clean"}}]
+        assert call({"op": "delete_preset", "name": "A slow"}) == [{"name": "b fast", "settings": {"mood": "clean"}}]
+        print(f"ok  plugin ops (projects, chunked upload, recording saved, {len(kf)} keyframes, id validation, sound of a video, song library, presets)")
 
         # 4b) gray frames for the generator's motion analysis: a file stretch and a scene preview over HTTP
         gf = call({"op": "gray_frames", "items": [{"key": "a", "path": str(a), "start": 2.0, "duration": 1.0, "fps": 30}, {"key": "c", "path": str(c), "start": 0, "duration": 0.5, "fps": 10}, {"key": "x", "path": str(tmp / "nope.mp4"), "fps": 30}]})
@@ -314,12 +324,18 @@ def main():
         hb.PLAIN_LOG = True
         assert hb.map_path("/data/clips/a b.mp4", [{"from": "/data/", "to": "Y:\\"}, {"from": "/data/clips/", "to": "Z:\\c"}]) == "Z:\\c\\a b.mp4"
         assert hb.map_path("/other/x.mp4", [{"from": "/data/", "to": "Y:\\"}]) is None
+        # the way back (a PC render saved in a folder Stash sees): drive letters loosely, the longest mapping wins
+        assert hb.unmap_path("y:\\PMVs\\a b.mp4", [{"from": "/data/", "to": "Y:\\"}, {"from": "/data/clips/", "to": "Z:\\c"}]) == "/data/PMVs/a b.mp4"
+        assert hb.unmap_path("Z:\\c\\x.mp4", [{"from": "/data/", "to": "Y:\\"}, {"from": "/data/clips/", "to": "Z:\\c"}]) == "/data/clips/x.mp4"
+        assert hb.unmap_path("Z:\\cc\\x.mp4", [{"from": "/data/clips/", "to": "Z:\\c"}]) is None
+        assert hb.unmap_path("I:\\PMVs\\x.mp4", [{"from": "/data/", "to": "Y:\\"}]) is None
         assert call({"op": "helper_progress", "jobId": "nope"}) == {"cancel": True}
         call({"op": "helper_hello", "info": {"name": "TEST PC", "version": "t", "ffmpeg": FFMPEG, "defaultOutput": str(tmp / "pc-default")}})
         helpers = call({"op": "helper_list"})
         assert [h["id"] for h in helpers] == ["TEST_PC"] and helpers[0]["online"], helpers
-        call({"op": "helper_config", "name": "TEST_PC", "config": {"outputDir": str(tmp / "pc-out"), "mappings": [{"from": "/data/", "to": "Y:\\"}, {"from": "", "to": "x"}]}})
-        assert call({"op": "helper_list"})[0]["config"] == {"outputDir": str(tmp / "pc-out"), "mappings": [{"from": "/data/", "to": "Y:\\"}]}
+        # the output folder is mapped too (as if Stash saw it as /stash/pmvs/): the result names the file as Stash sees it
+        call({"op": "helper_config", "name": "TEST_PC", "config": {"outputDir": str(tmp / "pc-out"), "mappings": [{"from": "/data/", "to": "Y:\\"}, {"from": "/stash/pmvs/", "to": str(tmp / "pc-out")}, {"from": "", "to": "x"}]}})
+        assert call({"op": "helper_list"})[0]["config"] == {"outputDir": str(tmp / "pc-out"), "mappings": [{"from": "/data/", "to": "Y:\\"}, {"from": "/stash/pmvs/", "to": str(tmp / "pc-out")}]}
         stream = run_stream_server(a)
         broker = subprocess.Popen([sys.executable, str(BACKEND)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         broker.stdin.write(json.dumps({"args": {"mode": "pc", "renderId": "render_pc", "helper": "TEST_PC", "plan": json.dumps(plan)}}))
@@ -354,6 +370,7 @@ def main():
         check_output(Path(pc["file"]), total)
         status = call({"op": "render_result", "renderId": "render_pc"})
         assert status["status"] == "done" and status["helper"] == "TEST_PC" and status["file"] == pc["file"], status
+        assert status["stashFile"] == "/stash/pmvs/" + Path(pc["file"]).name, status
         assert stream.requests and all(k == "k3y" for k in stream.keys), (stream.requests[:3], stream.keys[:3])
         assert not list((data / "pc-jobs").glob("*")), "job files cleaned up"
         print(f"ok  render on a PC: broker task + helper, {len(stream.requests)} stream requests with API key -> {Path(pc['file']).name}")

@@ -1,3 +1,4 @@
+import type { GeneratorSettings } from "../generator/generate";
 import { t } from "../i18n";
 import { uid } from "./ids";
 
@@ -124,6 +125,8 @@ export interface Clip {
   /** null = output.fit */
   fit: FitMode | null;
   label: string;
+  /** Kept by the generator: "generate again" / another variant leave it where it is. */
+  pinned?: boolean;
 }
 
 /** tracks[0] is the top-most track; where clips overlap, the higher track wins. */
@@ -141,6 +144,24 @@ export interface TimelineMarker {
   label: string;
 }
 
+/** Cuts and flashes measured in another PMV ("cuts like another PMV"); times in that video's own time. */
+export interface CutTemplate {
+  sceneId: string;
+  title: string;
+  duration: Seconds;
+  cuts: Seconds[];
+  flashes: Seconds[];
+  /** Name of the project music when it is that PMV's own sound (then the cuts follow the music on the timeline). */
+  music: string | null;
+}
+
+/** How the clips were generated last – lets a single clip be re-rolled later with the same rules. */
+export interface GeneratorMemo {
+  settings: GeneratorSettings;
+  from: Seconds;
+  to: Seconds;
+}
+
 export interface PmvProject {
   schemaVersion: number;
   id: string;
@@ -155,6 +176,10 @@ export interface PmvProject {
   exclusions: Exclusion[];
   tracks: Track[];
   markers: TimelineMarker[];
+  /** Last generator run; absent for projects that were never generated. */
+  generator?: GeneratorMemo | null;
+  /** Another PMV whose cuts the generator can take over. */
+  cutTemplate?: CutTemplate | null;
 }
 
 export const clipEnd = (c: Clip): Seconds => c.start + c.duration;

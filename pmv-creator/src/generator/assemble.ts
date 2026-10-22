@@ -108,7 +108,7 @@ class Pool {
 }
 
 function transitionFor(o: FillOptions, slot: Slot, beat: number): Transition | null {
-  if (slot.drop && o.flashDrops) return { type: "fadewhite", duration: Math.min(0.15, beat / 3) };
+  if (slot.flash || (slot.drop && o.flashDrops)) return { type: "fadewhite", duration: Math.min(0.15, beat / 3) };
   switch (o.transitions) {
     case "flashBar":
       return slot.downbeat ? { type: "fadewhite", duration: Math.min(0.12, beat / 4) } : null;
@@ -131,9 +131,10 @@ function rampedSpeed(o: FillOptions, slot: Slot): number {
 
 /**
  * One clip per slot. `pools[stage]` holds the candidates of each tag stage, `stages[i]` the stage of slot i.
+ * A slot whose middle lies in a pinned clip stays empty – the pinned clip plays there and counts for variety.
  * Deterministic: all randomness comes from `o.seed`.
  */
-export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools: MaterialItem[][], o: FillOptions, ctx: FillContext): Clip[] {
+export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools: MaterialItem[][], o: FillOptions, ctx: FillContext, pinned: Clip[] = []): Clip[] {
   const rnd = mulberry32(o.seed ^ 0x9e3779b9);
   const queues = pools.map((items) => new Pool(items, o.order, rnd));
   const beat = beatLength(p.beatGrid);
@@ -160,7 +161,16 @@ export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools:
     return d;
   };
 
-  return slots.map((slot, k) => {
+  const out: Clip[] = [];
+  slots.forEach((slot, k) => {
+    const mid = slot.start + slot.duration / 2;
+    const pin = pinned.find((c) => c.start <= mid && c.start + c.duration > mid);
+    if (pin) {
+      recentScenes.push(pin.sceneId);
+      recentPerformers.push([]);
+      usedSpots.set(pin.sceneId, [...(usedSpots.get(pin.sceneId) ?? []), pin.sourceIn].slice(-8));
+      return;
+    }
     const pool = queues[stages[k]] ?? queues[0];
     const speed = rampedSpeed(o, slot);
     const need = slot.duration * speed;
@@ -217,7 +227,7 @@ export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools:
     recentPerformers.push(it.performers);
     usedSpots.set(s.sceneId, [...(usedSpots.get(s.sceneId) ?? []), start].slice(-8));
 
-    return {
+    out.push({
       id: uid("clip"),
       sceneId: s.sceneId,
       snippetId: s.id,
@@ -230,8 +240,9 @@ export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools:
       transitionIn: k === 0 ? null : transitionFor(o, slot, beat),
       fit: null,
       label: s.label,
-    };
+    });
   });
+  return out;
 }
 
 /** The part of [a, b] that matches song progress p (±12 % of the length). */

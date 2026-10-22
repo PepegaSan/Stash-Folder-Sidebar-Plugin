@@ -7,6 +7,7 @@ import { peaksEnergy } from "../../generator/rhythm";
 import { t } from "../../i18n";
 import type { Clip, PmvProject, SourceMedia } from "../../model/project";
 import { grayFrames } from "../../stash/backend";
+import { SKIP_TAG, cachedTagId } from "../../stash/library";
 import { fetchScenes, previewConfig, queryMarkers, queryScenes, tagIdByName } from "../../stash/queries";
 import { primeScenes } from "../../stash/sceneCache";
 import type { StashSceneCore } from "../../stash/types";
@@ -17,11 +18,13 @@ export type Status = (msg: string) => void;
 const sourcesOf = (scenes: StashSceneCore[]) => scenes.map(sceneToSource).filter((s): s is SourceMedia => !!s);
 const hasAny = (tagIds: Set<string>, tags: Array<{ id: string }>) => !tagIds.size || tags.some((t) => tagIds.has(t.id));
 
-async function collectOne(o: ClipOptions, p: PmvProject, seed: number, favId: string | null): Promise<{ items: MaterialItem[]; sources: SourceMedia[] }> {
+async function collectOne(o: ClipOptions, p: PmvProject, seed: number, favId: string | null, skipId: string | null): Promise<{ items: MaterialItem[]; sources: SourceMedia[] }> {
   const find = { per_page: Math.max(1, Math.min(500, o.limit)), sort: `random_${seed}`, direction: "ASC" };
+  // scenes tagged "never use it again" (⊘) are left out – asked in the filter where Stash can, checked here anyway
+  const ok = (s: StashSceneCore) => !skipId || !s.tags.some((x) => x.id === skipId);
   if (o.source === "bin") return { items: p.bin.map((snippet) => ({ snippet, performers: [], fixedStart: !!snippet.markerId })), sources: [] };
   if (o.source === "project") {
-    const scenes = await fetchScenes(Object.keys(p.sources));
+    const scenes = (await fetchScenes(Object.keys(p.sources))).filter(ok);
     primeScenes(scenes);
     return { items: scenes.flatMap((s) => sceneItems(s, o)), sources: sourcesOf(scenes) };
   }
@@ -31,17 +34,19 @@ async function collectOne(o: ClipOptions, p: PmvProject, seed: number, favId: st
     const byPlays = { per_page: find.per_page, sort: "play_count", direction: "DESC" };
     let r = await queryScenes(recent, byPlays);
     if (r.scenes.length < 8) r = await queryScenes({ play_count: { value: 0, modifier: "GREATER_THAN" } }, byPlays);
-    primeScenes(r.scenes);
-    return { items: r.scenes.flatMap((s) => sceneItems(s, o)), sources: sourcesOf(r.scenes) };
+    const scenes = r.scenes.filter(ok);
+    primeScenes(scenes);
+    return { items: scenes.flatMap((s) => sceneItems(s, o)), sources: sourcesOf(scenes) };
   }
   const any = new Set(clientAnyTags(o, favId));
   if (o.kind === "markers") {
     const r = await queryMarkers(buildMarkerFilter(o, favId), find);
-    const markers = r.markers.filter((m) => hasAny(any, [...m.tags, m.primary_tag, ...m.scene.tags]));
+    const markers = r.markers.filter((m) => ok(m.scene) && hasAny(any, [...m.tags, m.primary_tag, ...m.scene.tags]));
     return { items: markers.map((m) => markerItem(m, m.scene, o.markerLength)), sources: sourcesOf(markers.map((m) => m.scene)) };
   }
-  const r = await queryScenes(buildSceneFilter(o, favId), find);
-  const scenes = r.scenes.filter((s) => hasAny(any, s.tags));
+  const xtags = skipId ? [...o.xtags, { id: skipId, name: SKIP_TAG }] : o.xtags;
+  const r = await queryScenes(buildSceneFilter({ ...o, xtags }, favId), find);
+  const scenes = r.scenes.filter((s) => ok(s) && hasAny(any, s.tags));
   primeScenes(scenes);
   return { items: scenes.flatMap((s) => sceneItems(s, o)), sources: sourcesOf(scenes) };
 }
@@ -53,8 +58,9 @@ export async function collectPools(o: ClipOptions, p: PmvProject, seed: number):
     favId = await tagIdByName("Favorite");
     if (!favId) throw new Error(t("“Favorites only”: Stash has no tag “Favorite”."));
   }
+  const skipId = o.source === "bin" ? null : await cachedTagId(SKIP_TAG).catch(() => null);
   const stages = o.source === "filter" && o.stagesOn && o.stages.length >= 2 ? o.stages : null;
-  const runs = stages ? await Promise.all(stages.map((st) => collectOne({ ...o, tags: st.tags, xtags: st.xtags }, p, seed, favId))) : [await collectOne(o, p, seed, favId)];
+  const runs = stages ? await Promise.all(stages.map((st) => collectOne({ ...o, tags: st.tags, xtags: st.xtags }, p, seed, favId, skipId))) : [await collectOne(o, p, seed, favId, skipId)];
   const sources = new Map<string, SourceMedia>();
   for (const r of runs) for (const s of r.sources) sources.set(s.sceneId, s);
   return { pools: runs.map((r) => r.items), sources: [...sources.values()] };

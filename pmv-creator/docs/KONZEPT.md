@@ -120,7 +120,14 @@ Die Pipeline ist in [src/generator/](../src/generator/) in reine, getestete Stuf
 | Schnitt | [rhythm.ts](../src/generator/rhythm.ts) | Energie pro Beat (relativ zum Song), Drop-Erkennung, Schnittraster, Stufen-Zuordnung |
 | Auswahl | [assemble.ts](../src/generator/assemble.ts) | Welcher Clip und welche Stelle in welchen Slot: Vielfalt, Zeitleiste, Tempo-Match, Speed-Rampen, Übergänge |
 | Bewegung | [motion.ts](../src/generator/motion.ts) | Bewegungsmessung, Rhythmus, Beat-Fit, Tempokarten aus Scene-Previews |
-| Ergebnis | [generate.ts](../src/generator/generate.ts) | Presets, Bereich, Beat-Sync-Nachlauf, Anwenden im Reducer |
+| Ergebnis | [generate.ts](../src/generator/generate.ts) | Presets, Bereich, Beat-Sync-Nachlauf, Anwenden im Reducer (behaltene Clips bleiben, der Lauf wird im Projekt gemerkt) |
+| Nachbessern | [reroll.ts](../src/generator/reroll.ts), [clipActions.ts](../src/ui/clipActions.ts) | 🎲 neues Material für einzelne Clips, ⊘ Szene raus |
+| Schnitt-Vorlage | [template.ts](../src/generator/template.ts), [cutTemplate.ts](../src/ui/generator/cutTemplate.ts) | Schnitte und Blitze eines anderen PMV messen, als Slots verwenden |
+
+**Nach dem Erzeugen.** Das Projekt merkt sich den letzten Lauf (`generator`: Einstellungen, Seed, Bereich). Darauf bauen drei Werkzeuge in der Leiste über der Timeline auf:
+* **🎲 Anderer Clip** (N) holt die Kandidaten desselben Laufs (gleiche Filter und gleicher Seed, also dieselbe Auswahl aus der Bibliothek, pro Sitzung gecacht) und gibt dem Clip neues Material aus seiner Tag-Stufe. Platz, Länge, Speed und Übergang bleiben. Gewählt wird nach den Generator-Regeln: nicht die bisherige Szene, keine Szene der ±6 Nachbarn, wenige Clips pro Szene, eine noch freie Stelle. Wiederholtes Drücken meidet die gerade verworfenen Szenen. Projekte ohne gespeicherten Lauf ziehen aus den eigenen Szenen.
+* **📌 Behalten** (P, `clip.pinned`): Erneutes Erzeugen lässt den Clip stehen. Slots, deren Mitte in einem behaltenen Clip liegt, bleiben leer, und der Clip zählt für die Vielfalt mit. Neue Clips weichen ihm aus, auch bei „Spur vorher leeren“.
+* **⊘ Szene raus** legt einen Ausschluss über die ganze Szene und würfelt alle ihre Clips neu, beides in einem Undo-Schritt. *Nie wieder verwenden* setzt in Stash den Tag `PMV Creator: skip`, den jeder Generator-Lauf ausfiltert (als `excludes` im Stash-Filter und zusätzlich auf dem Client). In der Szenen-Ansicht nimmt *Wieder erlauben* ihn ab.
 
 **Abgleich mit dem Pepega PMV Generator** (`stash-pmv-plugins/plugins/pepega-pmvGenerator`):
 
@@ -137,6 +144,7 @@ Die Pipeline ist in [src/generator/](../src/generator/) in reine, getestete Stuf
 | Stimmungen Klassik / Maximal / Hypno / Clean | als Presets für Schnitt und Stil |
 | *Experimentell:* Clip-Tempo folgt der Musik | siehe unten |
 | *Experimentell:* Bewegung auf den Beat | siehe unten |
+| PMV als Vorlage (Schnitte, Layouts, Blitze, Musik eines PMV) | Schnitte, Blitze und Musik (`template.ts`): Schnittregel gleich (größte Regionsdifferenz > max(0,09; 3,2 × Median der letzten 12), ≥ 0,15 s Abstand, auf Beats ±80 ms). Blitz anders: Pepega zählt einen Sprung auf ein helles Bild, was ein Schnitt auf einen hellen Clip auch ist; hier ist ein Blitz ein kurzes (≤ 0,5 s), fast einfarbig helles Bild (Helligkeit ≥ 0,45, Streuung ≤ 0,08). Gemessen wird jedes Frame (30 fps, 64 px) statt Stichproben beim schnellen Abspielen. Layouts nicht |
 | Split-Screens, Live-Effekte, Best Moments (Haut/Kontrast), Smart Crop, Match Cuts | **nicht übernommen**. Das Ziel ist ein editierbarer Einspur-Schnitt, Effekte gehören ins NLE |
 
 ### Experimentelle Modi
@@ -171,9 +179,13 @@ Schema: [schema/pmv-project.schema.json](../schema/pmv-project.schema.json) · T
     { "id": "trk_…", "name": "V1", "muted": false, "locked": false, "clips": [
       { "id": "clip_…", "sceneId": "1234", "snippetId": "snip_…", "markerId": "551",
         "start": 15.0, "duration": 0.9375, "sourceIn": 312.0, "speed": 1.25, "volume": 0,
-        "transitionIn": { "type": "fade", "duration": 0.2 }, "fit": null, "label": "Kiss" } ] }
+        "transitionIn": { "type": "fade", "duration": 0.2 }, "fit": null, "label": "Kiss",
+        "pinned": true } ] }                                                   // optional: 📌 behalten
   ],
-  "markers": [ { "id": "mrk_…", "time": 30.0, "label": "Drop" } ]
+  "markers": [ { "id": "mrk_…", "time": 30.0, "label": "Drop" } ],
+  "generator": { "settings": { "seed": 3, "clips": { … }, … }, "from": 0, "to": 213.4 },  // optional: letzter Lauf
+  "cutTemplate": { "sceneId": "23", "title": "Other PMV", "duration": 90, "cuts": [0.53, 1.0, …],   // optional: Schnitte
+                   "flashes": [14.97], "music": "Other PMV.m4a" }                                 // eines anderen PMV
 }
 ```
 
@@ -230,7 +242,8 @@ Die Summe aller `frames` ist exakt `totalFrames`, das ist getestet.
 Eigenschaften:
 * **Inhaltsadressierter Segment-Cache**: Der SHA-1 aus Teil und Ausgabeeinstellungen ist der Dateiname. Nach kleinen Edits werden nur geänderte Teile neu gerendert.
 * **Parallel** (`parallelJobs`), mit Fortschritt an Stash (`\x01p\x02…`). Abbrechen beendet laufende FFmpeg-Prozesse.
-* Danach optional ein Stash-Scan des Ausgabeordners, damit das PMV als Szene erscheint.
+* Danach optional ein Stash-Scan des Ausgabeordners, damit das PMV als Szene erscheint. Das Ergebnis meldet `scanned`; ein PC-Render in einen zugeordneten Ordner (`Y:\PMVs` = `/data/PMVs`) wird über die umgekehrte Zuordnung (`unmap_path`, Ergebnis `stashFile`) ebenfalls gescannt.
+* **🏷 Beschriften** ([labels.ts](../src/ui/labels.ts)): Der Scan läuft erst nach dem Render-Task (Stashs Job-Warteschlange arbeitet nacheinander), deshalb beschriftet der Browser. Er sucht die Szene per exaktem Pfad (`EQUALS`; `INCLUDES` zerlegt den Wert in Wörter) und setzt Projektname als Titel, eine kurze Beschreibung, alle Performer der Quellszenen, die Tags, die mindestens ein Viertel davon teilen (mindestens zwei Szenen), und den Tag `PMV Creator`. Vorhandene Werte bleiben. Offene Aufträge liegen im `localStorage` und werden beim nächsten Editor-Start nachgeholt.
 * Sicherheit: Projekt- und Upload-IDs werden per Regex geprüft (keine Pfad-Traversal). Übergangsnamen kommen aus einer Whitelist, Pfade werden nur als Argumente übergeben, nie über eine Shell oder den Filtergraph.
 
 ### 7.3 Alternative Übergaben
@@ -244,7 +257,7 @@ Eigenschaften:
 ## 8. Determinismus – was garantiert ist
 * Gleiches Projekt und gleiche Quelldateien ergeben denselben Render-Plan und damit dieselben FFmpeg-Befehle.
 * Absolute Positionen werden quantisiert, ohne Drift. Die Frame-Summe wird im Backend vor dem Render geprüft.
-* Kein `Math.random()` in der Pipeline. Auto-Arrange „gemischt“ und Stashs `random_<seed>`-Sortierung nutzen Seeds.
+* Kein `Math.random()` in der Pipeline. Auto-Arrange „gemischt“ und Stashs `random_<seed>`-Sortierung nutzen Seeds. Einzige Ausnahme ist 🎲 *Anderer Clip* als bewusste Handaktion: Sein Ergebnis steht danach wie jede Bearbeitung im Projekt, der Render bleibt deterministisch.
 * Preview, EDL, OTIO und Render teilen sich `flattenTimeline` und `resolveTransitions`.
 
 ## 9. Grenzen & Ausbaustufen

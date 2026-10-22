@@ -18,12 +18,14 @@ import { t, tn } from "../../i18n";
 import { clipEnd } from "../../model/project";
 import { probeKeyframes } from "../../stash/backend";
 import { stashUrl } from "../../stash/graphql";
+import { SKIP_TAG } from "../../stash/library";
 import { invalidateScene, useScene } from "../../stash/sceneCache";
 import { VideoSlot, onStreamChange } from "../../stash/streams";
 import { type StashMarker, type StashScene, markerLabel, sceneTitle } from "../../stash/types";
 import { useEditor } from "../../state/store";
 import { type ClipSourceInput, findClip } from "../../timeline/ops";
 import { clamp, formatTime } from "../../timeline/time";
+import { allowAgain } from "../clipActions";
 import { NumField, SpriteThumb } from "../common";
 import { insertAction } from "../editing";
 import { useSprites } from "../hooks";
@@ -463,6 +465,14 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
           </span>
         ))}
       </div>
+      {scene.tags.some((x) => x.name === SKIP_TAG) && (
+        <div className="pmv-row pmv-wrap">
+          <span className="pmv-error">⊘ {t("The generator never uses this scene (Stash tag “{tag}”).", { tag: SKIP_TAG })}</span>
+          <button className="btn btn-sm btn-secondary" onClick={() => void allowAgain(scene.id)}>
+            {t("Allow it again")}
+          </button>
+        </div>
+      )}
       {shown ? (
         <div className="pmv-li-meta">{t("The scene plays in the big player – pick the part for the PMV there.")}</div>
       ) : (

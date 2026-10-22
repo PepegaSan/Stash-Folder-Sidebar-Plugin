@@ -1,17 +1,19 @@
 import React, { useEffect, useRef, useState } from "react";
 import { sceneToSource } from "../culling/culling";
 import { type Host, HostProvider, classicHost, useHost } from "../host";
-import { detectLang } from "../i18n";
+import { detectLang, t } from "../i18n";
 import { gql } from "../stash/graphql";
 import { uid } from "../model/ids";
-import { type SourceMedia, projectDuration } from "../model/project";
-import { fetchScenes } from "../stash/queries";
+import { type SourceMedia, createProject, projectDuration } from "../model/project";
+import { fetchScenes, performerRef, tagRef } from "../stash/queries";
 import { primeScenes } from "../stash/sceneCache";
 import { EditorProvider, useEditor } from "../state/store";
 import { findClip } from "../timeline/ops";
 import { clamp } from "../timeline/time";
+import { anotherClip } from "./clipActions";
 import { GeneratorDialog } from "./generator/GeneratorDialog";
 import { Inspector } from "./Inspector";
+import { resumeLabels } from "./labels";
 import { useLocalMediaPolling } from "./localMedia";
 import { Monitor, SourceHostContext, sourceKeys } from "./monitor";
 import { Sidebar } from "./sidebar/Sidebar";
@@ -62,7 +64,10 @@ function Workspace() {
   const [sourceHost, setSourceHost] = useState<HTMLDivElement | null>(null);
   useShortcuts();
   useDeepLinkScenes();
+  useDeepLinkClipPreset();
   useLocalMediaPolling(backend === "online");
+  // 🏷 labels of renders whose scan was not through when the editor was closed
+  useEffect(() => resumeLabels(), []);
   return (
     <SourceHostContext.Provider value={sourceHost}>
       {state.ui.generator && <GeneratorDialog />}
@@ -103,8 +108,30 @@ function useDeepLinkScenes() {
   }, [dispatch, host]);
 }
 
+/**
+ * ?performer=<id> / ?tag=<id> ("PMV with this performer" in Stash): a new project named after them, and the
+ * generator opens with them as its filter – after the song, or right away when the project has music.
+ */
+function useDeepLinkClipPreset() {
+  const { dispatch } = useEditor();
+  const host = useHost();
+  useEffect(() => {
+    const performer = host.query.get("performer") ?? "";
+    const tag = host.query.get("tag") ?? "";
+    if (!/^\d+$/.test(performer) && !/^\d+$/.test(tag)) return;
+    host.clearQueryParams?.(["performer", "tag"]);
+    void (async () => {
+      const [p, tg] = await Promise.all([/^\d+$/.test(performer) ? performerRef(performer) : null, /^\d+$/.test(tag) ? tagRef(tag) : null]);
+      const label = [p?.name, tg?.name].filter(Boolean).join(" · ");
+      if (!label) return;
+      dispatch({ type: "project/load", project: createProject(t("PMV – {name}", { name: label })) });
+      dispatch({ type: "ui", patch: { clipPreset: { performers: p ? [p] : [], tags: tg ? [tg] : [], label } } });
+    })().catch(() => undefined);
+  }, [dispatch, host]);
+}
+
 function useShortcuts() {
-  const { state, dispatch, transport } = useEditor();
+  const { state, getState, dispatch, transport } = useEditor();
   const latest = useRef(state);
   latest.current = state;
   useEffect(() => {
@@ -137,6 +164,14 @@ function useShortcuts() {
           case "r":
             if (sel && ui.selectedSnippetId) dispatch({ type: "clip/replace", clipId: sel, snippetId: ui.selectedSnippetId });
             break;
+          case "n":
+            if (sel && !e.repeat) void anotherClip(getState, dispatch, [sel]);
+            break;
+          case "p": {
+            const loc = sel ? findClip(p, sel) : null;
+            if (loc) dispatch({ type: "clips/pin", clipIds: [loc.clip.id], pinned: !loc.clip.pinned });
+            break;
+          }
           case "m":
             dispatch({ type: "marker/add", marker: { id: uid("mrk"), time: transport.time, label: `M${p.markers.length + 1}` } });
             break;
@@ -176,5 +211,5 @@ function useShortcuts() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [dispatch, transport]);
+  }, [dispatch, getState, transport]);
 }

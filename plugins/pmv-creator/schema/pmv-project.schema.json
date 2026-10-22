@@ -47,6 +47,39 @@
       "description": "Timeline-Marker (z. B. Drop, Refrain).",
       "type": "array",
       "items": { "$ref": "#/$defs/timelineMarker" }
+    },
+    "generator": {
+      "description": "Letzter Generator-Lauf (Einstellungen und Bereich) – damit lässt sich ein einzelner Clip später mit denselben Regeln neu würfeln. Fehlt bzw. null bei nie generierten Projekten.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["settings", "from", "to"],
+          "properties": {
+            "settings": { "type": "object" },
+            "from": { "$ref": "#/$defs/seconds" },
+            "to": { "$ref": "#/$defs/seconds" }
+          }
+        }
+      ]
+    },
+    "cutTemplate": {
+      "description": "Ein anderes PMV, dessen Schnitte der Generator übernehmen kann (Zeiten in dessen eigener Zeit). music = Name der Projektmusik, wenn es dessen Ton ist.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["sceneId", "title", "duration", "cuts", "flashes", "music"],
+          "properties": {
+            "sceneId": { "$ref": "#/$defs/stashId" },
+            "title": { "type": "string" },
+            "duration": { "$ref": "#/$defs/seconds" },
+            "cuts": { "type": "array", "items": { "$ref": "#/$defs/seconds" } },
+            "flashes": { "type": "array", "items": { "$ref": "#/$defs/seconds" } },
+            "music": { "type": ["string", "null"] }
+          }
+        }
+      ]
     }
   },
 
@@ -177,7 +210,8 @@
         "volume": { "type": "number", "minimum": 0, "maximum": 2, "description": "Lautstärke des Original-Tons (0 = nur Musik)." },
         "transitionIn": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/transition" }] },
         "fit": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/fit" }], "description": "null = output.fit" },
-        "label": { "type": "string" }
+        "label": { "type": "string" },
+        "pinned": { "type": "boolean", "description": "Vom Generator festgehalten: erneutes Erzeugen lässt den Clip stehen." }
       }
     },
 

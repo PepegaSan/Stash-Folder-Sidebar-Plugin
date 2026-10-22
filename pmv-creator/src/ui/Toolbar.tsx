@@ -14,6 +14,8 @@ import type { EditMode } from "../timeline/ops";
 import { Menu, Seg } from "./common";
 import { downloadText, safeName } from "./download";
 import { PcRender } from "./PcRender";
+import { useHost } from "../host";
+import { type LabelStatus, labelJob, labelingOn, queueLabel, setLabelingOn, watchLabel } from "./labels";
 import { RecordCancelled, type RecordProgress, recordSequence, recordingSupported } from "./preview/recorder";
 
 // label functions, not constants: t() needs the language, which is known only once the app runs
@@ -234,6 +236,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
         [t("Without snapping"), t("Shift while dragging")],
         [t("Show a clip's scene in the big player"), t("✎ Edit source · double-click the clip")],
         [t("Split at the playhead · replace with the clip selected under “My clips”"), "S · R"],
+        [t("Another clip for the selected one · keep it when generating again"), "N · P"],
         [t("Delete · ripple delete"), t("Del · Shift+Del")],
         [t("Timeline marker"), t("M (double-click in the ruler removes it)")],
         [t("Clear selection"), "Esc"],
@@ -361,9 +364,39 @@ function readTarget(): RenderTarget {
   }
 }
 
+/**
+ * 🏷 Labels the finished video in Stash once it is scanned (see labels.ts) and shows how far that is. Only for
+ * videos Stash scans; otherwise it says why nothing happens.
+ */
+function LabelLine({ project, file, scanned, pc }: { project: PmvProject; file: string | undefined; scanned: boolean; pc: boolean }) {
+  const host = useHost();
+  const [status, setStatus] = useState<LabelStatus | null>(null);
+  const [queued] = useState(() => {
+    if (!labelingOn() || !scanned || !file) return false;
+    queueLabel(labelJob(project, file));
+    return true;
+  });
+  useEffect(() => (queued && file ? watchLabel(file, setStatus) : undefined), [queued, file]);
+  if (!labelingOn()) return null;
+  if (!queued) {
+    return <div className="pmv-li-meta">🏷 {pc ? t("Not labeled: the video is on the PC outside the folders Stash sees (a mapped folder would be).") : t("Not labeled: Stash doesn't scan the video (plugin setting “Scan after rendering”, output folder inside a library).")}</div>;
+  }
+  if (!status || status.state === "waiting") return <div className="pmv-li-meta">🏷 {t("Waiting for Stash's scan to label the PMV…")}</div>;
+  if (status.state === "error") return <div className="pmv-error">🏷 {status.error}</div>;
+  return (
+    <div className="pmv-success">
+      🏷 {t("Labeled in Stash: title, {p} performers, {t} shared tags.", { p: status.performers, t: status.tags })}{" "}
+      <a href={host.sceneHref(status.sceneId)} target="_blank" rel="noreferrer">
+        {t("Open in Stash")} ↗
+      </a>
+    </div>
+  );
+}
+
 function RenderDialog({ onClose }: { onClose: () => void }) {
   const { state, backend, ffmpegAvailable } = useEditor();
   const [{ plan, warnings }] = useState(() => buildRenderPlan(state.present));
+  const [label, setLabel] = useState(labelingOn);
   // where it renders: in Stash (server) or on a PC with the render helper (opt-in, remembered per browser)
   const [target, setTargetState] = useState<RenderTarget>(readTarget);
   const [helper, setHelper] = useState<{ id: string; name: string } | null>(null);
@@ -453,6 +486,17 @@ function RenderDialog({ onClose }: { onClose: () => void }) {
           />
         </div>
         {pc && backend === "online" && <PcRender disabled={running} onHelper={(id, name) => setHelper(id && name ? { id, name } : null)} />}
+        <label className="pmv-check" title={t("Once Stash has scanned the video: the project name as title, the performers of its scenes, the tags most of them share and the tag “PMV Creator”")}>
+          <input
+            type="checkbox"
+            checked={label}
+            onChange={(e) => {
+              setLabelingOn(e.target.checked);
+              setLabel(e.target.checked);
+            }}
+          />{" "}
+          🏷 {t("Label it in Stash (title, performers, tags)")}
+        </label>
         {backend !== "online" && <div className="pmv-error">{t("Backend unreachable. Export the render plan and render with the CLI (see README).")}</div>}
         {!pc && backend === "online" && !ffmpegAvailable && <div className="pmv-error">{t("FFmpeg was not found on the server – set its path in the plugin settings.")}</div>}
         {status && !result && (
@@ -475,6 +519,7 @@ function RenderDialog({ onClose }: { onClose: () => void }) {
             <li>⚠ {result.warning}</li>
           </ul>
         )}
+        {result?.status === "done" && <LabelLine key={result.file} project={state.present} file={result.stashFile ?? result.file} scanned={!!result.scanned} pc={!!result.helper} />}
         {result?.status === "error" && <div className="pmv-error">{result.error}</div>}
         {status?.status === "CANCELLED" && <div className="pmv-error">{t("Cancelled.")}</div>}
         {error && <div className="pmv-error">{error}</div>}
@@ -567,6 +612,7 @@ function QuickRecord({ disabled, onBusy }: { disabled: boolean; onBusy: (busy: b
           <li>⚠ {phase.result.warning}</li>
         </ul>
       )}
+      {phase.kind === "done" && phase.result && <LabelLine key={phase.result.file} project={project} file={phase.result.file} scanned={!!phase.result.scanned} pc={false} />}
       {phase.kind === "error" && <div className="pmv-error">{phase.error}</div>}
       <div className="pmv-row">
         {!busy ? (

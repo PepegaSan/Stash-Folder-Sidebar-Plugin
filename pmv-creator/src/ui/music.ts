@@ -3,7 +3,7 @@ import { useState } from "react";
 import { detectTempo } from "../audio/analysis";
 import { t } from "../i18n";
 import { createAudioTrack } from "../model/project";
-import { importAudio, uploadAudio } from "../stash/backend";
+import { type LibrarySong, type MediaResult, importAudio, uploadAudio } from "../stash/backend";
 import { useEditor } from "../state/store";
 import { getAudioAnalysis } from "./hooks";
 
@@ -50,7 +50,16 @@ export function useMusic() {
       setStatus(t("Error: {error}", { error: String(e) }));
     }
   };
+  /** A song from the library (uploaded before) or one the backend made (a PMV's sound) – no upload. */
+  const adoptMedia = async (r: Pick<MediaResult, "name" | "path" | "url" | "duration">) => {
+    try {
+      await adopt(r.name, r.path, r.url, r.duration);
+    } catch (e) {
+      setStatus(t("Error: {error}", { error: String(e) }));
+    }
+  };
+  const adoptSong = (s: LibrarySong) => adoptMedia({ name: s.name, path: s.path, url: s.url, duration: null });
   const remove = () => dispatch({ type: "audio/set", audio: null });
 
-  return { audio, status, online: backend === "online", upload, usePath, remove };
+  return { audio, status, online: backend === "online", upload, usePath, adoptMedia, adoptSong, remove };
 }

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.0 (2026-10-22)
+
+After generating – in the bar above the timeline (a clip selected):
+
+- **🎲 Another clip** (N): new material for the clip, picked by the rules of the last generator run (same filters, tag stage and candidates, no scene that plays nearby, few clips per scene). Place, length, speed and transition stay; one undo step. Pressing again goes on to other scenes instead of back. The project remembers its last generator run for this; projects generated before 0.8 draw from their own scenes.
+- **📌 Keep** (P): "Generate again" and "Another variant" leave kept clips where they are and fill around them (also with "Clear the track first"). Kept clips carry a 📌 on the timeline; the generator dialog shows how many there are and can let them go.
+- **⊘ Scene out**: the scene leaves this PMV – every clip of it gets another clip and the generator skips it in this project (one undo step). **Never use it again** then gives the scene the Stash tag `PMV Creator: skip`, which every generator run leaves out; *Allow it again* in the scene view takes it off.
+- **🏷 Label it in Stash** (render dialog, on by default): once Stash has scanned the finished video, its scene gets the project name as title, a short description, the performers of the scenes used, the tags at least a quarter of them share and the tag `PMV Creator`. Works for server renders, Quick record and PC renders into a folder that is mapped to a Stash library (such a render is now scanned too). If the editor is closed before the scan is through, it labels the video on its next start.
+- The generator's result line points to 🎲 and 📌; the help lists N and P.
+
+Before generating:
+
+- **Cuts: Like another PMV** (Pepega's "PMV as template", without split screens): pick a PMV from the library; its cuts and flashes are measured (gray frames from the backend, Pepega's cut rule; a flash is a short, nearly uniform bright picture, so a cut to a bright clip stays a cut) and the generator changes clips exactly there – flashes become white flashes. *Take over its music too* (default) makes its sound the project's song (extracted on the server, BPM detected), so the cuts land on the music. Checked against a rendered PMV with known cuts: all 33 clip changes found to the frame.
+- **My presets**: save the generator settings under a name and load them again – kept on the server for every browser of this Stash.
+- **🎵 Song library**: songs uploaded before can be picked again (start panel and inspector) – no new upload over the network.
+- **PMV with this performer/tag**: Stash UI shows it in the header of performer and tag pages, classic Stash on the performer page (*⚡ PMV: name*). It starts a new project named after them; the generator opens with that performer/tag as its filter. Deep links `?performer=<id>` / `?tag=<id>`.
+
 ## 0.7.2 (2026-10-22)
 
 - **⇄ Replace all N…** in the bar above the timeline, next to *Edit source*: for a clip whose scene is in the PMV more than once. The scene list on the left then picks the new scene – one click replaces every clip of the old one (same relative spots, places and lengths stay, Ctrl+Z undoes it); Esc or ✕ cancels.

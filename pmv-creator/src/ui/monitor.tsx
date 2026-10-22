@@ -3,12 +3,14 @@
  * big ("source monitor"). The scene drill-down owns the scene player and portals it into the host
  * element provided here, so its state (selection, keyframes, slot) stays in one component.
  */
-import React, { createContext } from "react";
-import { t } from "../i18n";
+import React, { createContext, useState } from "react";
+import { t, tn } from "../i18n";
+import { SKIP_TAG } from "../stash/library";
 import { useScene } from "../stash/sceneCache";
 import { sceneTitle } from "../stash/types";
 import { useEditor } from "../state/store";
 import { findClip } from "../timeline/ops";
+import { anotherClip, sceneOut, skipForever } from "./clipActions";
 import { PreviewPlayer } from "./preview/PreviewPlayer";
 
 /** Element the scene player is portalled into; null until the monitor has mounted. */
@@ -88,6 +90,88 @@ export function ReplaceAllButton() {
     >
       ⇄ {t("Replace all {n}…", { n })}
     </button>
+  );
+}
+
+/**
+ * Next to "Edit source": 🎲 another clip (N), 📌 keep it when generating again (P), ⊘ the scene out of this PMV.
+ * The first and the last ask Stash for candidates of the last generator run.
+ */
+export function ClipActions() {
+  const { state, getState, dispatch } = useEditor();
+  const ui = state.ui;
+  const clip = !ui.swapFrom && ui.selectedClipId ? findClip(state.present, ui.selectedClipId)?.clip : null;
+  if (!clip) return null;
+  const busy = !!ui.clipTask && !ui.clipTask.error;
+  const title = state.present.sources[clip.sceneId]?.title ?? clip.sceneId;
+  return (
+    <>
+      <button
+        className="btn btn-sm btn-secondary"
+        disabled={busy}
+        title={t("Another clip for this spot – picked like the generator picks (same tags and performers), place and length stay (N)")}
+        onClick={() => void anotherClip(getState, dispatch, [clip.id])}
+      >
+        🎲 {t("Another clip")}
+      </button>
+      <button
+        className={`btn btn-sm ${clip.pinned ? "btn-primary" : "btn-secondary"}`}
+        title={clip.pinned ? t("Kept: “Generate again” and “Another variant” leave this clip where it is – click to let it go (P)") : t("Keep this clip: “Generate again” and “Another variant” leave it where it is and fill around it (P)")}
+        onClick={() => dispatch({ type: "clips/pin", clipIds: [clip.id], pinned: !clip.pinned })}
+      >
+        📌 {clip.pinned ? t("Kept") : t("Keep")}
+      </button>
+      <button
+        className="btn btn-sm btn-secondary"
+        disabled={busy}
+        title={t("Takes “{title}” out of this PMV: all its clips get another clip, the generator skips it from now on (Ctrl+Z undoes it)", { title })}
+        onClick={() => void sceneOut(getState, dispatch, clip.sceneId)}
+      >
+        ⊘ {t("Scene out")}
+      </button>
+    </>
+  );
+}
+
+/** One line under the bar: what the clip actions are doing, and the offer to skip a removed scene for good. */
+export function ClipNotice() {
+  const { state, dispatch } = useEditor();
+  const { clipTask, sceneOut: out } = state.ui;
+  const [tagging, setTagging] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
+  if (!clipTask && !out) return null;
+  const never = async () => {
+    if (!out) return;
+    setTagging({ busy: true, error: null });
+    try {
+      await skipForever(out.sceneId);
+      dispatch({ type: "ui", patch: { sceneOut: { ...out, tagged: true } } });
+      setTagging({ busy: false, error: null });
+    } catch (e) {
+      setTagging({ busy: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  };
+  return (
+    <div className="pmv-tl-notice">
+      {out && (
+        <span>
+          ⊘{" "}
+          {out.tagged
+            ? t("“{title}” is never used again (Stash tag “{tag}” – the scene on the left takes it off again).", { title: out.title, tag: SKIP_TAG })
+            : `${t("“{title}” is out of this PMV", { title: out.title })} – ${tn(out.replaced, "{n} clips replaced", "1 clip replaced")}.`}{" "}
+          {!out.tagged && (
+            <button className="btn btn-sm btn-secondary" disabled={tagging.busy} title={t("Gives the scene the Stash tag “{tag}” – no generator run uses it again, in any project", { tag: SKIP_TAG })} onClick={() => void never()}>
+              {t("Never use it again")}
+            </button>
+          )}{" "}
+          {tagging.error && <span className="pmv-error">⚠ {tagging.error}</span>}
+        </span>
+      )}
+      {clipTask && <span className={clipTask.error ? "pmv-error" : "pmv-li-meta"}>{clipTask.error ? "⚠ " : "⏳ "}{clipTask.text}</span>}
+      <span className="pmv-spacer" />
+      <button className="btn btn-sm btn-link" title={t("Close")} onClick={() => dispatch({ type: "ui", patch: { clipTask: null, sceneOut: null } })}>
+        ✕
+      </button>
+    </div>
   );
 }
 

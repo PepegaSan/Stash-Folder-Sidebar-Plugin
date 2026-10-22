@@ -12,6 +12,7 @@ import { beatLength, formatBarBeat, nearestGridTime } from "../timeline/time";
 import { More, NumField, transitionLabel } from "./common";
 import { useAudioAnalysis } from "./hooks";
 import { useMusic } from "./music";
+import { SongLibraryButton } from "./SongLibrary";
 
 export function Inspector() {
   const { state } = useEditor();
@@ -288,6 +289,7 @@ function AudioSection() {
         <button className={`btn btn-sm ${audio ? "btn-secondary" : "btn-primary"}`} disabled={!music.online} onClick={() => fileRef.current?.click()}>
           {audio ? t("Other song…") : t("Upload song…")}
         </button>
+        {music.online && <SongLibraryButton current={audio?.name} onPick={(s) => void music.adoptSong(s)} />}
         {audio && (
           <button className="btn btn-sm btn-link" onClick={music.remove}>
             {t("Remove")}

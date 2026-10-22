@@ -4,17 +4,19 @@
  * performers, count. Advanced mode shows every option (following the Pepega PMV Generator where it applies
  * to an offline cut; split screens and live effects are left out).
  */
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { PickOrder, TransitionPolicy } from "../../generator/assemble";
-import { type GeneratorSettings, MOODS, type Mood, applyMood, defaultSettings, generationRange } from "../../generator/generate";
+import { type GeneratorSettings, MOODS, type Mood, applyMood, defaultSettings, generationRange, pinnedClips } from "../../generator/generate";
 import type { ClipOptions, ClipSource, TagStage } from "../../generator/material";
 import type { CutOptions, Pace } from "../../generator/rhythm";
 import { t, tn } from "../../i18n";
 import { formatTime } from "../../timeline/time";
+import { type PresetEntry, deletePreset, listPresets, savePreset } from "../../stash/backend";
 import { findPerformers, findTags } from "../../stash/queries";
 import { rememberAdvanced } from "../../state/prefs";
 import { useEditor } from "../../state/store";
 import { NumField, RefPicker, Seg } from "../common";
+import { CutTemplateBox } from "./CutTemplateBox";
 import { type RunOutcome, runGenerator } from "./run";
 
 const LS_KEY = "pmv-creator:generator";
@@ -49,6 +51,25 @@ function save(s: GeneratorSettings): void {
   }
 }
 
+/** Saved settings applied over the defaults (older presets lack newer fields); the target stays. */
+function withPreset(x: GeneratorSettings, ps: Partial<GeneratorSettings>): GeneratorSettings {
+  const base = defaultSettings(x.target.trackId);
+  return {
+    ...x,
+    mood: ps.mood ?? x.mood,
+    clips: { ...base.clips, ...ps.clips },
+    select: { ...base.select, ...ps.select },
+    cut: { ...base.cut, ...ps.cut },
+    style: { ...base.style, ...ps.style },
+  };
+}
+
+/** Back from "like another PMV" to cutting by the music: the mood's cutting again (custom: automatic). */
+function cutsToMusic(x: GeneratorSettings): GeneratorSettings {
+  const back = { ...x, cut: { ...x.cut, mode: "auto" as const } };
+  return x.mood === "custom" ? back : applyMood(back, x.mood);
+}
+
 const Check = ({ label, checked, onChange, title, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; title?: string; disabled?: boolean }) => (
   <label className="pmv-check pmv-gen-check" title={title}>
     <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} /> {label}
@@ -61,10 +82,19 @@ export function GeneratorDialog() {
   const preset = state.ui.generator;
   const adv = state.ui.advanced;
   const defaultTrack = project.tracks[project.tracks.length - 1].id;
+  // read once: the preset is used up when the dialog opens, its hint stays while it is open
+  const [clipPreset] = useState(state.ui.clipPreset);
   const [s, setS] = useState<GeneratorSettings>(() => {
     const loaded = loadSaved(defaultTrack, project.tracks.map((x) => x.id));
+    // "PMV with this performer/tag" from Stash: just that filter, nothing left over from earlier runs
+    if (clipPreset) return { ...loaded, clips: { ...defaultSettings(defaultTrack).clips, limit: loaded.clips.limit, performers: clipPreset.performers, tags: clipPreset.tags } };
     return preset?.source ? { ...loaded, clips: { ...loaded.clips, source: preset.source } } : loaded;
   });
+  useEffect(() => {
+    if (clipPreset) dispatch({ type: "ui", patch: { clipPreset: null } });
+  }, []);
+  const [presets, setPresets] = useState<PresetEntry[] | null>(null);
+  const [presetName, setPresetName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
@@ -86,9 +116,37 @@ export function GeneratorDialog() {
   const c = s.clips;
   const hasAudio = !!project.audio;
   const offline = backend !== "online";
+  useEffect(() => {
+    // (an older backend doesn't know presets: no row)
+    if (!offline) listPresets().then((x) => setPresets(Array.isArray(x) ? x : null), () => setPresets(null));
+  }, [offline]);
+  const applyPreset = (name: string) => {
+    setPresetName(name);
+    const p = presets?.find((x) => x.name === name);
+    if (p) setS((x) => withPreset(x, p.settings as Partial<GeneratorSettings>));
+  };
+  const saveAs = async () => {
+    const name = window.prompt(t("Name for these settings (e.g. a model and a style):"), presetName)?.trim();
+    if (!name) return;
+    const { target: _target, seed: _seed, ...rest } = s;
+    try {
+      setPresets(await savePreset(name, rest));
+      setPresetName(name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const removePreset = async () => {
+    if (!presetName || !window.confirm(t("Delete the preset “{name}”?", { name: presetName }))) return;
+    setPresets(await deletePreset(presetName).catch(() => presets));
+    setPresetName("");
+  };
+  const fromPmv = s.cut.mode === "template";
+  const needsTemplate = fromPmv && !project.cutTemplate;
   // without music there is no song range: N bars from the playhead; simple mode always fills the whole song
   const target = !hasAudio ? { ...s.target, range: "bars" as const } : adv ? s.target : { ...s.target, range: "song" as const };
   const range = useMemo(() => generationRange(project, target, transport.time), [project, target.range, target.bars, transport.time]);
+  const pins = pinnedClips(project, target.trackId);
 
   const run = async (seed: number) => {
     const next = { ...s, seed };
@@ -98,7 +156,7 @@ export function GeneratorDialog() {
     setBusy(t("Starting…"));
     try {
       const r = await runGenerator(state.present, { ...next, target }, transport.time, setBusy);
-      if (!r.result.clips.length) throw new Error(t("No clips came out of this."));
+      if (!r.result.clips.length) throw new Error(pins.length ? t("Every spot is kept (📌) – nothing left to generate.") : t("No clips came out of this."));
       dispatch({ type: "generate/apply", result: r.result });
       setOutcome(r);
     } catch (e) {
@@ -152,6 +210,42 @@ export function GeneratorDialog() {
           />
           {!adv && s.mood !== "custom" && <span className="pmv-li-meta">{moodHints[s.mood]}</span>}
         </div>
+        {presets && (
+          <div className="pmv-row pmv-wrap">
+            <span className="pmv-gen-label">{t("My presets")}</span>
+            <select className="form-control form-control-sm pmv-gen-preset" value={presetName} onChange={(e) => applyPreset(e.target.value)} title={t("Saved settings: mood, clips, cutting and style – for every browser of this Stash")}>
+              <option value="">{presets.length ? t("— choose —") : t("— none yet —")}</option>
+              {presets.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <button className="btn btn-sm btn-secondary" disabled={!!busy} onClick={() => void saveAs()} title={t("Saves the current settings under a name (the same name overwrites)")}>
+              💾 {t("Save as…")}
+            </button>
+            {presetName && (
+              <button className="btn btn-sm btn-link" disabled={!!busy} onClick={() => void removePreset()} title={t("Delete this preset")}>
+                ✕
+              </button>
+            )}
+          </div>
+        )}
+        {clipPreset && <div className="pmv-li-meta">{t("Clips with {name} – change it below.", { name: clipPreset.label })}</div>}
+        {!adv && (
+          <div className="pmv-row pmv-wrap">
+            <span className="pmv-gen-label">{t("Cuts")}</span>
+            <Seg<"music" | "template">
+              value={fromPmv ? "template" : "music"}
+              onChange={(v) => setS((x) => (v === "template" ? { ...x, cut: { ...x.cut, mode: "template" } } : cutsToMusic(x)))}
+              options={[
+                ["music", t("To the music"), t("Cut on the beat, the way the mood says")],
+                ["template", t("Like another PMV"), t("Takes over the cuts and flashes of a PMV from your library")],
+              ]}
+            />
+          </div>
+        )}
+        {!adv && fromPmv && <CutTemplateBox disabled={!!busy} />}
 
         {!adv ? (
           // ---------------------------------------------------------------- simple: what is needed, nothing else
@@ -292,7 +386,11 @@ export function GeneratorDialog() {
               <div className="pmv-gen-h">3 · {t("Cutting & style")}</div>
               <div className="pmv-grid2">
                 <label>{t("Cutting")}</label>
-                <Seg<CutOptions["mode"]> value={s.cut.mode} onChange={(v) => setCut({ mode: v })} options={[["auto", t("Automatic"), t("By the music's energy: calm long, loud short")], ["fixed", t("Fixed")], ["pattern", t("Pattern")]]} />
+                <Seg<CutOptions["mode"]>
+                  value={s.cut.mode}
+                  onChange={(v) => setCut({ mode: v })}
+                  options={[["auto", t("Automatic"), t("By the music's energy: calm long, loud short")], ["fixed", t("Fixed")], ["pattern", t("Pattern")], ["template", t("Like a PMV"), t("Takes over the cuts and flashes of a PMV from your library")]]}
+                />
                 {s.cut.mode === "auto" && (
                   <>
                     <label>{t("Pace")}</label>
@@ -332,6 +430,7 @@ export function GeneratorDialog() {
                 <label>{t("Speed")}</label>
                 <NumField value={s.style.speed} onCommit={(v) => setStyle({ speed: v })} min={0.25} max={4} step={0.05} suffix="×" />
               </div>
+              {fromPmv && <CutTemplateBox disabled={!!busy} />}
               <div className="pmv-row pmv-wrap">
                 <Check label={t("Cuts on the bar grid")} checked={s.cut.onGrid} onChange={(v) => setCut({ onGrid: v })} />
                 <Check label={t("Flash on drops")} checked={s.style.flashDrops} onChange={(v) => setStyle({ flashDrops: v })} disabled={!hasAudio} />
@@ -366,7 +465,7 @@ export function GeneratorDialog() {
                 </span>
               </div>
               <div className="pmv-row pmv-wrap">
-                <Check label={t("Clear the track first")} checked={s.target.replaceTrack} onChange={(v) => setTarget({ replaceTrack: v })} />
+                <Check label={t("Clear the track first")} title={t("Kept clips (📌) stay")} checked={s.target.replaceTrack} onChange={(v) => setTarget({ replaceTrack: v })} />
                 <Check label={t("Used segments into “My clips”")} title={t("So every clip can later be swapped for another segment with ⇄")} checked={s.target.addToBin} onChange={(v) => setTarget({ addToBin: v })} />
               </div>
             </div>
@@ -377,6 +476,14 @@ export function GeneratorDialog() {
           <div className="pmv-li-meta">
             {formatTime(range.from)} – {formatTime(range.to)} ({Math.max(0, range.to - range.from).toFixed(1)} s){!hasAudio && ` · ${t("without music: no energy/drop signal")}`}
           </div>
+          {pins.length > 0 && (
+            <div className="pmv-li-meta">
+              📌 {tn(pins.length, "{n} kept clips stay – the generator fills around them.", "1 kept clip stays – the generator fills around it.")}{" "}
+              <button className="btn btn-sm btn-link" disabled={!!busy} onClick={() => dispatch({ type: "clips/pin", clipIds: pins.map((c) => c.id), pinned: false })}>
+                {t("Let them go")}
+              </button>
+            </div>
+          )}
           {busy && <div className="pmv-li-meta">⏳ {busy}</div>}
           {error && <div className="pmv-error">{error}</div>}
           {outcome && !busy && (
@@ -391,10 +498,11 @@ export function GeneratorDialog() {
                   {s.select.beatSync && ` · ${t("{n} clips put on the beat", { n: outcome.synced })}`}
                 </>
               )}
+              <div className="pmv-li-meta">{t("A clip you don't like: select it, 🎲 Another clip (N). Good ones: 📌 Keep (P) – “Another variant” then leaves them where they are.")}</div>
             </div>
           )}
           <div className="pmv-row">
-            <button className="btn btn-primary" disabled={!!busy || range.to <= range.from} onClick={() => void run(s.seed)}>
+            <button className="btn btn-primary" disabled={!!busy || range.to <= range.from || needsTemplate} title={needsTemplate ? t("Pick the PMV whose cuts to take over first") : undefined} onClick={() => void run(s.seed)}>
               ⚡ {outcome ? t("Generate again") : t("Generate")}
             </button>
             {outcome && (

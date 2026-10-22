@@ -61,8 +61,9 @@ export function analyzeBeats(grid: BeatGrid, from: number, to: number, energy?: 
  * auto    – cut length follows the energy: calm · medium · loud = PACE[pace] beats
  * fixed   – a cut every `every` beats
  * pattern – beat lengths cycled ([4, 2, 2]); fractions allowed (0.5 = eighths)
+ * template – the cuts of another PMV (project.cutTemplate, see template.ts)
  */
-export type CutMode = "auto" | "fixed" | "pattern";
+export type CutMode = "auto" | "fixed" | "pattern" | "template";
 export type Pace = "slow" | "normal" | "fast";
 export const PACE: Record<Pace, [number, number, number]> = { slow: [8, 4, 2], normal: [4, 2, 1], fast: [2, 1, 1] };
 
@@ -87,6 +88,8 @@ export interface Slot {
   drop: boolean;
   /** Position of the slot in the generated range, 0..1. */
   progress: number;
+  /** The template PMV flashes here. */
+  flash?: boolean;
 }
 
 const beatIndexAtTime = (beats: BeatInfo[], t: number): number => {
