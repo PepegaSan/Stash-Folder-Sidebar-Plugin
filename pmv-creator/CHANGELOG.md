@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2 (2026-10-22)
+
+- **⇄ Replace all N…** in the bar above the timeline, next to *Edit source*: for a clip whose scene is in the PMV more than once. The scene list on the left then picks the new scene – one click replaces every clip of the old one (same relative spots, places and lengths stay, Ctrl+Z undoes it); Esc or ✕ cancels.
+
 ## 0.7.1 (2026-10-22)
 
 - **✎ Edit source** / **← Back to the PMV (Esc)** moved to the middle of the bar above the timeline – between the player and the clips, the same spot for both.

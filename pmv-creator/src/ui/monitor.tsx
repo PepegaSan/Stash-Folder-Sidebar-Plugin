@@ -59,6 +59,38 @@ export function SourceToggle() {
   );
 }
 
+/** How many clips of a scene the PMV has. */
+export const clipsOfScene = (p: { tracks: Array<{ clips: Array<{ sceneId: string }> }> }, sceneId: string) => p.tracks.reduce((n, tr) => n + tr.clips.filter((c) => c.sceneId === sceneId).length, 0);
+
+/**
+ * Next to "Edit source": replace every clip of the selected clip's scene with another scene – the scene list on
+ * the left switches to picking it (see SceneBrowser). Only while that scene is in the PMV more than once.
+ */
+export function ReplaceAllButton() {
+  const { state, dispatch } = useEditor();
+  const ui = state.ui;
+  if (ui.swapFrom) {
+    return (
+      <button className="btn btn-sm btn-secondary" title="Esc" onClick={() => dispatch({ type: "ui", patch: { swapFrom: null } })}>
+        ✕ {t("Cancel replacing")}
+      </button>
+    );
+  }
+  const clip = ui.selectedClipId ? findClip(state.present, ui.selectedClipId)?.clip : null;
+  const n = clip ? clipsOfScene(state.present, clip.sceneId) : 0;
+  if (!clip || n < 2) return null;
+  const title = state.present.sources[clip.sceneId]?.title ?? clip.sceneId;
+  return (
+    <button
+      className="btn btn-sm btn-secondary"
+      title={t("Replaces all {n} clips of “{title}” with another scene: pick it in the list on the left (places and lengths stay, one undo step)", { n, title })}
+      onClick={() => dispatch({ type: "ui", patch: { swapFrom: clip.sceneId, sidebarTab: "scenes", activeSceneId: null } })}
+    >
+      ⇄ {t("Replace all {n}…", { n })}
+    </button>
+  );
+}
+
 function MonitorTabs({ sceneId, showScene }: { sceneId: string; showScene: boolean }) {
   const { dispatch } = useEditor();
   const scene = useScene(sceneId);

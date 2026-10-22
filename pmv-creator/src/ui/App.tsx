@@ -141,7 +141,8 @@ function useShortcuts() {
             dispatch({ type: "marker/add", marker: { id: uid("mrk"), time: transport.time, label: `M${p.markers.length + 1}` } });
             break;
           case "Escape":
-            dispatch({ type: "ui", patch: { selectedClipId: null, selectedSnippetId: null } });
+            // first leave "replace all" picking, then clear the selection
+            dispatch({ type: "ui", patch: ui.swapFrom ? { swapFrom: null } : { selectedClipId: null, selectedSnippetId: null } });
             break;
           case "Home":
             transport.seek(0);

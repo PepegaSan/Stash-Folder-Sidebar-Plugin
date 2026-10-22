@@ -9,6 +9,7 @@ import { type StashRef, type StashScene, sceneTitle } from "../../stash/types";
 import { useEditor } from "../../state/store";
 import { formatTime } from "../../timeline/time";
 import { RefPicker } from "../common";
+import { clipsOfScene } from "../monitor";
 
 const PER_PAGE = 30;
 
@@ -43,6 +44,14 @@ export function SceneBrowser() {
     }
   };
 
+  const swapFrom = state.ui.swapFrom;
+  const swapCount = swapFrom ? clipsOfScene(project, swapFrom) : 0;
+  /** While picking for "replace all", a click puts the scene into every clip of the old one. */
+  const pick = (src: SourceMedia | null) => {
+    if (!swapFrom || !src || src.sceneId === swapFrom) return;
+    dispatch({ type: "scene/swap", from: swapFrom, to: src.sceneId, label: src.title, sources: [src] });
+    dispatch({ type: "ui", patch: { swapFrom: null } });
+  };
   const open = (id: string) => dispatch({ type: "ui", patch: { activeSceneId: id, activeSceneSeek: 0 } });
   const addToPool = (s: StashScene) => {
     const src = sceneToSource(s);
@@ -89,6 +98,14 @@ export function SceneBrowser() {
 
   return (
     <div className="pmv-panel">
+      {swapFrom && (
+        <div className="pmv-swap-pick">
+          <span>{t("Pick the scene that replaces all {n} clips of “{title}” – places and lengths stay, Ctrl+Z undoes it.", { n: swapCount, title: project.sources[swapFrom]?.title ?? swapFrom })}</span>
+          <button className="btn btn-sm btn-link" title={t("Cancel replacing")} onClick={() => dispatch({ type: "ui", patch: { swapFrom: null } })}>
+            ✕
+          </button>
+        </div>
+      )}
       <section>
         <button className="pmv-section-head" onClick={() => setPoolOpen(!poolOpen)}>
           {poolOpen ? "▾" : "▸"} {t("Project scenes")} ({pool.length})
@@ -97,7 +114,12 @@ export function SceneBrowser() {
           <ul className="pmv-list">
             {pool.length === 0 && <li className="pmv-empty">{t("No scenes yet. Search below and add them with + – or let the generator pick them.")}</li>}
             {pool.map((s) => (
-              <li key={s.sceneId} className="pmv-list-item" onClick={() => open(s.sceneId)}>
+              <li
+                key={s.sceneId}
+                className={`pmv-list-item ${swapFrom ? (s.sceneId === swapFrom ? "is-excluded" : "is-pickable") : ""}`}
+                title={swapFrom && s.sceneId !== swapFrom ? t("Replace with this scene") : undefined}
+                onClick={() => (swapFrom ? pick(s) : open(s.sceneId))}
+              >
                 <div className="pmv-li-main">
                   <div className="pmv-li-title">{s.title}</div>
                   <div className="pmv-li-meta">
@@ -184,7 +206,12 @@ export function SceneBrowser() {
               {result.scenes.map((s) => {
                 const inPool = !!project.sources[s.id];
                 return (
-                  <li key={s.id} className="pmv-list-item" onClick={() => open(s.id)}>
+                  <li
+                    key={s.id}
+                    className={`pmv-list-item ${swapFrom ? (s.id === swapFrom ? "is-excluded" : "is-pickable") : ""}`}
+                    title={swapFrom && s.id !== swapFrom ? t("Replace with this scene") : undefined}
+                    onClick={() => (swapFrom ? pick(sceneToSource(s)) : open(s.id))}
+                  >
                     {s.paths.screenshot && <img className="pmv-li-img" src={stashUrl(s.paths.screenshot)} alt="" loading="lazy" />}
                     <div className="pmv-li-main">
                       <div className="pmv-li-title">{sceneTitle(s)}</div>

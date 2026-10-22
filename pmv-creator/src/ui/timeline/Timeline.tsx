@@ -15,7 +15,7 @@ import { useEditor } from "../../state/store";
 import { clipFromSnippet, findClip } from "../../timeline/ops";
 import { EPS, beatLength, clamp, formatBarBeat, formatTime, snapRange, snapTime } from "../../timeline/time";
 import { SpriteThumb, sceneHue, transitionLabel } from "../common";
-import { SourceToggle } from "../monitor";
+import { ReplaceAllButton, SourceToggle } from "../monitor";
 import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions } from "../editing";
 import { useAudioAnalysis, useSprites, useTransportTime } from "../hooks";
 import { Waveform } from "./Waveform";
@@ -267,6 +267,7 @@ export function Timeline() {
         <span className="pmv-mono pmv-dim">{formatBarBeat(now, project.beatGrid)}</span>
         <span className="pmv-spacer" />
         <SourceToggle />
+        <ReplaceAllButton />
         <span className="pmv-spacer" />
         {ui.advanced && (
           <>

@@ -260,6 +260,31 @@ describe("PMV Creator UI (mocked Stash)", () => {
     expect(input.value).toBe("99, abc");
   });
 
+  it("replaces every clip of a scene from the bar above the timeline", async () => {
+    // a clip's title starts with its label or its scene (the bin snippet clip is labelled, so the count comes from the button)
+    const titles = () => $$(".pmv-clip").map((el) => el.title.split("\n")[0]);
+    const before = titles();
+    const first = $$(".pmv-clip").find((el) => el.title.startsWith("Scene One"))!;
+    await fire(first, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await fire(window, new MouseEvent("pointerup", { bubbles: true }));
+    const replace = () => $$(".pmv-tl-toolbar button").find((b) => b.textContent?.startsWith("⇄ Replace all"))!;
+    const n = Number(replace().textContent!.match(/\d+/)![0]);
+    expect(n).toBeGreaterThan(1);
+    await fire(replace(), new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-swap-pick")!.textContent).toContain(`all ${n} clips of “Scene One”`);
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect($(".pmv-swap-pick")).toBeNull(); // Esc leaves picking, the clip stays selected
+    await fire(replace(), new MouseEvent("click", { bubbles: true }));
+    const two = $$(".pmv-list-item").find((li) => li.textContent?.includes("Scene Two"))!;
+    await fire(two, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-swap-pick")).toBeNull();
+    expect(titles().filter((x) => x === "Scene One")).toHaveLength(0);
+    expect(titles().filter((x) => x === "Scene Two")).toHaveLength(n);
+    await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    expect(titles()).toEqual(before);
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
   it("generates a PMV into the timeline as one undo step", async () => {
     const before = $$(".pmv-clip").length;
     await fire(byText("⚡ Generate PMV")!, new MouseEvent("click", { bubbles: true }));

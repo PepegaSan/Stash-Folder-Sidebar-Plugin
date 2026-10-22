@@ -192,6 +192,8 @@ export interface UiState {
   sceneInPlayer: boolean;
   /** Bumped by every request to open a scene, so opening the scene that is open already seeks again. */
   sceneRequest: number;
+  /** Picking the scene that replaces every clip of this scene (scene list on the left), null = not picking. */
+  swapFrom: string | null;
   sidebarTab: SidebarTab;
   /** Pixels per second. */
   zoom: number;
@@ -235,6 +237,7 @@ export const DEFAULT_UI: UiState = {
   activeSceneSeek: 0,
   sceneInPlayer: true,
   sceneRequest: 0,
+  swapFrom: null,
   sidebarTab: "scenes",
   zoom: 60,
   editMode: "clamp",
@@ -270,7 +273,7 @@ export function editorReducer(state: EditorState, action: Action, now: number = 
       return { ...state, past: [...state.past, state.present], present, future, lastEdit: null, ui: fixSelection(state.ui, present) };
     }
     case "project/load":
-      return initialEditorState(action.project, { ...state.ui, selectedClipId: null, selectedSnippetId: null, activeSceneId: null, saveState: "saved" });
+      return initialEditorState(action.project, { ...state.ui, selectedClipId: null, selectedSnippetId: null, activeSceneId: null, swapFrom: null, saveState: "saved" });
     case "ui": {
       const ui = { ...state.ui, ...action.patch };
       // opening a scene (from anywhere) shows it in the main player

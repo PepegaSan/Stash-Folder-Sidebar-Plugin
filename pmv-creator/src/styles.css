@@ -1287,3 +1287,18 @@
 .pmv-source-toggle {
   min-width: 180px;
 }
+
+/* "replace all": the scene list picks the new scene */
+.pmv-swap-pick {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 8px;
+  border: 1px solid #ff922b;
+  border-radius: 4px;
+  background: rgba(255, 146, 43, 0.1);
+  font-size: 12px;
+}
+.pmv-list-item.is-pickable:hover {
+  outline: 1px solid #ff922b;
+}

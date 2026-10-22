@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.7.1-informational)
+![Version](https://img.shields.io/badge/version-0.7.2-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -613,6 +613,10 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.7.2
+
+- **⇄ Replace all N…** above the timeline: pick the new scene in the list on the left, one click replaces every clip of the selected clip's scene
 
 ### PMV Creator 0.7.1
 
