@@ -87,7 +87,7 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
           <option value="contain">{t("Fit (bars)")}</option>
         </select>
       </div>
-      <div className="pmv-li-meta">{t("Another part of the scene never changes the clip's place on the timeline: open the source and drag the orange range.")}</div>
+      <div className="pmv-li-meta">{t("Another part of the scene never changes the clip's place on the timeline: “Edit source” and drag the orange range.")}</div>
 
       <More defaultOpen={adv}>
         <div className="pmv-grid2">
@@ -155,8 +155,12 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
       </More>
 
       <div className="pmv-row pmv-wrap">
-        <button className="btn btn-sm btn-primary" onClick={() => dispatch({ type: "ui", patch: { activeSceneId: clip.sceneId, activeSceneSeek: clip.sourceIn } })} title={t("Shows the scene on the left – pick another spot or marker for this clip there")}>
-          {t("Open source")}
+        <button
+          className="btn btn-sm btn-primary"
+          onClick={() => dispatch({ type: "ui", patch: { activeSceneId: clip.sceneId, activeSceneSeek: clip.sourceIn } })}
+          title={t("Shows the clip's scene in the big player – pick another spot, a marker or another scene for it there (also: double-click the clip)")}
+        >
+          ✎ {t("Edit source")}
         </button>
         <button className="btn btn-sm btn-danger" onClick={() => dispatch({ type: "clip/delete", clipId: id, ripple: false })} title={t("Del · Shift+Del = ripple")}>
           {t("Delete")}

@@ -180,16 +180,38 @@ describe("PMV Creator UI (mocked Stash)", () => {
     const widthBefore = target().style.width;
     await fire(target(), new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
     await fire(window, new MouseEvent("pointerup", { bubbles: true }));
-    await fire(byText("Open source")!, new MouseEvent("click", { bubbles: true }));
+    await fire(byText("✎ Edit source")!, new MouseEvent("click", { bubbles: true }));
     await waitFor(() => container.textContent!.includes("Selected clip"));
-    expect($(".pmv-scrub-clip")).not.toBeNull(); // the clip's range on the scene's scrub bar
+    // the scene takes over the main player; the clip's range sits on its scrub bar
+    expect($(".pmv-source-host")!.classList.contains("pmv-hidden")).toBe(false);
+    expect($(".pmv-source-host .pmv-scrub-clip")).not.toBeNull();
+    expect($(".pmv-monitor-tabs .pmv-tab.is-active")!.textContent).toBe("Scene: Scene One");
     const markerRow = $$(".pmv-list-item").find((li) => li.textContent?.includes("Marker A"))!;
     await fire(markerRow.querySelector<HTMLElement>("button[title^='Put the selected clip on this marker']")!, new MouseEvent("click", { bubbles: true }));
     expect(target().style.width).toBe(widthBefore);
     expect(target().title).toContain("Source 0:10.000");
     await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
     expect(target().title).toContain("Source 0:05.000");
+    // I / O pick a range in the scene player (keys go to the scene, not to the timeline)
+    await fire(document.body, new KeyboardEvent("keydown", { key: "i", bubbles: true }));
+    expect($(".pmv-source-host .pmv-selection")).not.toBeNull();
+    // Esc goes back to the PMV preview first, the clip stays selected; the second Esc clears it
     await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect($(".pmv-source-host")!.classList.contains("pmv-hidden")).toBe(true);
+    expect($(".pmv-monitor-tabs .pmv-tab.is-active")!.textContent).toBe("PMV preview");
+    expect(byText("✎ Edit source")).not.toBeNull();
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(byText("✎ Edit source")).toBeNull();
+  });
+
+  it("re-opening the open scene brings it back to the main player", async () => {
+    const v1Lane = $$(".pmv-lane[data-track-id]")[1];
+    const clip = Array.from(v1Lane.querySelectorAll<HTMLElement>(".pmv-clip")).find((el) => el.style.left === "0px")!;
+    await fire(clip, new MouseEvent("dblclick", { bubbles: true }));
+    expect($(".pmv-source-host")!.classList.contains("pmv-hidden")).toBe(false);
+    await fire($$(".pmv-monitor-tabs button").find((b) => b.title === "Close the scene")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-monitor-tabs")).toBeNull();
+    expect($(".pmv-source-host")!.classList.contains("pmv-hidden")).toBe(true);
   });
 
   it("adds scenes by ID and reports unknown input", async () => {

@@ -12,7 +12,7 @@ import { findClip } from "../timeline/ops";
 import { clamp } from "../timeline/time";
 import { GeneratorDialog } from "./generator/GeneratorDialog";
 import { Inspector } from "./Inspector";
-import { PreviewPlayer } from "./preview/PreviewPlayer";
+import { Monitor, SourceHostContext, sourceKeys } from "./monitor";
 import { Sidebar } from "./sidebar/Sidebar";
 import { Timeline } from "./timeline/Timeline";
 import { Toolbar } from "./Toolbar";
@@ -57,10 +57,12 @@ export function App({ host }: { host?: Host }) {
 
 function Workspace() {
   const { state } = useEditor();
+  // state, not a ref: the scene drill-down re-renders into the host once it exists
+  const [sourceHost, setSourceHost] = useState<HTMLDivElement | null>(null);
   useShortcuts();
   useDeepLinkScenes();
   return (
-    <>
+    <SourceHostContext.Provider value={sourceHost}>
       {state.ui.generator && <GeneratorDialog />}
       <Toolbar />
       <div className="pmv-main">
@@ -69,13 +71,13 @@ function Workspace() {
         </aside>
         <section className="pmv-center">
           <div className="pmv-upper">
-            <PreviewPlayer />
+            <Monitor hostRef={setSourceHost} />
             <Inspector />
           </div>
           <Timeline />
         </section>
       </div>
-    </>
+    </SourceHostContext.Provider>
   );
 }
 
@@ -113,7 +115,9 @@ function useShortcuts() {
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       let handled = true;
-      if (mod && key === "z") dispatch({ type: e.shiftKey ? "redo" : "undo" });
+      if (!mod && sourceKeys.handle?.(key, e)) {
+        // the scene in the main player took the key
+      } else if (mod && key === "z") dispatch({ type: e.shiftKey ? "redo" : "undo" });
       else if (mod && key === "y") dispatch({ type: "redo" });
       else if (mod) handled = false;
       else

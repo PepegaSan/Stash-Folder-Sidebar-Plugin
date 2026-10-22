@@ -649,18 +649,64 @@
   background: var(--pmv-panel-2);
 }
 
-/* scene drill-down */
-.pmv-detail-video {
-  aspect-ratio: 16 / 9;
+/* scene drill-down: facts and markers in the sidebar, the player itself in the main player area */
+.pmv-src {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
+  user-select: none;
+}
+.pmv-src-video {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 80px;
   overflow: hidden;
   background: #000;
   border-radius: 4px;
   cursor: pointer;
 }
-.pmv-detail-video video {
+.pmv-src-video video {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+.pmv-src .pmv-scrub {
+  flex: 0 0 auto;
+  height: 40px;
+}
+.pmv-src .pmv-scrub-marker {
+  top: 6px;
+  height: 14px;
+}
+.pmv-src .pmv-scrub-snip {
+  bottom: 4px;
+  height: 8px;
+}
+.pmv-src .pmv-scrub-kf {
+  height: 6px;
+}
+.pmv-src-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+.pmv-src-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+.pmv-src-actions > * {
+  flex: 1 1 320px;
+  min-width: 0;
 }
 .pmv-filmstrip {
   display: flex;
@@ -684,8 +730,6 @@
   touch-action: none;
   user-select: none;
 }
-.pmv-scene-detail .pmv-filmstrip,
-.pmv-scene-detail .pmv-detail-video,
 .pmv-scene-detail .pmv-row {
   user-select: none;
 }
@@ -770,6 +814,47 @@
   border-radius: 3px;
   font-size: 10px;
   transform: translateX(-50%);
+}
+
+/* ---------------------------------------------------------------- main player: PMV preview or the open scene */
+.pmv-monitor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.pmv-monitor-tabs {
+  flex: 0 0 auto;
+  align-items: center;
+}
+.pmv-monitor-tabs .pmv-tab {
+  flex: 0 1 auto;
+  max-width: 60%;
+  padding: 6px 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pmv-monitor-tabs .btn-link {
+  margin-left: auto;
+}
+.pmv-monitor-body {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pmv-monitor-body > .pmv-preview {
+  flex: 1 1 auto;
+}
+/* covers the PMV preview, which stays mounted underneath (its players keep their cues) */
+.pmv-source-host {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  background: var(--pmv-bg);
 }
 
 /* ---------------------------------------------------------------- preview */

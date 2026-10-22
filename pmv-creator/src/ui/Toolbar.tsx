@@ -229,6 +229,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
     [t("Move / trim / slip a clip"), t("drag · drag the edges · Alt+drag")],
     [t("Without snapping"), t("Shift while dragging")],
     [t("Open a clip's source"), t("double-click the clip")],
+    [t("Scene in the player: in / out point · back to the PMV"), "I / O · Esc"],
     [t("Split at the playhead · replace with the selected snippet"), "S · R"],
     [t("Delete · ripple delete"), "Del · Shift+Del"],
     [t("Timeline marker"), t("M (double-click in the ruler removes it)")],

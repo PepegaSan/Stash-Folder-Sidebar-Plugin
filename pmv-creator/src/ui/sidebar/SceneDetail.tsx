@@ -1,5 +1,9 @@
-/** Drill-down for one scene: player, scrub bar with markers/exclusions/keyframes, culling actions. */
-import React, { useEffect, useRef, useState } from "react";
+/**
+ * Drill-down for one scene. The sidebar keeps the facts and the marker list; the player, the scrub bar
+ * with markers/exclusions/keyframes and the range/clip actions are portalled into the main player area.
+ */
+import React, { useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   exclusionFromRange,
   isMarkerExcluded,
@@ -23,6 +27,7 @@ import { clamp, formatTime } from "../../timeline/time";
 import { NumField, SpriteThumb } from "../common";
 import { insertAction } from "../editing";
 import { useSprites } from "../hooks";
+import { SourceHostContext, sourceKeys } from "../monitor";
 
 const nearest = (list: number[], x: number) => list.reduce((best, v) => (Math.abs(v - x) < Math.abs(best - x) ? v : best), list[0] ?? x);
 
@@ -45,11 +50,12 @@ export function SceneDetail({ sceneId, onBack }: { sceneId: string; onBack: () =
 function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => void }) {
   const { state, dispatch, transport, backend } = useEditor();
   const host = useHost();
+  const monitorEl = useContext(SourceHostContext);
   const project = state.present;
   const ui = state.ui;
   const sceneId = scene.id;
   const sprites = useSprites(scene.paths.vtt);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const slotRef = useRef<VideoSlot | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const [time, setTime] = useState(ui.activeSceneSeek);
@@ -60,42 +66,110 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
   const [keyframes, setKeyframes] = useState<number[] | null>(null);
   const [kfState, setKfState] = useState<string | null>(null);
   const [snapKf, setSnapKf] = useState(false);
+  const shown = !!monitorEl && ui.sceneInPlayer;
 
+  // the <video> lives in the main player (portal): bind a slot whenever that element appears
   useEffect(() => {
-    const el = videoRef.current!;
-    const slot = new VideoSlot(el);
+    if (!videoEl) return;
+    const slot = new VideoSlot(videoEl);
     slotRef.current = slot;
-    slot.assign(scene, ui.activeSceneSeek);
+    slot.assign(scene, time);
     const onTime = () => setTime(slot.time);
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-    el.addEventListener("timeupdate", onTime);
-    el.addEventListener("seeked", onTime);
-    el.addEventListener("play", onPlay);
-    el.addEventListener("pause", onPause);
+    videoEl.addEventListener("timeupdate", onTime);
+    videoEl.addEventListener("seeked", onTime);
+    videoEl.addEventListener("play", onPlay);
+    videoEl.addEventListener("pause", onPause);
     return () => {
-      el.removeEventListener("timeupdate", onTime);
-      el.removeEventListener("seeked", onTime);
-      el.removeEventListener("play", onPlay);
-      el.removeEventListener("pause", onPause);
+      videoEl.removeEventListener("timeupdate", onTime);
+      videoEl.removeEventListener("seeked", onTime);
+      videoEl.removeEventListener("play", onPlay);
+      videoEl.removeEventListener("pause", onPause);
       slot.dispose();
+      slotRef.current = null;
     };
-    // mount-only: the component is keyed by scene id
-  }, []);
+    // only the element: the component is keyed by scene id
+  }, [videoEl]);
+
+  // the scene replaces the PMV preview in the main player – only one of them plays
+  useEffect(() => {
+    if (shown) transport.pause();
+    else videoEl?.pause();
+  }, [shown, videoEl, transport]);
 
   const file = scene.files[0];
   const duration = file?.duration ?? 0;
+  const fps = file?.frame_rate || 30;
   const source = sceneToSource(scene);
   const pct = (x: number) => `${duration > 0 ? (x / duration) * 100 : 0}%`;
+  const now = () => slotRef.current?.time ?? time;
   const seek = (x: number) => {
-    slotRef.current?.seek(Math.max(0, Math.min(duration, x)));
-    setTime(x);
+    const to = clamp(x, 0, duration);
+    slotRef.current?.seek(to);
+    setTime(to);
   };
   const pick = (x: number) => (snapKf && keyframes?.length ? nearest(keyframes, x) : x);
   const timeAt = (clientX: number) => {
     const r = barRef.current!.getBoundingClientRect();
     return Math.max(0, Math.min(duration, ((clientX - r.left) / r.width) * duration));
   };
+  const togglePlay = () => (playing ? videoEl?.pause() : void videoEl?.play());
+  /** From the sidebar (marker list): seek and bring the scene to the front. */
+  const showAt = (x: number) => {
+    if (!ui.sceneInPlayer) dispatch({ type: "ui", patch: { sceneInPlayer: true } });
+    seek(x);
+  };
+  const markIn = () => {
+    const x = pick(now());
+    setSel((s) => ({ in: x, out: Math.max(x + 0.1, s?.out ?? Math.min(duration, x + ui.markerDefaultLength)) }));
+  };
+  const markOut = () => {
+    const x = pick(now());
+    setSel((s) => ({ in: Math.min(s?.in ?? Math.max(0, x - ui.markerDefaultLength), x - 0.1), out: x }));
+  };
+
+  // opening this scene again (another clip, marker, …) jumps to the requested spot
+  const request = useRef(ui.sceneRequest);
+  useEffect(() => {
+    if (request.current === ui.sceneRequest) return;
+    request.current = ui.sceneRequest;
+    seek(ui.activeSceneSeek);
+  }, [ui.sceneRequest]);
+
+  // while the scene is in the main player it gets Space, I/O, ←/→ and Esc; the rest stays with the timeline
+  const keys = useRef<(key: string, e: KeyboardEvent) => boolean>(() => false);
+  keys.current = (key, e) => {
+    if (e.altKey) return false; // Alt+←/→ nudges the selected timeline clip
+    switch (key) {
+      case " ":
+        togglePlay();
+        return true;
+      case "i":
+        markIn();
+        return true;
+      case "o":
+        markOut();
+        return true;
+      case "ArrowLeft":
+      case "ArrowRight":
+        seek(now() + (key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 1 : 1 / fps));
+        return true;
+      case "Escape":
+        dispatch({ type: "ui", patch: { sceneInPlayer: false } });
+        return true;
+      default:
+        return false;
+    }
+  };
+  useEffect(() => {
+    if (!shown) return;
+    const handle = (key: string, e: KeyboardEvent) => keys.current(key, e);
+    sourceKeys.handle = handle;
+    return () => {
+      if (sourceKeys.handle === handle) sourceKeys.handle = null;
+    };
+  }, [shown]);
 
   const markers = [...scene.scene_markers].sort((a, b) => a.seconds - b.seconds);
   const exclusions = project.exclusions.filter((x) => x.sceneId === sceneId);
@@ -143,46 +217,18 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
     }
   };
 
-  return (
-    <div className="pmv-panel pmv-scene-detail">
-      <div className="pmv-row">
-        <button className="btn btn-sm btn-link" onClick={onBack}>
-          ← {t("back")}
-        </button>
-        <a className="btn btn-sm btn-link" href={host.sceneHref(scene.id)} target="_blank" rel="noreferrer" title={host.kind === "stashui" ? t("Open in Stash UI") : t("Open in Stash")}>
-          ↗
-        </a>
-        <button className="btn btn-sm btn-link" title={t("Reload (e.g. after changing markers in Stash)")} onClick={() => invalidateScene(scene.id)}>
-          ↻
-        </button>
-      </div>
-      <div className="pmv-li-title">{sceneTitle(scene)}</div>
-      <div className="pmv-li-meta">
-        {[scene.studio?.name, scene.date, formatTime(duration), file && `${file.width}×${file.height}`, file && `${Math.round(file.frame_rate * 100) / 100} fps`, file?.video_codec].filter(Boolean).join(" · ")}
-      </div>
-      <div className="pmv-chips">
-        {scene.performers.map((p) => (
-          <span key={p.id} className="pmv-chip pmv-chip-performer">
-            {p.name}
-          </span>
-        ))}
-        {scene.tags.slice(0, 12).map((x) => (
-          <span key={x.id} className="pmv-chip">
-            {x.name}
-          </span>
-        ))}
-      </div>
-
-      <div className="pmv-detail-video" onClick={() => (playing ? videoRef.current?.pause() : void videoRef.current?.play())}>
-        <video ref={videoRef} muted={muted} playsInline preload="metadata" />
+  const player = (
+    <div className="pmv-src">
+      <div className="pmv-src-video" onClick={togglePlay}>
+        <video ref={setVideoEl} muted={muted} playsInline preload="metadata" />
       </div>
 
       <div className="pmv-filmstrip">
-        {Array.from({ length: 10 }, (_, i) => {
-          const x = ((i + 0.5) / 10) * duration;
+        {Array.from({ length: 16 }, (_, i) => {
+          const x = ((i + 0.5) / 16) * duration;
           return (
             <button key={i} onClick={() => seek(x)} title={formatTime(x)}>
-              <SpriteThumb sheet={sprites} t={x} height={28} fallback={i === 0 ? scene.paths.screenshot : null} />
+              <SpriteThumb sheet={sprites} t={x} height={40} fallback={i === 0 ? scene.paths.screenshot : null} />
             </button>
           );
         })}
@@ -192,7 +238,7 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
         className="pmv-scrub"
         ref={barRef}
         onPointerDown={(e) => {
-          e.preventDefault(); // shift+drag must not extend a text selection through the sidebar
+          e.preventDefault(); // shift+drag must not extend a text selection
           (e.target as HTMLElement).setPointerCapture(e.pointerId);
           const x = timeAt(e.clientX);
           if (e.shiftKey) setSel({ in: pick(x), out: pick(x) });
@@ -250,105 +296,163 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
         <div className="pmv-scrub-head" style={{ left: pct(time) }} />
         {hover !== null && (
           <div className="pmv-scrub-hover" style={{ left: pct(hover) }}>
-            <SpriteThumb sheet={sprites} t={hover} height={54} />
+            <SpriteThumb sheet={sprites} t={hover} height={90} />
             <span>{formatTime(hover)}</span>
           </div>
         )}
       </div>
 
-      <div className="pmv-row">
-        <button className="btn btn-sm btn-secondary" onClick={() => (playing ? videoRef.current?.pause() : void videoRef.current?.play())}>
+      <div className="pmv-src-controls">
+        <button className="btn btn-sm btn-secondary" title={t("1 frame back (←)")} onClick={() => seek(now() - 1 / fps)}>
+          ‹
+        </button>
+        <button className="btn btn-sm btn-primary pmv-play" title={t("Play/pause (Space)")} onClick={togglePlay}>
           {playing ? "❚❚" : "▶"}
+        </button>
+        <button className="btn btn-sm btn-secondary" title={t("1 frame forward (→)")} onClick={() => seek(now() + 1 / fps)}>
+          ›
         </button>
         <button className="btn btn-sm btn-secondary" onClick={() => setMuted(!muted)} title={t("Sound")}>
           {muted ? "🔇" : "🔊"}
         </button>
-        <span className="pmv-mono">{formatTime(time)}</span>
-        <button className="btn btn-sm btn-secondary" title={t("Range starts here (in point)")} onClick={() => setSel((s) => ({ in: pick(time), out: Math.max(pick(time) + 0.1, s?.out ?? pick(time) + ui.markerDefaultLength) }))}>
+        <span className="pmv-mono">
+          {formatTime(time)} / {formatTime(duration)}
+        </span>
+        <button className="btn btn-sm btn-secondary" title={t("Range starts here (in point)")} onClick={markIn}>
           I
         </button>
-        <button className="btn btn-sm btn-secondary" title={t("Range ends here (out point)")} onClick={() => setSel((s) => ({ in: Math.min(s?.in ?? Math.max(0, pick(time) - ui.markerDefaultLength), pick(time) - 0.1), out: pick(time) }))}>
+        <button className="btn btn-sm btn-secondary" title={t("Range ends here (out point)")} onClick={markOut}>
           O
         </button>
         {!sel && <span className="pmv-li-meta">{t("I / O or Shift+drag on the bar picks a range")}</span>}
+        {ui.advanced && (
+          <>
+            <button className="btn btn-sm btn-secondary" disabled={backend !== "online"} onClick={() => void loadKeyframes()} title={t("I-frames via ffprobe (backend)")}>
+              {t("Load keyframes")}
+            </button>
+            <label className="pmv-check">
+              <input type="checkbox" checked={snapKf} disabled={!keyframes} onChange={(e) => setSnapKf(e.target.checked)} /> {t("Snap I/O")}
+            </label>
+            {kfState && <span className="pmv-li-meta">{kfState}</span>}
+          </>
+        )}
       </div>
 
-      {selected && (
-        <div className="pmv-clip-link">
-          <div className="pmv-li-meta">
-            <strong>{t("Selected clip")}</strong> · {t("timeline {from} → {to} stays", { from: formatTime(selected.start), to: formatTime(clipEnd(selected)) })}
-            {linked ? ` · ${t("source {from} – {to}", { from: formatTime(clipIn), to: formatTime(clipIn + clipLen) })}` : ` · ${t("comes from “{title}”", { title: project.sources[selected.sceneId]?.title ?? selected.sceneId })}`}
-          </div>
-          <div className="pmv-row pmv-wrap">
-            <button
-              className="btn btn-sm btn-primary"
-              title={linked ? t("The clip starts at the player position – place and length on the timeline stay") : t("Put this scene from the player position into the clip – place and length on the timeline stay")}
-              onClick={() => setSource({ sourceIn: pick(time), markerId: null, label: linked ? undefined : sceneTitle(scene) })}
-            >
-              {linked ? t("Start clip here") : t("Use this scene here")}
-            </button>
-            {linked && (
-              <button className="btn btn-sm btn-secondary" title={t("Player to the start of the clip")} onClick={() => seek(linked.sourceIn)}>
-                ▶ {t("Jump to clip start")}
-              </button>
-            )}
-            {sel && ui.advanced && (
-              <button
-                className="btn btn-sm btn-secondary"
-                title={t("The clip starts at the beginning of the range, speed stays – place and length on the timeline stay")}
-                onClick={() => setSource({ sourceIn: Math.min(sel.in, sel.out), markerId: null, label: linked ? undefined : selLabel() })}
-              >
-                {t("Use range")}
-              </button>
-            )}
-            {sel && (
-              <button
-                className="btn btn-sm btn-secondary"
-                title={t("Play exactly the range in the clip – the speed adapts ({speed}×), place and length stay", { speed: fitSpeed.toFixed(2) })}
-                onClick={() => setSource({ sourceIn: Math.min(sel.in, sel.out), sourceOut: Math.max(sel.in, sel.out), markerId: null, label: linked ? undefined : selLabel() }, true)}
-              >
-                {t("Fit range ({speed}×)", { speed: fitSpeed.toFixed(2) })}
-              </button>
-            )}
-          </div>
-          {linked && <div className="pmv-li-meta">{t("Drag the orange range on the bar to take another spot.")}</div>}
+      {(selected || sel) && (
+        <div className="pmv-src-actions">
+          {selected && (
+            <div className="pmv-clip-link">
+              <div className="pmv-li-meta">
+                <strong>{t("Selected clip")}</strong> · {t("timeline {from} → {to} stays", { from: formatTime(selected.start), to: formatTime(clipEnd(selected)) })}
+                {linked ? ` · ${t("source {from} – {to}", { from: formatTime(clipIn), to: formatTime(clipIn + clipLen) })}` : ` · ${t("comes from “{title}”", { title: project.sources[selected.sceneId]?.title ?? selected.sceneId })}`}
+              </div>
+              <div className="pmv-row pmv-wrap">
+                <button
+                  className="btn btn-sm btn-primary"
+                  title={linked ? t("The clip starts at the player position – place and length on the timeline stay") : t("Put this scene from the player position into the clip – place and length on the timeline stay")}
+                  onClick={() => setSource({ sourceIn: pick(now()), markerId: null, label: linked ? undefined : sceneTitle(scene) })}
+                >
+                  {linked ? t("Start clip here") : t("Use this scene here")}
+                </button>
+                {linked && (
+                  <button className="btn btn-sm btn-secondary" title={t("Player to the start of the clip")} onClick={() => seek(linked.sourceIn)}>
+                    ▶ {t("Jump to clip start")}
+                  </button>
+                )}
+                {sel && ui.advanced && (
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    title={t("The clip starts at the beginning of the range, speed stays – place and length on the timeline stay")}
+                    onClick={() => setSource({ sourceIn: Math.min(sel.in, sel.out), markerId: null, label: linked ? undefined : selLabel() })}
+                  >
+                    {t("Use range")}
+                  </button>
+                )}
+                {sel && (
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    title={t("Play exactly the range in the clip – the speed adapts ({speed}×), place and length stay", { speed: fitSpeed.toFixed(2) })}
+                    onClick={() => setSource({ sourceIn: Math.min(sel.in, sel.out), sourceOut: Math.max(sel.in, sel.out), markerId: null, label: linked ? undefined : selLabel() }, true)}
+                  >
+                    {t("Fit range ({speed}×)", { speed: fitSpeed.toFixed(2) })}
+                  </button>
+                )}
+                <button
+                  className="btn btn-sm btn-secondary"
+                  title={t("Pick another scene on the left – it opens here, then “Use this scene here”")}
+                  onClick={() => dispatch({ type: "ui", patch: { activeSceneId: null, sidebarTab: "scenes" } })}
+                >
+                  {t("Other scene…")}
+                </button>
+              </div>
+              {linked && <div className="pmv-li-meta">{t("Drag the orange range on the bar to take another spot.")}</div>}
+            </div>
+          )}
+
+          {sel && (
+            <div className="pmv-selection">
+              <div className="pmv-row">
+                <NumField value={Math.min(sel.in, sel.out)} onCommit={(v) => setSel({ in: v, out: Math.max(sel.in, sel.out) })} min={0} max={duration} suffix={t("in")} />
+                <NumField value={Math.max(sel.in, sel.out)} onCommit={(v) => setSel({ in: Math.min(sel.in, sel.out), out: v })} min={0} max={duration} suffix={t("out")} />
+                <span className="pmv-li-meta">{Math.abs(sel.out - sel.in).toFixed(2)} s</span>
+              </div>
+              <div className="pmv-row pmv-wrap">
+                <button className="btn btn-sm btn-primary" onClick={selectionToBin} title={t("Keep this range under “My clips”")}>
+                  + {t("My clips")}
+                </button>
+                <button className="btn btn-sm btn-secondary" onClick={selectionToTimeline} title={t("Put this range onto the timeline at the playhead")}>
+                  → {t("Timeline")}
+                </button>
+                <button className="btn btn-sm btn-danger" onClick={() => dispatch({ type: "exclusion/add", exclusion: exclusionFromRange(sceneId, sel.in, sel.out), sources })}>
+                  ⊘ {t("Exclude")}
+                </button>
+                <button className="btn btn-sm btn-link" onClick={() => setSel(null)}>
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
 
-      {sel && (
-        <div className="pmv-selection">
-          <div className="pmv-row">
-            <NumField value={Math.min(sel.in, sel.out)} onCommit={(v) => setSel({ in: v, out: Math.max(sel.in, sel.out) })} min={0} max={duration} suffix={t("in")} />
-            <NumField value={Math.max(sel.in, sel.out)} onCommit={(v) => setSel({ in: Math.min(sel.in, sel.out), out: v })} min={0} max={duration} suffix={t("out")} />
-            <span className="pmv-li-meta">{Math.abs(sel.out - sel.in).toFixed(2)} s</span>
-          </div>
-          <div className="pmv-row">
-            <button className="btn btn-sm btn-primary" onClick={selectionToBin} title={t("Keep this range under “My clips”")}>
-              + {t("My clips")}
-            </button>
-            <button className="btn btn-sm btn-secondary" onClick={selectionToTimeline} title={t("Put this range onto the timeline at the playhead")}>
-              → {t("Timeline")}
-            </button>
-            <button className="btn btn-sm btn-danger" onClick={() => dispatch({ type: "exclusion/add", exclusion: exclusionFromRange(sceneId, sel.in, sel.out), sources })}>
-              ⊘ {t("Exclude")}
-            </button>
-            <button className="btn btn-sm btn-link" onClick={() => setSel(null)}>
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
-      {ui.advanced && (
-        <div className="pmv-row">
-          <button className="btn btn-sm btn-secondary" disabled={backend !== "online"} onClick={() => void loadKeyframes()} title={t("I-frames via ffprobe (backend)")}>
-            {t("Load keyframes")}
-          </button>
-          <label className="pmv-check">
-            <input type="checkbox" checked={snapKf} disabled={!keyframes} onChange={(e) => setSnapKf(e.target.checked)} /> {t("Snap I/O")}
-          </label>
-          {kfState && <span className="pmv-li-meta">{kfState}</span>}
-        </div>
+  return (
+    <div className="pmv-panel pmv-scene-detail">
+      {monitorEl && createPortal(player, monitorEl)}
+      <div className="pmv-row">
+        <button className="btn btn-sm btn-link" onClick={onBack}>
+          ← {t("back")}
+        </button>
+        <a className="btn btn-sm btn-link" href={host.sceneHref(scene.id)} target="_blank" rel="noreferrer" title={host.kind === "stashui" ? t("Open in Stash UI") : t("Open in Stash")}>
+          ↗
+        </a>
+        <button className="btn btn-sm btn-link" title={t("Reload (e.g. after changing markers in Stash)")} onClick={() => invalidateScene(scene.id)}>
+          ↻
+        </button>
+      </div>
+      <div className="pmv-li-title">{sceneTitle(scene)}</div>
+      <div className="pmv-li-meta">
+        {[scene.studio?.name, scene.date, formatTime(duration), file && `${file.width}×${file.height}`, file && `${Math.round(file.frame_rate * 100) / 100} fps`, file?.video_codec].filter(Boolean).join(" · ")}
+      </div>
+      <div className="pmv-chips">
+        {scene.performers.map((p) => (
+          <span key={p.id} className="pmv-chip pmv-chip-performer">
+            {p.name}
+          </span>
+        ))}
+        {scene.tags.slice(0, 12).map((x) => (
+          <span key={x.id} className="pmv-chip">
+            {x.name}
+          </span>
+        ))}
+      </div>
+      {shown ? (
+        <div className="pmv-li-meta">{t("The scene plays in the big player – pick the part for the PMV there.")}</div>
+      ) : (
+        <button className="btn btn-sm btn-primary" onClick={() => dispatch({ type: "ui", patch: { sceneInPlayer: true } })} title={t("The main player shows this scene instead of the PMV")}>
+          ▶ {t("Show in the player")}
+        </button>
       )}
 
       <div className="pmv-section-head is-static">
@@ -366,7 +470,7 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
           const inBin = isMarkerInBin(project, m.id);
           const excluded = isMarkerExcluded(project, m.id);
           return (
-            <li key={m.id} className={`pmv-list-item ${excluded ? "is-excluded" : ""} ${inBin ? "is-picked" : ""}`} onClick={() => seek(a)}>
+            <li key={m.id} className={`pmv-list-item ${excluded ? "is-excluded" : ""} ${inBin ? "is-picked" : ""}`} onClick={() => showAt(a)}>
               {m.screenshot && <img className="pmv-li-img" src={stashUrl(m.screenshot)} alt="" loading="lazy" />}
               <div className="pmv-li-main">
                 <div className="pmv-li-title">{markerLabel(m)}</div>
@@ -386,7 +490,14 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
                   </button>
                 )}
                 {ui.advanced && (
-                  <button className="btn btn-sm btn-secondary" title={t("Take as the range to cut")} onClick={() => setSel({ in: a, out: b })}>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    title={t("Take as the range to cut")}
+                    onClick={() => {
+                      setSel({ in: a, out: b });
+                      showAt(a);
+                    }}
+                  >
                     ✂
                   </button>
                 )}
@@ -411,7 +522,14 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
           <div className="pmv-section-head is-static">{t("In this project")}</div>
           <ul className="pmv-list">
             {snippets.map((s) => (
-              <li key={s.id} className="pmv-list-item is-picked" onClick={() => setSel({ in: s.in, out: s.out })}>
+              <li
+                key={s.id}
+                className="pmv-list-item is-picked"
+                onClick={() => {
+                  setSel({ in: s.in, out: s.out });
+                  showAt(s.in);
+                }}
+              >
                 <div className="pmv-li-main">
                   <div className="pmv-li-title">{s.label}</div>
                   <div className="pmv-li-meta">

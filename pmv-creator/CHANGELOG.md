@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0 (2026-10-22)
+
+- **Scenes open in the main player**: picking the part of a scene no longer happens in the small sidebar player. The scene takes over the big player area (tabs *PMV preview* / *Scene* above it) with a large scrub bar, filmstrip, I/O, *Start clip here* and *Fit range*; the sidebar keeps facts and markers. Inspector: **✎ Edit source** (or double-click the clip) opens the clip's scene there; **Other scene…** puts another scene into the same slot. Keys while the scene is shown: Space, I / O, ← → (frame, Shift = 1 s), Esc back to the PMV.
+
 ## 0.5.0 (2026-10-21)
 
 - **Render on your PC** (optional): Render → *Render on: My PC*. A render helper on the PC (one Python file, downloaded from the dialog with the Stash address filled in) takes the job from Stash, renders with the PC's FFmpeg and saves the video in a folder on the PC. The output folder and optional path mappings (`/data/` → `Y:\`) are set once in the dialog; videos and music come over Stash otherwise. Progress and *Cancel* work as for server renders; the Stash task only hands the job over.

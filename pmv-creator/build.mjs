@@ -36,7 +36,7 @@ const classic = {
   ...shared,
   entryPoints: { "pmv-creator": "src/index.tsx" },
   format: "iife",
-  alias: { react: path.resolve("src/shims/react.ts") },
+  alias: { react: path.resolve("src/shims/react.ts"), "react-dom": path.resolve("src/shims/react-dom.ts") },
 };
 
 /** Stash UI extension module: an ES module with its own React, served at /plugin/pmv-creator/assets/stashui.js. */

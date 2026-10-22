@@ -175,6 +175,10 @@ export interface UiState {
   activeSceneId: string | null;
   /** Source time the scene drill-down jumps to when it opens. */
   activeSceneSeek: number;
+  /** The open scene is shown in the main player (off = PMV preview while the scene stays open). */
+  sceneInPlayer: boolean;
+  /** Bumped by every request to open a scene, so opening the scene that is open already seeks again. */
+  sceneRequest: number;
   sidebarTab: SidebarTab;
   /** Pixels per second. */
   zoom: number;
@@ -216,6 +220,8 @@ export const DEFAULT_UI: UiState = {
   selectedSnippetId: null,
   activeSceneId: null,
   activeSceneSeek: 0,
+  sceneInPlayer: true,
+  sceneRequest: 0,
   sidebarTab: "scenes",
   zoom: 60,
   editMode: "clamp",
@@ -252,8 +258,15 @@ export function editorReducer(state: EditorState, action: Action, now: number = 
     }
     case "project/load":
       return initialEditorState(action.project, { ...state.ui, selectedClipId: null, selectedSnippetId: null, activeSceneId: null, saveState: "saved" });
-    case "ui":
-      return { ...state, ui: { ...state.ui, ...action.patch } };
+    case "ui": {
+      const ui = { ...state.ui, ...action.patch };
+      // opening a scene (from anywhere) shows it in the main player
+      if (action.patch.activeSceneId) {
+        ui.sceneInPlayer = action.patch.sceneInPlayer ?? true;
+        ui.sceneRequest = state.ui.sceneRequest + 1;
+      }
+      return { ...state, ui };
+    }
     default: {
       const next = applyEdit(state.present, action);
       if (next === state.present) return state;

@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.5.0-informational)
+![Version](https://img.shields.io/badge/version-0.6.0-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -582,6 +582,7 @@ Works in classic Stash and in Stash UI.
 
 - **Culling sidebar** — scenes (search, tags, performers, by id or Stash link), markers across the library, a bin of snippets; exclude ranges
 - **Beat-grid timeline** — BPM detection/tap, snap, ripple/overwrite modes, trim/slip/split, transitions, speed with beat-safe duration
+- **Scene view in the main player** — a scene opens big in place of the preview (tabs *PMV preview* / *Scene*): pick ranges, move a clip to another spot or put another scene into it
 - **Ground rule** — another part of the scene never changes a clip's place on the timeline
 - **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"
 - **Render** — deterministic FFmpeg pipeline as a Stash task (segment cache, exact CFR), plus **Quick record** (real-time WebM in the browser, no server FFmpeg needed)
@@ -612,6 +613,10 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.6.0
+
+- Scenes open in the main player instead of the small sidebar player: large scrub bar, filmstrip and I/O; **✎ Edit source** (or double-click a clip) shows the clip's scene there, **Other scene…** puts another scene into the same slot; keys Space, I / O, ← →, Esc
 
 ### PMV Creator 0.5.0
 
