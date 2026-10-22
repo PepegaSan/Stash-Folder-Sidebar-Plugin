@@ -372,6 +372,44 @@ export function setClipSource(p: PmvProject, clipId: string, src: ClipSourceInpu
   }));
 }
 
+/**
+ * Every clip of one scene gets another scene – start and length on the timeline stay (A → B), each clip takes
+ * the same relative spot in the new scene (30 % in stays 30 % in) and moves past excluded ranges where it can.
+ * Locked tracks stay as they are.
+ */
+export function swapScene(p: PmvProject, from: string, to: string, label: string): PmvProject {
+  const fromDur = sourceDuration(p, from);
+  const toDur = sourceDuration(p, to);
+  if (from === to || toDur <= 0) return p;
+  const blocked = p.exclusions.filter((x) => x.sceneId === to).sort((a, b) => a.in - b.in);
+  const hits = (s: number, len: number) => blocked.find((x) => x.in < s + len - EPS && x.out > s + EPS);
+  /** The wanted spot, else the next free one after it, else the nearest free one before it. */
+  const free = (want: number, len: number): number => {
+    let s = want;
+    for (let x = hits(s, len); x && s + len <= toDur + EPS; x = hits(s, len)) s = x.out;
+    if (s + len <= toDur + EPS && !hits(s, len)) return s;
+    s = want;
+    for (let x = hits(s, len); x && s >= 0; x = hits(s, len)) s = x.in - len;
+    return s >= 0 ? s : want;
+  };
+  let changed = false;
+  const tracks = p.tracks.map((t) => {
+    if (t.locked || !t.clips.some((c) => c.sceneId === from)) return t;
+    const clips = t.clips.map((c) => {
+      if (c.sceneId !== from) return c;
+      changed = true;
+      // material shorter than the slot: slow down rather than run past the end of the file
+      const speed = c.duration * c.speed > toDur ? Math.max(MIN_SPEED, toDur / c.duration) : c.speed;
+      const len = c.duration * speed;
+      const room = Math.max(0, toDur - len);
+      const want = clamp(fromDur > 0 ? (c.sourceIn / fromDur) * toDur : 0, 0, room);
+      return { ...c, sceneId: to, sourceIn: clamp(free(want, len), 0, room), speed, markerId: null, snippetId: null, label };
+    });
+    return { ...t, clips };
+  });
+  return changed ? { ...p, tracks } : p;
+}
+
 export function splitClip(p: PmvProject, clipId: string, at: number): PmvProject {
   const loc = findClip(p, clipId);
   if (!loc) return p;

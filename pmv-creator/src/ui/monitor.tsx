@@ -8,6 +8,7 @@ import { t } from "../i18n";
 import { useScene } from "../stash/sceneCache";
 import { sceneTitle } from "../stash/types";
 import { useEditor } from "../state/store";
+import { findClip } from "../timeline/ops";
 import { PreviewPlayer } from "./preview/PreviewPlayer";
 
 /** Element the scene player is portalled into; null until the monitor has mounted. */
@@ -28,6 +29,33 @@ export function Monitor({ hostRef }: { hostRef: (el: HTMLDivElement | null) => v
         <div ref={hostRef} className={`pmv-source-host ${showScene ? "" : "pmv-hidden"}`} />
       </div>
     </div>
+  );
+}
+
+/**
+ * "Edit source" and the way back in one central spot above the timeline – where the clip is picked, between the
+ * player and the timeline (Esc does the same). Without a clip only the way back shows.
+ */
+export function SourceToggle() {
+  const { state, dispatch } = useEditor();
+  const ui = state.ui;
+  if (ui.activeSceneId && ui.sceneInPlayer) {
+    return (
+      <button className="btn btn-sm btn-primary pmv-source-toggle" title={t("Back to the PMV preview – the scene stays open on the left")} onClick={() => dispatch({ type: "ui", patch: { sceneInPlayer: false } })}>
+        ← {t("Back to the PMV (Esc)")}
+      </button>
+    );
+  }
+  const clip = ui.selectedClipId ? findClip(state.present, ui.selectedClipId)?.clip : null;
+  if (!clip) return null;
+  return (
+    <button
+      className="btn btn-sm btn-primary pmv-source-toggle"
+      onClick={() => dispatch({ type: "ui", patch: { activeSceneId: clip.sceneId, activeSceneSeek: clip.sourceIn } })}
+      title={t("Shows the clip's scene in the big player – pick another spot, a marker or another scene for it there (also: double-click the clip)")}
+    >
+      ✎ {t("Edit source")}
+    </button>
   );
 }
 

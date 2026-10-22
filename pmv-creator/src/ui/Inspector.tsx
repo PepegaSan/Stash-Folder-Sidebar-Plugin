@@ -24,31 +24,6 @@ export function Inspector() {
   );
 }
 
-/**
- * "Edit source" and the way back share one spot at the top of the inspector: leaving the scene in the
- * main player happens where entering it did (Esc does the same). Without a clip only the way back shows.
- */
-function SourceToggle({ clip }: { clip?: { sceneId: string; sourceIn: number } }) {
-  const { state, dispatch } = useEditor();
-  if (state.ui.activeSceneId && state.ui.sceneInPlayer) {
-    return (
-      <button className="btn btn-sm btn-primary" title={t("Back to the PMV preview – the scene stays open on the left")} onClick={() => dispatch({ type: "ui", patch: { sceneInPlayer: false } })}>
-        ← {t("Back to the PMV (Esc)")}
-      </button>
-    );
-  }
-  if (!clip) return null;
-  return (
-    <button
-      className="btn btn-sm btn-primary"
-      onClick={() => dispatch({ type: "ui", patch: { activeSceneId: clip.sceneId, activeSceneSeek: clip.sourceIn } })}
-      title={t("Shows the clip's scene in the big player – pick another spot, a marker or another scene for it there (also: double-click the clip)")}
-    >
-      ✎ {t("Edit source")}
-    </button>
-  );
-}
-
 const fitLabel = (fit: FitMode) => (fit === "cover" ? t("Fill (crop)") : fit === "contain" ? t("Fit (bars)") : t("Fit (blurred edges)"));
 
 function ClipInspector({ loc }: { loc: ClipLocation }) {
@@ -63,6 +38,7 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
   const mode = ui.editMode;
   const id = clip.id;
   const step = beat * ui.snapDivision;
+  const sameScene = project.tracks.reduce((n, tr) => n + tr.clips.filter((c) => c.sceneId === clip.sceneId).length, 0);
 
   return (
     <div className="pmv-panel">
@@ -73,7 +49,6 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
           ✕
         </button>
       </div>
-      <SourceToggle clip={clip} />
       <input
         className="form-control form-control-sm"
         key={id}
@@ -88,6 +63,7 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
       <div className="pmv-li-meta">
         {src?.title ?? t("Scene {id} (not in the project)", { id: clip.sceneId })} · {t("Track {name}", { name: track.name })}
         {track.locked && ` · ${t("locked")}`}
+        {sameScene > 1 && ` · ${t("{n} clips from this scene", { n: sameScene })}`}
       </div>
 
       <div className="pmv-grid2">
@@ -218,7 +194,6 @@ function ProjectInspector() {
   const res = RESOLUTIONS.find(([w, h]) => w === o.width && h === o.height);
   return (
     <div className="pmv-panel">
-      <SourceToggle />
       <AudioSection />
       <GridSection />
       <div className="pmv-section-head is-static">{t("Output")}</div>

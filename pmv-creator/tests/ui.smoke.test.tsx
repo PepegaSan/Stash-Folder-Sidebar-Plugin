@@ -137,6 +137,9 @@ describe("PMV Creator UI (mocked Stash)", () => {
     const first = Array.from(v1Lane.querySelectorAll<HTMLElement>(".pmv-clip")).find((el) => el.style.left === "0px")!;
     await fire(first, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
     await fire(window, new MouseEvent("pointerup", { bubbles: true }));
+    // the other clips of the same scene are marked; "Edit source" sits above the timeline
+    expect($$(".pmv-clip.is-same-scene")).toHaveLength(2);
+    expect($(".pmv-tl-toolbar")!.textContent).toContain("✎ Edit source");
     const select = $$(".pmv-inspector select").find((s) => s.querySelector('option[value="wipeleft"]')) as HTMLSelectElement;
     expect(select).toBeTruthy();
     expect(select.closest(".pmv-more")).toBeNull();

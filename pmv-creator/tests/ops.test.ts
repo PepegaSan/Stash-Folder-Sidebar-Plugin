@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clipEnd } from "../src/model/project";
-import { deleteClip, insertClip, moveClip, replaceClip, setAllTransitions, setClipSource, setClipSpeed, slipClip, splitClip, trimClip } from "../src/timeline/ops";
+import { deleteClip, insertClip, moveClip, replaceClip, setAllTransitions, setClipSource, setClipSpeed, slipClip, splitClip, swapScene, trimClip } from "../src/timeline/ops";
 import { transitionLooks } from "../src/ui/preview/engine";
 import { assertTrackInvariants, clip, project } from "./helpers";
 
@@ -244,5 +244,32 @@ describe("transitions", () => {
     expect(transitionLooks("circleopen", 1).incoming.circle).toBe(1);
     // everything without its own look is a crossfade
     expect(transitionLooks("dissolve", 0.4)).toEqual({ incoming: { opacity: 0.4 }, outgoing: { opacity: 1 } });
+  });
+});
+
+describe("swapScene", () => {
+  it("gives every clip of a scene another one: same slot, same relative spot, markers and labels cleared", () => {
+    const p = project([clip("1", 0, 2, { sourceIn: 50, markerId: "m1", label: "old" })], [clip("1", 0, 2, { sourceIn: 10 }), clip("2", 2, 2, { sourceIn: 30 }), clip("1", 4, 2, { sourceIn: 90 })]);
+    p.sources["3"] = { ...p.sources["3"], duration: 200 };
+    const next = swapScene(p, "1", "3", "S3");
+    assertTrackInvariants(next);
+    expect(trackOf(next, 0)[0]).toMatchObject({ sceneId: "3", start: 0, duration: 2, sourceIn: 100, markerId: null, snippetId: null, label: "S3" });
+    // 10 % → 20 s; 90 % of 200 s = 180 s; the clip of scene 2 stays
+    expect(trackOf(next, 1).map((c) => [c.sceneId, c.start, c.sourceIn])).toEqual([
+      ["3", 0, 20],
+      ["2", 2, 30],
+      ["3", 4, 180],
+    ]);
+    expect(swapScene(p, "1", "1", "x")).toBe(p);
+    expect(swapScene(p, "9", "3", "x")).toBe(p);
+  });
+
+  it("moves past excluded ranges and leaves locked tracks alone", () => {
+    const p = project([clip("1", 0, 2, { sourceIn: 50 })], [clip("1", 0, 2, { sourceIn: 50 })]);
+    p.tracks[1].locked = true;
+    p.exclusions = [{ id: "x1", sceneId: "2", markerId: null, in: 49, out: 60 }];
+    const next = swapScene(p, "1", "2", "S2");
+    expect(trackOf(next, 0)[0].sourceIn).toBe(60); // 50 % of 100 s lies in the excluded range → right after it
+    expect(trackOf(next, 1)).toBe(trackOf(p, 1));
   });
 });

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1 (2026-10-22)
+
+- **✎ Edit source** / **← Back to the PMV (Esc)** moved to the middle of the bar above the timeline – between the player and the clips, the same spot for both.
+- **⇄ Use it in all N clips of that scene**: with a clip selected and another scene in the player, every clip of the clip's scene gets the new scene in one undo step – places and lengths on the timeline stay, each clip takes the same relative spot in the new scene (moved past excluded ranges). The other clips of the selected clip's scene are outlined on the timeline; the inspector shows how many there are.
+
 ## 0.7.0 (2026-10-22)
 
 - **Preview from this PC**: while the render helper runs, the preview (PMV and scene player) plays the videos of its mapped folders from the PC instead of the NAS. The helper streams them with the PC's FFmpeg as H.264 from the exact spot – HEVC, MPEG-4 and other codecs the browser can't play no longer need the NAS's live conversion. **💻 from PC** / **🗄 from Stash** next to the player switches; whatever the helper can't serve comes from Stash. Needs the helper 0.7 (download it again under Render → On my PC).

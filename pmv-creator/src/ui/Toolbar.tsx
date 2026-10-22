@@ -250,7 +250,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
         [t("In / out point of the range"), "I / O"],
         [t("Pick a range with the mouse"), t("Shift+drag on the bar")],
         [t("Another part for the selected clip"), t("drag the orange range")],
-        [t("Back to the PMV preview"), t("Esc · “Back to the PMV” (inspector)")],
+        [t("Back to the PMV preview"), t("Esc · “Back to the PMV” above the timeline")],
       ],
     ],
   ];

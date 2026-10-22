@@ -208,6 +208,8 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
   const setSource = (src: Omit<ClipSourceInput, "sceneId">, fit = false) =>
     selected && dispatch({ type: "clip/source", clipId: selected.id, source: { sceneId, ...src }, fit, sources });
   const fitSpeed = selected && sel ? Math.abs(sel.out - sel.in) / selected.duration : 1;
+  /** How often the selected clip's scene is in the PMV – all of them can get this scene at once. */
+  const sameScene = selected ? project.tracks.reduce((n, tr) => n + tr.clips.filter((c) => c.sceneId === selected.sceneId).length, 0) : 0;
 
   const loadKeyframes = async () => {
     if (!file) return;
@@ -359,6 +361,15 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
                 >
                   {linked ? t("Start clip here") : t("Use this scene here")}
                 </button>
+                {!linked && sameScene > 1 && (
+                  <button
+                    className="btn btn-sm btn-primary"
+                    title={t("Every clip of “{title}” gets this scene: places and lengths on the timeline stay, each clip takes the same relative spot here. One step – Ctrl+Z undoes it.", { title: project.sources[selected.sceneId]?.title ?? selected.sceneId })}
+                    onClick={() => dispatch({ type: "scene/swap", from: selected.sceneId, to: sceneId, label: sceneTitle(scene), sources })}
+                  >
+                    ⇄ {t("Use it in all {n} clips of that scene", { n: sameScene })}
+                  </button>
+                )}
                 {linked && (
                   <button className="btn btn-sm btn-secondary" title={t("Player to the start of the clip")} onClick={() => seek(linked.sourceIn)}>
                     ▶ {t("Jump to clip start")}

@@ -27,6 +27,7 @@ import {
   setClipSpeed,
   slipClip,
   splitClip,
+  swapScene,
   trimClip,
   updateClip,
   updateTrack,
@@ -41,6 +42,8 @@ export type EditAction =
   | { type: "clip/update"; clipId: string; patch: ClipPatch }
   /** The same transition for every clip (the first clip of a track keeps its own). */
   | { type: "clips/transition"; transition: Transition | null }
+  /** Every clip of scene `from` gets scene `to` (same relative spot, places and lengths stay). */
+  | { type: "scene/swap"; from: string; to: string; label: string; sources: SourceMedia[] }
   | { type: "clip/replace"; clipId: string; snippetId: string }
   /** New material for the same slot (start/duration stay); fit = play exactly the given range. */
   | { type: "clip/source"; clipId: string; source: ClipSourceInput; fit: boolean; sources: SourceMedia[] }
@@ -85,6 +88,11 @@ export function applyEdit(p: PmvProject, a: EditAction): PmvProject {
       return updateClip(p, a.clipId, a.patch);
     case "clips/transition":
       return setAllTransitions(p, a.transition);
+    case "scene/swap": {
+      const withSources = addSources(p, a.sources);
+      const next = swapScene(withSources, a.from, a.to, a.label);
+      return next === withSources ? p : next;
+    }
     case "clip/replace": {
       const s = p.bin.find((x) => x.id === a.snippetId);
       return s ? replaceClip(p, a.clipId, s) : p;

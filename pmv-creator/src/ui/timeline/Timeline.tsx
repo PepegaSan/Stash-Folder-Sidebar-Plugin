@@ -12,9 +12,10 @@ import { useScenes } from "../../stash/sceneCache";
 import type { StashScene } from "../../stash/types";
 import { type EditAction, applyEdit } from "../../state/reducer";
 import { useEditor } from "../../state/store";
-import { clipFromSnippet } from "../../timeline/ops";
+import { clipFromSnippet, findClip } from "../../timeline/ops";
 import { EPS, beatLength, clamp, formatBarBeat, formatTime, snapRange, snapTime } from "../../timeline/time";
 import { SpriteThumb, sceneHue, transitionLabel } from "../common";
+import { SourceToggle } from "../monitor";
 import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions } from "../editing";
 import { useAudioAnalysis, useSprites, useTransportTime } from "../hooks";
 import { Waveform } from "./Waveform";
@@ -58,6 +59,7 @@ export function Timeline() {
     setPendingState(a);
   };
   const view = useMemo(() => (pending ? applyEdit(project, pending) : project), [project, pending]);
+  const selectedScene = ui.selectedClipId ? findClip(project, ui.selectedClipId)?.clip.sceneId ?? null : null;
   const scrollRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -264,6 +266,8 @@ export function Timeline() {
         <span className="pmv-mono">{formatTime(now)}</span>
         <span className="pmv-mono pmv-dim">{formatBarBeat(now, project.beatGrid)}</span>
         <span className="pmv-spacer" />
+        <SourceToggle />
+        <span className="pmv-spacer" />
         {ui.advanced && (
           <>
             <button className="btn btn-sm btn-secondary" title={t("Timeline marker at the playhead")} onClick={() => dispatch({ type: "marker/add", marker: { id: uid("mrk"), time: transport.time, label: `M${project.markers.length + 1}` } })}>
@@ -383,6 +387,7 @@ export function Timeline() {
                     sourceTitle={view.sources[c.sceneId]?.title ?? null}
                     excluded={overlapsExclusion(view.exclusions, c.sceneId, c.sourceIn, clipSourceOut(c))}
                     selected={ui.selectedClipId === c.id}
+                    sameScene={c.sceneId === selectedScene && ui.selectedClipId !== c.id}
                     ghost={pending !== null && "clipId" in pending && pending.clipId === c.id}
                     onPointerDown={stable.beginDrag}
                     onOpenSource={stable.openSource}
@@ -446,12 +451,14 @@ interface ClipBlockProps {
   sourceTitle: string | null;
   excluded: boolean;
   selected: boolean;
+  /** Same scene as the selected clip – shows which clips "all clips of that scene" would change. */
+  sameScene: boolean;
   ghost: boolean;
   onPointerDown: (e: React.PointerEvent, clip: Clip, track: Track, kind: DragKind) => void;
   onOpenSource: (clip: Clip) => void;
 }
 
-const ClipBlock = memo(function ClipBlock({ clip, track, zoom, scene, sourceTitle, excluded, selected, ghost, onPointerDown, onOpenSource }: ClipBlockProps) {
+const ClipBlock = memo(function ClipBlock({ clip, track, zoom, scene, sourceTitle, excluded, selected, sameScene, ghost, onPointerDown, onOpenSource }: ClipBlockProps) {
   const sprites = useSprites(scene?.paths.vtt);
   const width = Math.max(2, clip.duration * zoom);
   const missing = sourceTitle === null;
@@ -467,7 +474,7 @@ const ClipBlock = memo(function ClipBlock({ clip, track, zoom, scene, sourceTitl
     .join("\n");
   return (
     <div
-      className={`pmv-clip ${selected ? "is-selected" : ""} ${ghost ? "is-ghost" : ""} ${excluded ? "is-excluded" : ""} ${missing ? "is-missing" : ""}`}
+      className={`pmv-clip ${selected ? "is-selected" : ""} ${sameScene ? "is-same-scene" : ""} ${ghost ? "is-ghost" : ""} ${excluded ? "is-excluded" : ""} ${missing ? "is-missing" : ""}`}
       style={{ left: clip.start * zoom, width, ["--hue" as string]: sceneHue(clip.sceneId) }}
       title={title}
       onPointerDown={(e) => onPointerDown(e, clip, track, "move")}

@@ -1068,6 +1068,11 @@
   z-index: 2;
   outline: 2px solid #fff;
 }
+/* the other clips of the selected clip's scene */
+.pmv-clip.is-same-scene {
+  outline: 1px dashed rgba(255, 255, 255, 0.75);
+  outline-offset: -1px;
+}
 .pmv-clip.is-ghost {
   z-index: 3;
   box-shadow: 0 0 0 2px var(--pmv-accent), 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -1276,4 +1281,9 @@
 }
 .pmv-media-badge.is-warn {
   cursor: help;
+}
+
+/* "Edit source" / "Back to the PMV" in the middle of the bar above the timeline */
+.pmv-source-toggle {
+  min-width: 180px;
 }
