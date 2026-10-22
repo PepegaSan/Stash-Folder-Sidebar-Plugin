@@ -44,7 +44,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 PLUGIN_ID = "pmv-creator"
 PLAN_VERSION = 1
 # Bump when piece_command() changes, invalidates cached pieces.

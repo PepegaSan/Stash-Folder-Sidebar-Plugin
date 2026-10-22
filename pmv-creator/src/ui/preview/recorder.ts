@@ -9,7 +9,7 @@ import { projectDuration } from "../../model/project";
 import type { StashScene } from "../../stash/types";
 import type { Transport } from "../../state/transport";
 import { flattenTimeline, resolveTransitions } from "../../timeline/flatten";
-import { PreviewEngine } from "./engine";
+import { PreviewEngine, type SlotLook } from "./engine";
 
 export interface RecordProgress {
   time: number;
@@ -23,6 +23,22 @@ export interface Recording {
 }
 
 const MIMES = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+
+/** The visible part of a transition look as a canvas clip – the same geometry as the preview's CSS. */
+function clipToLook(g: CanvasRenderingContext2D, look: SlotLook, w: number, h: number): void {
+  const cx = w / 2;
+  const cy = h / 2;
+  const r = Math.hypot(w, h) / 2;
+  g.beginPath();
+  if (look.band) g.rect(look.band[0] * w, 0, (look.band[1] - look.band[0]) * w, h);
+  else if (look.circle !== undefined) g.arc(cx, cy, look.circle * r, 0, 2 * Math.PI);
+  else if (look.sweep !== undefined) {
+    g.moveTo(cx, cy);
+    g.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + look.sweep * 2 * Math.PI);
+    g.closePath();
+  } else return;
+  g.clip();
+}
 
 export function recordingSupported(): boolean {
   return typeof MediaRecorder !== "undefined" && typeof HTMLCanvasElement.prototype.captureStream === "function" && MIMES.some((m) => MediaRecorder.isTypeSupported(m));
@@ -91,12 +107,20 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
   const draw = () => {
     g.fillStyle = "#000";
     g.fillRect(0, 0, width, height);
-    // same stacking as the DOM preview: z-index, then opacity
-    const order = [...videos].sort((a, b) => Number(a.style.zIndex || 1) - Number(b.style.zIndex || 1));
-    for (const v of order) {
-      const alpha = Number(v.style.opacity || 0);
-      if (alpha <= 0 || v.readyState < 2 || !v.videoWidth) continue;
-      g.globalAlpha = alpha;
+    // same stacking as the DOM preview: z-index, then the engine's look (opacity, visible part, shift, zoom, blur)
+    const order = videos.map((v, k) => ({ v, k })).sort((a, b) => Number(a.v.style.zIndex || 1) - Number(b.v.style.zIndex || 1));
+    for (const { v, k } of order) {
+      const look = engine.looks[k];
+      if (look.opacity <= 0 || v.readyState < 2 || !v.videoWidth) continue;
+      g.save();
+      g.globalAlpha = look.opacity;
+      clipToLook(g, look, width, height);
+      if (look.shift) g.translate(look.shift * width, 0);
+      if (look.scale && look.scale !== 1) {
+        g.translate(width / 2, height / 2);
+        g.scale(look.scale, look.scale);
+        g.translate(-width / 2, -height / 2);
+      }
       // the engine marks each slot with the clip's framing
       const clipFit: typeof fit = v.classList.contains("is-blur") ? "blur" : v.classList.contains("is-contain") ? "contain" : "cover";
       const cover = Math.max(width / v.videoWidth, height / v.videoHeight);
@@ -104,12 +128,13 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
       if (clipFit === "blur") {
         g.filter = `blur(${Math.round(Math.min(width, height) / 40)}px) brightness(0.85)`;
         g.drawImage(v, (width - v.videoWidth * cover) / 2, (height - v.videoHeight * cover) / 2, v.videoWidth * cover, v.videoHeight * cover);
-        g.filter = "none";
       }
+      g.filter = look.blur ? `blur(${Math.round(look.blur * height)}px)` : "none";
       const scale = clipFit === "cover" ? cover : contain;
       const w = v.videoWidth * scale;
       const h = v.videoHeight * scale;
       g.drawImage(v, (width - w) / 2, (height - h) / 2, w, h);
+      g.restore();
     }
     g.globalAlpha = Number(overlay.style.opacity || 0);
     if (g.globalAlpha > 0) {

@@ -222,27 +222,43 @@ export function Toolbar() {
 
 /** Controls and shortcuts at a glance; the README has the long version. */
 function HelpDialog({ onClose }: { onClose: () => void }) {
-  const rows: Array<[string, string]> = [
-    [t("Play / pause"), "Space"],
-    [t("Frame ± / beat ±"), "← → / Shift+← →"],
-    [t("Nudge the selected clip by a frame/beat"), "Alt+← → / Alt+Shift+← →"],
-    [t("Move / trim / slip a clip"), t("drag · drag the edges · Alt+drag")],
-    [t("Without snapping"), t("Shift while dragging")],
-    [t("Open a clip's source"), t("double-click the clip")],
-    [t("Scene in the player: in / out point · back to the PMV"), "I / O · Esc"],
-    [t("Split at the playhead · replace with the selected snippet"), "S · R"],
-    [t("Delete · ripple delete"), "Del · Shift+Del"],
-    [t("Timeline marker"), t("M (double-click in the ruler removes it)")],
-    [t("Clear selection"), "Esc"],
-    [t("Undo / redo"), "Ctrl+Z / Ctrl+Y"],
-    [t("Zoom"), t("Ctrl+wheel, + / − · wheel = scroll horizontally")],
-    [t("Start / end"), "Home / End"],
+  // the keys depend on what the main player shows: the PMV or a scene (Space, ←/→ and Esc differ)
+  const sections: Array<[string, Array<[string, string]>]> = [
+    [
+      t("Timeline and PMV preview"),
+      [
+        [t("Play / pause"), t("Space")],
+        [t("Frame ± / beat ±"), "← → / Shift+← →"],
+        [t("Nudge the selected clip by a frame/beat"), "Alt+← → / Alt+Shift+← →"],
+        [t("Move / trim / slip a clip"), t("drag · drag the edges · Alt+drag")],
+        [t("Without snapping"), t("Shift while dragging")],
+        [t("Show a clip's scene in the big player"), t("✎ Edit source · double-click the clip")],
+        [t("Split at the playhead · replace with the clip selected under “My clips”"), "S · R"],
+        [t("Delete · ripple delete"), t("Del · Shift+Del")],
+        [t("Timeline marker"), t("M (double-click in the ruler removes it)")],
+        [t("Clear selection"), "Esc"],
+        [t("Undo / redo"), t("Ctrl+Z / Ctrl+Y")],
+        [t("Zoom"), t("Ctrl+wheel, + / − · wheel = scroll horizontally")],
+        [t("Start / end"), t("Home / End")],
+      ],
+    ],
+    [
+      t("Scene in the big player"),
+      [
+        [t("Play / pause the scene"), t("Space")],
+        [t("Frame ± / second ±"), "← → / Shift+← →"],
+        [t("In / out point of the range"), "I / O"],
+        [t("Pick a range with the mouse"), t("Shift+drag on the bar")],
+        [t("Another part for the selected clip"), t("drag the orange range")],
+        [t("Back to the PMV preview"), t("Esc · “Back to the PMV” (inspector)")],
+      ],
+    ],
   ];
   const steps = [
     t("Music: in the inspector (nothing selected) upload a file or enter a server path, then Detect BPM."),
     t("Scenes: search in the sidebar and add with +, or paste scene ids / Stash links. Click a scene to pick markers and ranges (I/O, Shift+drag)."),
     t("Arrange: drag snippets from the selection onto a track, or let the ⚡ Generator cut to the beat – everything stays editable."),
-    t("Fine-tune: click a clip; the inspector sets start, duration, source in/out, speed, transition. Another part of the scene never moves the clip on the timeline."),
+    t("Fine-tune: click a clip; the inspector sets start, duration, speed and framing. “✎ Edit source” shows its scene in the big player – pick another spot there, the clip keeps its place on the timeline."),
     t("Render with FFmpeg (exact) or Quick record in the browser (real time), or export EDL/OTIO."),
   ];
   return (
@@ -260,16 +276,21 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
           ))}
         </ol>
         <table className="pmv-help-keys">
-          <tbody>
-            {rows.map(([what, how]) => (
-              <tr key={what}>
-                <td>{what}</td>
-                <td>
-                  <code>{how}</code>
-                </td>
+          {sections.map(([title, rows]) => (
+            <tbody key={title}>
+              <tr>
+                <th colSpan={2}>{title}</th>
               </tr>
-            ))}
-          </tbody>
+              {rows.map(([what, how]) => (
+                <tr key={what}>
+                  <td>{what}</td>
+                  <td>
+                    <code>{how}</code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          ))}
         </table>
         <div className="pmv-li-meta">
           {t("Every button has a tooltip – hover over it.")}{" "}

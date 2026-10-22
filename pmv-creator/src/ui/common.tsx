@@ -1,6 +1,7 @@
 /** Small shared UI pieces. Styling relies on Stash's Bootstrap plus styles.css. */
 import React, { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import type { TransitionType } from "../model/project";
 import { stashUrl } from "../stash/graphql";
 import { type SpriteSheet, cueAt } from "../stash/sprites";
 import type { StashRef } from "../stash/types";
@@ -201,3 +202,35 @@ export const sceneHue = (sceneId: string): number => {
   for (const ch of sceneId) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return (h * 47) % 360;
 };
+
+/** Display name of a transition (the ids are FFmpeg's xfade names). */
+export function transitionLabel(type: TransitionType): string {
+  switch (type) {
+    case "fade":
+      return t("Crossfade");
+    case "fadeblack":
+      return t("Fade through black");
+    case "fadewhite":
+      return t("Fade through white");
+    case "dissolve":
+      return t("Dissolve");
+    case "wipeleft":
+      return t("Wipe to the left");
+    case "wiperight":
+      return t("Wipe to the right");
+    case "slideleft":
+      return t("Slide to the left");
+    case "slideright":
+      return t("Slide to the right");
+    case "circleopen":
+      return t("Circle opens");
+    case "pixelize":
+      return t("Pixelate");
+    case "zoomin":
+      return t("Zoom in");
+    case "hblur":
+      return t("Blur");
+    case "radial":
+      return t("Clock wipe");
+  }
+}

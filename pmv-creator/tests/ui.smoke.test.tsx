@@ -132,6 +132,24 @@ describe("PMV Creator UI (mocked Stash)", () => {
     expect(container.textContent).toContain("Detect BPM");
   });
 
+  it("shows the transition without “More…” and applies one to all clips in one undo step", async () => {
+    const v1Lane = $$(".pmv-lane[data-track-id]")[1];
+    const first = Array.from(v1Lane.querySelectorAll<HTMLElement>(".pmv-clip")).find((el) => el.style.left === "0px")!;
+    await fire(first, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await fire(window, new MouseEvent("pointerup", { bubbles: true }));
+    const select = $$(".pmv-inspector select").find((s) => s.querySelector('option[value="wipeleft"]')) as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    expect(select.closest(".pmv-more")).toBeNull();
+    expect(select.querySelector('option[value="wipeleft"]')!.textContent).toBe("Wipe to the left");
+    expect($$(".pmv-clip-trans")).toHaveLength(1);
+    // the first clip has a hard cut – giving that to all removes the fade of the second clip
+    await fire(byText("⇉ Transition for all clips")!, new MouseEvent("click", { bubbles: true }));
+    expect($$(".pmv-clip-trans")).toHaveLength(0);
+    await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    expect($$(".pmv-clip-trans")).toHaveLength(1);
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
   it("selects, deletes and restores a clip", async () => {
     const clip = $$(".pmv-clip")[0];
     await fire(clip, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
@@ -186,6 +204,9 @@ describe("PMV Creator UI (mocked Stash)", () => {
     expect($(".pmv-source-host")!.classList.contains("pmv-hidden")).toBe(false);
     expect($(".pmv-source-host .pmv-scrub-clip")).not.toBeNull();
     expect($(".pmv-monitor-tabs .pmv-tab.is-active")!.textContent).toBe("Scene: Scene One");
+    // the way back sits where "Edit source" was
+    expect(byText("✎ Edit source")).toBeNull();
+    expect(byText("← Back to the PMV (Esc)")).not.toBeNull();
     const markerRow = $$(".pmv-list-item").find((li) => li.textContent?.includes("Marker A"))!;
     await fire(markerRow.querySelector<HTMLElement>("button[title^='Put the selected clip on this marker']")!, new MouseEvent("click", { bubbles: true }));
     expect(target().style.width).toBe(widthBefore);
@@ -208,6 +229,12 @@ describe("PMV Creator UI (mocked Stash)", () => {
     const v1Lane = $$(".pmv-lane[data-track-id]")[1];
     const clip = Array.from(v1Lane.querySelectorAll<HTMLElement>(".pmv-clip")).find((el) => el.style.left === "0px")!;
     await fire(clip, new MouseEvent("dblclick", { bubbles: true }));
+    expect($(".pmv-source-host")!.classList.contains("pmv-hidden")).toBe(false);
+    // without a selected clip the inspector offers only the way back
+    await fire(byText("← Back to the PMV (Esc)")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-source-host")!.classList.contains("pmv-hidden")).toBe(true);
+    expect(byText("← Back to the PMV (Esc)")).toBeNull();
+    await fire($$(".pmv-monitor-tabs .pmv-tab")[1], new MouseEvent("click", { bubbles: true }));
     expect($(".pmv-source-host")!.classList.contains("pmv-hidden")).toBe(false);
     await fire($$(".pmv-monitor-tabs button").find((b) => b.title === "Close the scene")!, new MouseEvent("click", { bubbles: true }));
     expect($(".pmv-monitor-tabs")).toBeNull();

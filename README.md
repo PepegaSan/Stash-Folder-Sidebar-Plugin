@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.6.0-informational)
+![Version](https://img.shields.io/badge/version-0.6.1-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -613,6 +613,11 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.6.1
+
+- Transitions right in the inspector with readable names; **⇉ Transition for all clips** (one undo step); the preview and Quick record show wipes, slides, circle, clock wipe and zoom like the render
+- **← Back to the PMV (Esc)** sits where **✎ Edit source** was; help lists the keys per player (PMV / scene) with localized key names
 
 ### PMV Creator 0.6.0
 

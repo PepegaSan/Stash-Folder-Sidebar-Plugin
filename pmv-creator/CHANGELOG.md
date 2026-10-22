@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1 (2026-10-22)
+
+- "✎ Edit source" and the way back share one spot at the top of the inspector: while a scene is in the main player, the button reads **← Back to the PMV (Esc)** – also without a selected clip.
+- **Transitions** are in the inspector right away (no longer behind "More…"), with readable names (Crossfade, Fade through black, Wipe to the left, …) and their length on a row of their own. **⇉ Transition for all clips** gives every clip the selected clip's transition in one undo step (the first clip of a track keeps its own).
+- The preview shows wipes, slides, circle, clock wipe, zoom and blur/pixelate like the render does (before: a plain crossfade); Quick record records them the same way.
+- Help: the shortcuts are split into *Timeline and PMV preview* and *Scene in the big player*; key names follow the language (Leertaste, Entf, Strg, Pos1); the I/O buttons name their keys.
+
 ## 0.6.0 (2026-10-22)
 
 - **Scenes open in the main player**: picking the part of a scene no longer happens in the small sidebar player. The scene takes over the big player area (tabs *PMV preview* / *Scene* above it) with a large scrub bar, filmstrip, I/O, *Start clip here* and *Fit range*; the sidebar keeps facts and markers. Inspector: **✎ Edit source** (or double-click the clip) opens the clip's scene there; **Other scene…** puts another scene into the same slot. Keys while the scene is shown: Space, I / O, ← → (frame, Shift = 1 s), Esc back to the PMV.

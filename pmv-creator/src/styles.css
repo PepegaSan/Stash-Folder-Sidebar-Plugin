@@ -1157,6 +1157,14 @@
 .pmv-help-keys td:last-child {
   white-space: nowrap;
 }
+.pmv-help-keys th {
+  padding: 10px 0 4px;
+  text-align: left;
+  font-weight: 700;
+}
+.pmv-help-keys tbody:first-child th {
+  padding-top: 0;
+}
 
 .pmv-stage-blur {
   position: absolute;

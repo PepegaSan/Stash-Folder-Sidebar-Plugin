@@ -318,10 +318,10 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
         <span className="pmv-mono">
           {formatTime(time)} / {formatTime(duration)}
         </span>
-        <button className="btn btn-sm btn-secondary" title={t("Range starts here (in point)")} onClick={markIn}>
+        <button className="btn btn-sm btn-secondary" title={t("Range starts here – in point (I)")} onClick={markIn}>
           I
         </button>
-        <button className="btn btn-sm btn-secondary" title={t("Range ends here (out point)")} onClick={markOut}>
+        <button className="btn btn-sm btn-secondary" title={t("Range ends here – out point (O)")} onClick={markOut}>
           O
         </button>
         {!sel && <span className="pmv-li-meta">{t("I / O or Shift+drag on the bar picks a range")}</span>}

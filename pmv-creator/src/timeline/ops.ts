@@ -8,7 +8,7 @@
  * Invariant per track: clips sorted by start, no overlaps.
  */
 import { uid } from "../model/ids";
-import { type Clip, type PmvProject, type Snippet, type Track, clipEnd, clipSourceOut, createTrack } from "../model/project";
+import { type Clip, type PmvProject, type Snippet, type Track, type Transition, clipEnd, clipSourceOut, createTrack } from "../model/project";
 import { EPS, clamp } from "./time";
 
 /**
@@ -289,6 +289,25 @@ export type ClipPatch = Partial<Pick<Clip, "volume" | "transitionIn" | "fit" | "
 
 export function updateClip(p: PmvProject, clipId: string, patch: ClipPatch): PmvProject {
   return mapClip(p, clipId, (c) => ({ ...c, ...patch }));
+}
+
+/**
+ * One transition for every clip of the unlocked tracks. The first clip of a track keeps its own –
+ * there is nothing before it to blend from (the generator leaves it a hard cut, too).
+ */
+export function setAllTransitions(p: PmvProject, transition: Transition | null): PmvProject {
+  const same = (a: Transition | null, b: Transition | null) => (a && b ? a.type === b.type && Math.abs(a.duration - b.duration) < EPS : a === b);
+  let changed = false;
+  const tracks = p.tracks.map((t) => {
+    if (t.locked) return t;
+    const clips = sortClips(t.clips).map((c, i) => {
+      if (i === 0 || same(c.transitionIn, transition)) return c;
+      changed = true;
+      return { ...c, transitionIn: transition && { ...transition } };
+    });
+    return { ...t, clips };
+  });
+  return changed ? { ...p, tracks } : p;
 }
 
 /**

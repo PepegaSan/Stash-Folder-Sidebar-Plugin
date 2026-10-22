@@ -14,7 +14,7 @@ import { type EditAction, applyEdit } from "../../state/reducer";
 import { useEditor } from "../../state/store";
 import { clipFromSnippet } from "../../timeline/ops";
 import { EPS, beatLength, clamp, formatBarBeat, formatTime, snapRange, snapTime } from "../../timeline/time";
-import { SpriteThumb, sceneHue } from "../common";
+import { SpriteThumb, sceneHue, transitionLabel } from "../common";
 import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions } from "../editing";
 import { useAudioAnalysis, useSprites, useTransportTime } from "../hooks";
 import { Waveform } from "./Waveform";
@@ -461,7 +461,7 @@ const ClipBlock = memo(function ClipBlock({ clip, track, zoom, scene, sourceTitl
     t("Source {from} – {to}", { from: formatTime(clip.sourceIn), to: formatTime(clipSourceOut(clip)) }),
     clip.speed !== 1 ? t("Speed {speed}×", { speed: clip.speed }) : "",
     excluded ? t("⚠ overlaps an excluded range") : "",
-    t("Drag: move · edges: trim · Alt+drag: slip · Shift: no snapping · double-click: open the source"),
+    t("Drag: move · edges: trim · Alt+drag: slip · Shift: no snapping · double-click: edit the source"),
   ]
     .filter(Boolean)
     .join("\n");
@@ -482,7 +482,7 @@ const ClipBlock = memo(function ClipBlock({ clip, track, zoom, scene, sourceTitl
         {clip.speed !== 1 && <span className="pmv-badge">{Number(clip.speed.toFixed(2))}×</span>}
         {clip.label || sourceTitle || clip.sceneId}
       </div>
-      {clip.transitionIn && <div className="pmv-clip-trans" style={{ width: Math.min(width / 2, (clip.transitionIn.duration / 2) * zoom) }} title={clip.transitionIn.type} />}
+      {clip.transitionIn && <div className="pmv-clip-trans" style={{ width: Math.min(width / 2, (clip.transitionIn.duration / 2) * zoom) }} title={transitionLabel(clip.transitionIn.type)} />}
       <div className="pmv-clip-handle is-left" onPointerDown={(e) => onPointerDown(e, clip, track, "trim-start")} />
       <div className="pmv-clip-handle is-right" onPointerDown={(e) => onPointerDown(e, clip, track, "trim-end")} />
     </div>

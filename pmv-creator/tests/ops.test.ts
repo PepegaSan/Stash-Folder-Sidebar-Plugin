@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { clipEnd } from "../src/model/project";
-import { deleteClip, insertClip, moveClip, replaceClip, setClipSource, setClipSpeed, slipClip, splitClip, trimClip } from "../src/timeline/ops";
+import { deleteClip, insertClip, moveClip, replaceClip, setAllTransitions, setClipSource, setClipSpeed, slipClip, splitClip, trimClip } from "../src/timeline/ops";
+import { transitionLooks } from "../src/ui/preview/engine";
 import { assertTrackInvariants, clip, project } from "./helpers";
 
 const trackOf = (p: ReturnType<typeof project>, i = 0) => p.tracks[i].clips;
@@ -213,5 +214,35 @@ describe("slip / speed / replace / split / delete", () => {
     const p = project([a, b]);
     const clips = trackOf(deleteClip(p, a.id, true));
     expect(clips[0].start).toBe(0);
+  });
+});
+
+describe("transitions", () => {
+  it("one transition for all clips: the first clip of each track and locked tracks keep theirs", () => {
+    const own = { type: "fadewhite" as const, duration: 0.1 };
+    const p = project([clip("1", 0, 2, { transitionIn: own }), clip("2", 2, 2)], [clip("3", 0, 2), clip("1", 2, 2), clip("2", 4, 2, { transitionIn: own })]);
+    const fade = { type: "fade" as const, duration: 0.5 };
+    const next = setAllTransitions(p, fade);
+    expect(trackOf(next, 0).map((c) => c.transitionIn)).toEqual([own, fade]);
+    expect(trackOf(next, 1).map((c) => c.transitionIn)).toEqual([null, fade, fade]);
+    // nothing to change → same project (no undo step)
+    expect(setAllTransitions(next, fade)).toBe(next);
+    // hard cuts everywhere, locked tracks untouched
+    const locked = { ...next, tracks: next.tracks.map((t, i) => (i === 1 ? { ...t, locked: true } : t)) };
+    const cut = setAllTransitions(locked, null);
+    expect(trackOf(cut, 0).map((c) => c.transitionIn)).toEqual([own, null]);
+    expect(trackOf(cut, 1)).toBe(trackOf(locked, 1));
+  });
+
+  it("preview looks follow FFmpeg's xfade directions", () => {
+    // wipeleft: the new clip appears on the right and grows to the left
+    expect(transitionLooks("wipeleft", 0.25).incoming.band).toEqual([0.75, 1]);
+    expect(transitionLooks("wiperight", 0.25).incoming.band).toEqual([0, 0.25]);
+    // slideleft: both move left, the new clip comes in from the right
+    const s = transitionLooks("slideleft", 0.25);
+    expect([s.incoming.shift, s.outgoing.shift]).toEqual([0.75, -0.25]);
+    expect(transitionLooks("circleopen", 1).incoming.circle).toBe(1);
+    // everything without its own look is a crossfade
+    expect(transitionLooks("dissolve", 0.4)).toEqual({ incoming: { opacity: 0.4 }, outgoing: { opacity: 1 } });
   });
 });

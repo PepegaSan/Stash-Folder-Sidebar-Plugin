@@ -9,7 +9,7 @@ import { type FitMode, TRANSITION_TYPES, type TransitionType, VIDEO_CODECS, type
 import { useEditor } from "../state/store";
 import { type ClipLocation, type SpeedKeep, findClip } from "../timeline/ops";
 import { beatLength, formatBarBeat, nearestGridTime } from "../timeline/time";
-import { More, NumField } from "./common";
+import { More, NumField, transitionLabel } from "./common";
 import { useAudioAnalysis } from "./hooks";
 import { useMusic } from "./music";
 
@@ -21,6 +21,31 @@ export function Inspector() {
     <div className="pmv-inspector" key={String(state.ui.advanced)}>
       {loc ? <ClipInspector loc={loc} /> : <ProjectInspector />}
     </div>
+  );
+}
+
+/**
+ * "Edit source" and the way back share one spot at the top of the inspector: leaving the scene in the
+ * main player happens where entering it did (Esc does the same). Without a clip only the way back shows.
+ */
+function SourceToggle({ clip }: { clip?: { sceneId: string; sourceIn: number } }) {
+  const { state, dispatch } = useEditor();
+  if (state.ui.activeSceneId && state.ui.sceneInPlayer) {
+    return (
+      <button className="btn btn-sm btn-primary" title={t("Back to the PMV preview – the scene stays open on the left")} onClick={() => dispatch({ type: "ui", patch: { sceneInPlayer: false } })}>
+        ← {t("Back to the PMV (Esc)")}
+      </button>
+    );
+  }
+  if (!clip) return null;
+  return (
+    <button
+      className="btn btn-sm btn-primary"
+      onClick={() => dispatch({ type: "ui", patch: { activeSceneId: clip.sceneId, activeSceneSeek: clip.sourceIn } })}
+      title={t("Shows the clip's scene in the big player – pick another spot, a marker or another scene for it there (also: double-click the clip)")}
+    >
+      ✎ {t("Edit source")}
+    </button>
   );
 }
 
@@ -48,6 +73,7 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
           ✕
         </button>
       </div>
+      <SourceToggle clip={clip} />
       <input
         className="form-control form-control-sm"
         key={id}
@@ -86,6 +112,39 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
           <option value="cover">{t("Fill (crop)")}</option>
           <option value="contain">{t("Fit (bars)")}</option>
         </select>
+        <label>{t("Transition")}</label>
+        <select
+          className="form-control form-control-sm"
+          value={clip.transitionIn?.type ?? ""}
+          title={t("How this clip comes in after the one before it")}
+          onChange={(e) => {
+            const type = e.target.value as TransitionType | "";
+            dispatch({ type: "clip/update", clipId: id, patch: { transitionIn: type ? { type, duration: clip.transitionIn?.duration ?? Math.min(0.5, beat / 2) } : null } });
+          }}
+        >
+          <option value="">{t("Hard cut")}</option>
+          {TRANSITION_TYPES.map((x) => (
+            <option key={x} value={x}>
+              {transitionLabel(x)}
+            </option>
+          ))}
+        </select>
+        {clip.transitionIn && (
+          <>
+            <label>{t("Transition length")}</label>
+            <NumField value={clip.transitionIn.duration} min={0.02} max={10} onCommit={(v) => dispatch({ type: "clip/update", clipId: id, patch: { transitionIn: { ...clip.transitionIn!, duration: v } } })} suffix="s" />
+          </>
+        )}
+        <label />
+        <span>
+          <button
+            className="btn btn-sm btn-secondary"
+            title={t("Gives every clip this transition (type and length); the first clip of a track keeps its own. One step – Ctrl+Z undoes it.")}
+            onClick={() => dispatch({ type: "clips/transition", transition: clip.transitionIn })}
+          >
+            ⇉ {t("Transition for all clips")}
+          </button>
+        </span>
       </div>
       <div className="pmv-li-meta">{t("Another part of the scene never changes the clip's place on the timeline: “Edit source” and drag the orange range.")}</div>
 
@@ -109,27 +168,6 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
           <span className="pmv-row">
             <input type="range" min={0} max={2} step={0.05} value={clip.volume} onChange={(e) => dispatch({ type: "clip/update", clipId: id, patch: { volume: +e.target.value } })} />
             <span className="pmv-mono">{Math.round(clip.volume * 100)}%</span>
-          </span>
-          <label>{t("Transition")}</label>
-          <span className="pmv-row">
-            <select
-              className="form-control form-control-sm"
-              value={clip.transitionIn?.type ?? ""}
-              onChange={(e) => {
-                const type = e.target.value as TransitionType | "";
-                dispatch({ type: "clip/update", clipId: id, patch: { transitionIn: type ? { type, duration: clip.transitionIn?.duration ?? Math.min(0.5, beat / 2) } : null } });
-              }}
-            >
-              <option value="">{t("Hard cut")}</option>
-              {TRANSITION_TYPES.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-            {clip.transitionIn && (
-              <NumField value={clip.transitionIn.duration} min={0.02} max={10} onCommit={(v) => dispatch({ type: "clip/update", clipId: id, patch: { transitionIn: { ...clip.transitionIn!, duration: v } } })} suffix="s" />
-            )}
           </span>
         </div>
         <div className="pmv-row pmv-wrap">
@@ -155,13 +193,6 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
       </More>
 
       <div className="pmv-row pmv-wrap">
-        <button
-          className="btn btn-sm btn-primary"
-          onClick={() => dispatch({ type: "ui", patch: { activeSceneId: clip.sceneId, activeSceneSeek: clip.sourceIn } })}
-          title={t("Shows the clip's scene in the big player – pick another spot, a marker or another scene for it there (also: double-click the clip)")}
-        >
-          ✎ {t("Edit source")}
-        </button>
         <button className="btn btn-sm btn-danger" onClick={() => dispatch({ type: "clip/delete", clipId: id, ripple: false })} title={t("Del · Shift+Del = ripple")}>
           {t("Delete")}
         </button>
@@ -187,6 +218,7 @@ function ProjectInspector() {
   const res = RESOLUTIONS.find(([w, h]) => w === o.width && h === o.height);
   return (
     <div className="pmv-panel">
+      <SourceToggle />
       <AudioSection />
       <GridSection />
       <div className="pmv-section-head is-static">{t("Output")}</div>

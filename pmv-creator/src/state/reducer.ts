@@ -8,7 +8,7 @@
 import { type GenerationResult, applyGeneration } from "../generator/generate";
 import type { ClipSource } from "../generator/material";
 import { readAdvanced } from "./prefs";
-import type { AudioTrack, BeatGrid, Clip, Exclusion, OutputSettings, PmvProject, Snippet, SourceMedia, TimelineMarker, Track } from "../model/project";
+import type { AudioTrack, BeatGrid, Clip, Exclusion, OutputSettings, PmvProject, Snippet, SourceMedia, TimelineMarker, Track, Transition } from "../model/project";
 import {
   type ClipPatch,
   type ClipSourceInput,
@@ -22,6 +22,7 @@ import {
   moveClip,
   removeTrack,
   replaceClip,
+  setAllTransitions,
   setClipSource,
   setClipSpeed,
   slipClip,
@@ -38,6 +39,8 @@ export type EditAction =
   | { type: "clip/slip"; clipId: string; sourceIn: number }
   | { type: "clip/speed"; clipId: string; speed: number; keep: SpeedKeep; mode: EditMode }
   | { type: "clip/update"; clipId: string; patch: ClipPatch }
+  /** The same transition for every clip (the first clip of a track keeps its own). */
+  | { type: "clips/transition"; transition: Transition | null }
   | { type: "clip/replace"; clipId: string; snippetId: string }
   /** New material for the same slot (start/duration stay); fit = play exactly the given range. */
   | { type: "clip/source"; clipId: string; source: ClipSourceInput; fit: boolean; sources: SourceMedia[] }
@@ -80,6 +83,8 @@ export function applyEdit(p: PmvProject, a: EditAction): PmvProject {
       return setClipSpeed(p, a.clipId, a.speed, a.keep, a.mode);
     case "clip/update":
       return updateClip(p, a.clipId, a.patch);
+    case "clips/transition":
+      return setAllTransitions(p, a.transition);
     case "clip/replace": {
       const s = p.bin.find((x) => x.id === a.snippetId);
       return s ? replaceClip(p, a.clipId, s) : p;

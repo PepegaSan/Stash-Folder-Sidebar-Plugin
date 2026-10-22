@@ -1,9 +1,10 @@
 /**
  * Seamless sequence preview with two <video> elements (A/B). The one not on screen is pre-cued on
  * the next segment, so a cut is just a visibility swap. Picture follows the transport clock; drift
- * above a threshold triggers a seek. Transitions are approximated with opacity/colour overlays.
+ * above a threshold triggers a seek. Transitions are approximated per slot (opacity, visible part,
+ * shift, zoom, blur) and colour overlays; the quick recorder replays the same looks on its canvas.
  */
-import type { FitMode } from "../../model/project";
+import type { FitMode, TransitionType } from "../../model/project";
 import { type ResolvedTransition, type Segment, segmentIndexAt, sourceTimeAt } from "../../timeline/flatten";
 import { VideoSlot } from "../../stash/streams";
 import type { StashScene } from "../../stash/types";
@@ -21,6 +22,65 @@ export interface PreviewTimeline {
 const DRIFT_PLAYING = 0.15;
 /** Low-res copy of the picture behind a "blur" clip; the CSS blur does the rest. */
 const BLUR_W = 160;
+
+/** How one slot is drawn. Fractions refer to the picture, so CSS and the recorder's canvas agree. */
+export interface SlotLook {
+  opacity: number;
+  /** Visible horizontal band [from, to] as fractions of the width (wipes). */
+  band?: [number, number];
+  /** Visible circle around the centre; radius as a fraction of half the diagonal. */
+  circle?: number;
+  /** Visible clock sweep from 12 o'clock, as a fraction of a turn. */
+  sweep?: number;
+  /** Horizontal shift as a fraction of the width (slides). */
+  shift?: number;
+  scale?: number;
+  /** Blur radius as a fraction of the picture height. */
+  blur?: number;
+}
+
+/**
+ * Incoming/outgoing looks of an xfade-style transition at progress p (0 → 1), after FFmpeg's xfade
+ * so the preview resembles the render. fade/dissolve fall back to a crossfade; the colour fades use
+ * the overlay instead.
+ */
+export function transitionLooks(type: TransitionType, p: number): { incoming: SlotLook; outgoing: SlotLook } {
+  const peak = 1 - Math.abs(2 * p - 1);
+  switch (type) {
+    case "wipeleft":
+      return { incoming: { opacity: 1, band: [1 - p, 1] }, outgoing: { opacity: 1 } };
+    case "wiperight":
+      return { incoming: { opacity: 1, band: [0, p] }, outgoing: { opacity: 1 } };
+    case "slideleft":
+      return { incoming: { opacity: 1, shift: 1 - p }, outgoing: { opacity: 1, shift: -p } };
+    case "slideright":
+      return { incoming: { opacity: 1, shift: p - 1 }, outgoing: { opacity: 1, shift: p } };
+    case "circleopen":
+      return { incoming: { opacity: 1, circle: p }, outgoing: { opacity: 1 } };
+    case "radial":
+      return { incoming: { opacity: 1, sweep: p }, outgoing: { opacity: 1 } };
+    case "zoomin":
+      return { incoming: { opacity: p }, outgoing: { opacity: 1, scale: 1 + p } };
+    case "pixelize":
+    case "hblur":
+      return { incoming: { opacity: p, blur: 0.03 * peak }, outgoing: { opacity: 1, blur: 0.03 * peak } };
+    default:
+      return { incoming: { opacity: p }, outgoing: { opacity: 1 } };
+  }
+}
+
+/** CSS for a look; empty strings reset what a previous transition set. */
+function lookCss(look: SlotLook, height: number): { clipPath: string; mask: string; transform: string; filter: string } {
+  const clipPath = look.band
+    ? `inset(0 ${(1 - look.band[1]) * 100}% 0 ${look.band[0] * 100}%)`
+    : look.circle !== undefined
+      ? `circle(${look.circle * 70.72}% at 50% 50%)` // % of a circle() radius = diagonal / √2
+      : "";
+  const mask = look.sweep !== undefined ? `conic-gradient(#000 ${look.sweep * 360}deg, transparent 0)` : "";
+  const transform = [look.shift ? `translateX(${look.shift * 100}%)` : "", look.scale && look.scale !== 1 ? `scale(${look.scale})` : ""].filter(Boolean).join(" ");
+  const filter = look.blur ? `blur(${(look.blur * height).toFixed(1)}px)` : "";
+  return { clipPath, mask, transform, filter };
+}
 
 export class PreviewEngine {
   private slots: VideoSlot[];
@@ -131,8 +191,8 @@ export class PreviewEngine {
     });
 
     // visibility
-    const opacity = [0, 0];
-    if (active >= 0) opacity[active] = 1;
+    const looks: SlotLook[] = [{ opacity: 0 }, { opacity: 0 }];
+    if (active >= 0) looks[active] = { opacity: 1 };
     let overlayColor = "transparent";
     let overlayAlpha = 0;
     const tr = j >= 0 ? tl.trans[j] : null;
@@ -143,12 +203,14 @@ export class PreviewEngine {
         overlayColor = tr.type === "fadeblack" ? "#000" : "#fff";
         overlayAlpha = 1 - Math.abs(2 * progress - 1);
       } else if (incomingSlot >= 0) {
-        opacity[incomingSlot] = progress;
-        opacity[outgoingSlot] = want[outgoingSlot] !== null ? 1 : 0;
+        const { incoming, outgoing } = transitionLooks(tr.type, progress);
+        looks[incomingSlot] = incoming;
+        looks[outgoingSlot] = want[outgoingSlot] !== null ? outgoing : { opacity: 0 };
       }
     }
+    this.looks = looks;
     this.slots.forEach((s, k) => {
-      s.el.style.opacity = String(opacity[k]);
+      this.paint(k, looks[k]);
       s.el.style.zIndex = tr && want[k] === j ? "2" : "1";
       if (want[k] !== i && !s.el.paused) s.el.pause();
     });
@@ -159,6 +221,25 @@ export class PreviewEngine {
     const top = [...this.slots].filter((s) => Number(s.el.style.opacity) > 0 && s.el.classList.contains("is-blur")).sort((a, b) => Number(b.el.style.zIndex) - Number(a.el.style.zIndex))[0];
     this.blurTarget = top?.el ?? null;
     this.drawBlur(this.blurTarget);
+  }
+
+  /** Looks of the two slots after the last render (the recorder draws them on its canvas). */
+  looks: SlotLook[] = [{ opacity: 0 }, { opacity: 0 }];
+  /** CSS last written per slot – render runs every frame, so only changes are applied. */
+  private painted = ["", ""];
+
+  private paint(k: number, look: SlotLook): void {
+    const el = this.slots[k].el;
+    el.style.opacity = String(look.opacity);
+    const css = lookCss(look, el.clientHeight);
+    const key = `${css.clipPath}|${css.mask}|${css.transform}|${css.filter}`;
+    if (key === this.painted[k]) return;
+    this.painted[k] = key;
+    el.style.clipPath = css.clipPath;
+    el.style.transform = css.transform;
+    el.style.filter = css.filter;
+    el.style.setProperty("mask-image", css.mask);
+    el.style.setProperty("-webkit-mask-image", css.mask);
   }
 
   private nextClip(i: number): number {
