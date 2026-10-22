@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.6.1-informational)
+![Version](https://img.shields.io/badge/version-0.7.0-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -586,7 +586,7 @@ Works in classic Stash and in Stash UI.
 - **Ground rule** — another part of the scene never changes a clip's place on the timeline
 - **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"
 - **Render** — deterministic FFmpeg pipeline as a Stash task (segment cache, exact CFR), plus **Quick record** (real-time WebM in the browser, no server FFmpeg needed)
-- **Render on your PC** (optional) — a render helper on a PC renders with its own FFmpeg and saves to any folder on the PC; set up once in the render dialog
+- **Render on your PC** (optional) — a render helper on a PC renders with its own FFmpeg and saves to any folder on the PC; set up once in the render dialog. While it runs, the preview plays the videos of its mapped folders from the PC (also HEVC/MPEG-4, converted by the PC instead of the NAS)
 - **Exports** — project JSON, CMX3600 EDL, OpenTimelineIO, render plan, FFmpeg scripts; CLI render without Stash
 - English interface, German when Stash (or Stash UI) is set to German
 
@@ -613,6 +613,10 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.7.0
+
+- Preview from this PC: with the render helper (0.7, download it again) running, the preview plays the videos of the mapped folders from the PC, converted there to H.264 where needed; **💻 from PC** / **🗄 from Stash** next to the player. After updating, reload the editor once with Ctrl+F5
 
 ### PMV Creator 0.6.1
 

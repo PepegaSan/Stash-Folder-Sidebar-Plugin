@@ -24,9 +24,11 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import signal
@@ -41,10 +43,11 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 from fractions import Fraction
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-VERSION = "0.6.1"
+VERSION = "0.7.0"
 PLUGIN_ID = "pmv-creator"
 PLAN_VERSION = 1
 # Bump when piece_command() changes, invalidates cached pieces.
@@ -931,6 +934,11 @@ def op_helper_hello(ctx: Context, args: dict) -> dict:
     for k in ("name", "version", "ffmpeg", "defaultOutput", "platform"):
         if info.get(k) is not None:
             cur[k] = str(info[k])[:300]
+    serve = info.get("serve")
+    if isinstance(serve, dict) and serve.get("url") and serve.get("token"):
+        cur["serve"] = {"url": str(serve["url"])[:200], "token": str(serve["token"])[:100]}
+    else:
+        cur.pop("serve", None)  # an older helper or one started with --no-preview
     cur["lastSeen"] = time.time()
     cur.setdefault("config", {"outputDir": "", "mappings": []})
     atomic_write(path, json.dumps(cur).encode())
@@ -1082,13 +1090,19 @@ class HelperClient:
         return self.gql(q, {"a": args}, timeout)["runPluginOperation"]
 
 
-def map_path(path: str, mappings: List[Dict[str, str]]) -> Optional[str]:
-    """Longest matching prefix wins; the rest of the path gets the separators of the target (Y:\\ -> backslashes)."""
+def best_mapping(path: str, mappings: List[Dict[str, str]]) -> Optional[tuple]:
+    """(from, to) of the longest mapping prefix that matches the path."""
     best = None
     for m in mappings or []:
         src, dst = str(m.get("from") or ""), str(m.get("to") or "")
         if src and dst and path.startswith(src) and (best is None or len(src) > len(best[0])):
             best = (src, dst)
+    return best
+
+
+def map_path(path: str, mappings: List[Dict[str, str]]) -> Optional[str]:
+    """Longest matching prefix wins; the rest of the path gets the separators of the target (Y:\\ -> backslashes)."""
+    best = best_mapping(path, mappings)
     if not best:
         return None
     rest = path[len(best[0]):].lstrip("/\\")
@@ -1106,6 +1120,155 @@ def find_ffmpeg() -> Optional[str]:
         if cand.is_file():
             return str(cand)
     return None
+
+
+# ---- the helper's media server: the editor's preview plays the videos from the PC's own drive
+#
+# Stash's Content-Security-Policy lets <video> load only from Stash itself or from blob: URLs, while a plugin may
+# add hosts to connect-src (pmv-creator.yml: http://*:9978-9981). So the editor fetch()es a fragmented MP4 from
+# here and plays it through Media Source Extensions. The MP4 muxer always starts a stream at 0, so every stream
+# begins exactly at ?start= (encoded here, frame-exact) and the player shifts it there (timestampOffset).
+
+MEDIA_EXT = {".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".wmv", ".flv", ".mpg", ".mpeg", ".ts", ".m2ts", ".3gp"}
+SERVE_PORTS = (9978, 9979, 9980, 9981)  # must match the csp in pmv-creator.yml
+LIVE_STREAMS = 6  # FFmpeg processes at the same time (two preview players, the scene player, seeks in flight)
+_GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+
+
+def lan_address(stash: str) -> str:
+    """This PC's address on the way to Stash. A page from Stash reaches it without a "local network" prompt
+    (same address space); with Stash on this PC it is 127.0.0.1."""
+    host = urllib.parse.urlparse(stash).hostname or "127.0.0.1"
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect((host, 9))  # UDP: nothing is sent, only the route is looked up
+            return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+
+
+def stream_command(ff: str, f: Path, start: float, audio: bool) -> List[str]:
+    """Fragmented MP4 of the file from `start` on: H.264 with the long side at most 1280 px, a keyframe every
+    30 frames and half-second fragments (quick to start), AAC stereo unless audio is off."""
+    scale = "scale='if(gte(iw,ih),min(1280,iw),-2)':'if(gte(iw,ih),-2,min(1280,ih))'"
+    cmd = [ff, "-hide_banner", "-loglevel", "error", "-ss", f"{max(0.0, start):.3f}", "-i", str(f), "-map", "0:v:0"]
+    cmd += ["-map", "0:a:0?", "-c:a", "aac", "-b:a", "128k", "-ac", "2"] if audio else ["-an"]
+    cmd += ["-vf", scale, "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-crf", "23", "-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", "4.1", "-g", "30"]
+    return cmd + ["-sn", "-dn", "-f", "mp4", "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-frag_duration", "500000", "pipe:1"]
+
+
+class MediaServer:
+    """Streams the videos of the mapped folders to the editor (see above). Every request needs the token."""
+
+    def __init__(self, address: str, ff: str, token: str, ports: tuple = SERVE_PORTS):
+        self.ff = ff
+        self.token = token
+        self.mappings: List[Dict[str, str]] = []
+        self.live = threading.BoundedSemaphore(LIVE_STREAMS)
+        handler = self._handler()
+        httpd = None
+        err: Optional[OSError] = None
+        for port in ports:
+            try:
+                httpd = ThreadingHTTPServer((address, port), handler)
+                break
+            except OSError as e:
+                err = e
+        if httpd is None:
+            raise OSError(f"ports {ports[0]}-{ports[-1]} are taken ({err})")
+        self.httpd = httpd
+        self.httpd.daemon_threads = True
+        self.url = f"http://{address}:{self.httpd.server_address[1]}"
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def local_file(self, path: str) -> Optional[Path]:
+        """The PC file of a Stash path – only inside a mapped folder, only media files that exist."""
+        best = best_mapping(path, self.mappings)
+        mapped = map_path(path, self.mappings)
+        if not best or not mapped:
+            return None
+        try:
+            root = Path(best[1]).resolve()
+            f = Path(mapped).resolve()
+        except (OSError, RuntimeError, ValueError):
+            return None
+        if f != root and root not in f.parents:  # ".." must not leave the folder
+            return None
+        return f if f.suffix.lower() in MEDIA_EXT and f.is_file() else None
+
+    def _handler(self) -> type:
+        server = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_: Any) -> None:  # the console belongs to the renders
+                pass
+
+            def _cors(self) -> None:
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Private-Network", "true")
+
+            def _reply(self, code: int, body: bytes = b"", ctype: str = "text/plain; charset=utf-8") -> None:
+                self.send_response(code)
+                self._cors()
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                if body:
+                    self.wfile.write(body)
+
+            def do_OPTIONS(self) -> None:
+                self.send_response(204)
+                self._cors()
+                self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def do_GET(self) -> None:
+                url = urllib.parse.urlparse(self.path)
+                q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
+                if not hmac.compare_digest(q.get("k", "").encode(), server.token.encode()):
+                    return self._reply(403, b"forbidden")
+                if url.path == "/v1/ping":
+                    info = {"ok": True, "version": VERSION, "folders": [m.get("from") for m in server.mappings]}
+                    return self._reply(200, json.dumps(info).encode(), "application/json")
+                if url.path != "/v1/stream":
+                    return self._reply(404, b"unknown path")
+                f = server.local_file(q.get("path", ""))
+                if not f:
+                    return self._reply(404, b"not on this PC")
+                try:
+                    self._stream(f, float(q.get("start") or 0), q.get("a") != "0")
+                except _GONE:
+                    pass  # the browser seeked elsewhere or closed the player – FFmpeg was stopped in _stream
+
+            def _stream(self, f: Path, start: float, audio: bool) -> None:
+                if not server.ff:
+                    return self._reply(503, b"no FFmpeg")
+                if not server.live.acquire(timeout=5):
+                    return self._reply(503, b"busy")
+                proc = None
+                try:
+                    flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0  # type: ignore[attr-defined]
+                    proc = subprocess.Popen(stream_command(server.ff, f, start, audio), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=flags)
+                    self.send_response(200)
+                    self._cors()
+                    self.send_header("Content-Type", "video/mp4")
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    while True:
+                        chunk = proc.stdout.read1(1 << 16)  # type: ignore[union-attr]
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                finally:
+                    if proc:
+                        if proc.poll() is None:
+                            proc.kill()
+                        proc.wait()
+                        proc.stdout.close()  # type: ignore[union-attr]
+                    server.live.release()
+
+        return Handler
 
 
 def helper_dirs() -> Dict[str, Path]:
@@ -1218,7 +1381,7 @@ def run_helper_job(job: Dict[str, Any], client: Any, ff: str, dirs: Dict[str, Pa
     return result
 
 
-def helper_main(stash: str, api_key: str = "", name: str = "", ffmpeg: str = "", jobs: int = 0, stream_only: bool = False, pause: bool = False) -> int:
+def helper_main(stash: str, api_key: str = "", name: str = "", ffmpeg: str = "", jobs: int = 0, stream_only: bool = False, pause: bool = False, preview: bool = True) -> int:
     """Long-running loop on the PC: say hello, watch Stash's task queue, claim and render jobs for this PC."""
     global PLAIN_LOG
     PLAIN_LOG = True
@@ -1247,14 +1410,25 @@ def helper_main(stash: str, api_key: str = "", name: str = "", ffmpeg: str = "",
     print(f"Default output folder: {dirs['output']} (change it in PMV Creator → Render → On my PC)")
     print("Waiting for renders – keep this window open (Ctrl+C stops the helper).", flush=True)
     trim_cache(dirs["cache"])
-    info = {"name": name, "version": VERSION, "ffmpeg": ff, "defaultOutput": str(dirs["output"]), "platform": sys.platform}
+    info: Dict[str, Any] = {"name": name, "version": VERSION, "ffmpeg": ff, "defaultOutput": str(dirs["output"]), "platform": sys.platform}
+    serve: Optional[MediaServer] = None
+    if preview:
+        try:
+            serve = MediaServer(lan_address(stash), ff, secrets.token_urlsafe(18))
+            info["serve"] = {"url": serve.url, "token": serve.token}
+            print(f"Preview: the editor plays the videos of the mapped folders from this PC ({serve.url}).")
+            print("  If Windows asks whether Python may use private networks: allow it.", flush=True)
+        except OSError as e:
+            print(f"Preview server not started ({e}) – the editor plays the videos from Stash.", flush=True)
     last_hello = 0.0
     last_claim = 0.0
     connected = None
     while not _STOP.is_set():
         try:
             if time.time() - last_hello > 30:
-                client.op({"op": "helper_hello", "info": info})
+                hello = client.op({"op": "helper_hello", "info": info})
+                if serve and isinstance(hello, dict):  # the path mappings may have changed in the editor
+                    serve.mappings = (hello.get("config") or {}).get("mappings") or []
                 last_hello = time.time()
                 if connected is not True:
                     print("Connected to Stash.", flush=True)
@@ -1356,9 +1530,10 @@ def cli_main(argv: List[str]) -> int:
     h.add_argument("--ffmpeg", default="")
     h.add_argument("--jobs", type=int, default=0, help="parallel FFmpeg jobs (default: half the CPU cores)")
     h.add_argument("--stream-only", action="store_true", help="always read the videos over Stash, never from a drive")
+    h.add_argument("--no-preview", action="store_true", help="don't play the videos of the mapped folders in the editor's preview")
     a = ap.parse_args(argv)
     if a.cmd == "helper":
-        return helper_main(a.stash, a.api_key, a.name, a.ffmpeg, a.jobs, a.stream_only)
+        return helper_main(a.stash, a.api_key, a.name, a.ffmpeg, a.jobs, a.stream_only, preview=not a.no_preview)
     plan = json.loads(Path(a.plan).read_text(encoding="utf-8"))
     if a.cmd == "script":
         sys.stdout.write(ffmpeg_script(plan, a.shell))

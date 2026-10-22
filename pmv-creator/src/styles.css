@@ -1259,3 +1259,21 @@
 .pmv-pc-setup .pmv-help-steps {
   margin: 4px 0;
 }
+
+/* ---------------------------------------------------------------- where the videos come from (render helper on this PC / Stash) */
+.pmv-media-badge {
+  padding: 1px 8px;
+  border: 1px solid var(--pmv-border);
+  border-radius: 10px;
+  background: none;
+  color: var(--pmv-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.pmv-media-badge.is-on {
+  border-color: var(--pmv-ok);
+  color: var(--pmv-ok);
+}
+.pmv-media-badge.is-warn {
+  cursor: help;
+}

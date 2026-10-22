@@ -98,7 +98,9 @@ By default the render runs inside Stash. With the **render helper** it runs on a
 
 The PC fetches the videos and the music over Stash, so nothing else has to be set up. If the videos are also on a drive of the PC (e.g. the NAS as `Y:`), *Read the videos from a drive* maps Stash's paths onto it (`/data/` → `Y:\`). For Stash with a login, enter an API key before downloading the helper.
 
-Command line: `python pmv_backend.py helper --stash http://nas:9999 [--api-key KEY] [--name PC] [--jobs N] [--stream-only]`. Its segment cache is `%LOCALAPPDATA%\PMV Creator\cache`; pieces older than 14 days are removed when it starts.
+**Preview from this PC.** While the helper (0.7 or newer) runs, the editor's preview plays the videos of the mapped folders from the PC instead of the NAS (**💻 from PC** next to the player; click it to switch to Stash and back). The helper streams them with the PC's FFmpeg as H.264 – also HEVC, MPEG-4 and other codecs the browser can't play, which the NAS would otherwise convert itself. Anything the helper can't serve still comes from Stash. If Windows asks whether Python may use private networks, allow it. After updating the plugin, reload the editor once with **Ctrl+F5**: Stash lets the browser cache `/pmv-creator`, including its old security settings (the ⚠ next to the player says so).
+
+Command line: `python pmv_backend.py helper --stash http://nas:9999 [--api-key KEY] [--name PC] [--jobs N] [--stream-only] [--no-preview]`. Its segment cache is `%LOCALAPPDATA%\PMV Creator\cache`; pieces older than 14 days are removed when it starts.
 
 ## Rendering without Stash (CLI)
 

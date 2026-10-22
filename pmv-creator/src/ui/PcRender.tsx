@@ -150,6 +150,11 @@ function HelperSettings({ helper, disabled }: { helper: RenderHelper; disabled: 
         <button className="btn btn-sm btn-secondary" disabled={disabled} onClick={() => setCfg({ ...cfg, mappings: [...cfg.mappings, { from: "/data/", to: "" }] })}>
           + {t("Path mapping")}
         </button>
+        <div className="pmv-li-meta">
+          {helper.serve
+            ? t("The preview uses these folders too: while the helper runs, the editor plays their videos from this PC (💻 next to the player).")
+            : t("Download the helper again (below) and the preview plays the videos of these folders from this PC, too.")}
+        </div>
       </More>
     </>
   );

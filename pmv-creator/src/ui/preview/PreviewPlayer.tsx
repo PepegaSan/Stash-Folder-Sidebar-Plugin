@@ -6,6 +6,8 @@ import { useEditor } from "../../state/store";
 import { flattenTimeline, resolveTransitions } from "../../timeline/flatten";
 import { formatBarBeat, formatTime } from "../../timeline/time";
 import { useTransportPlaying, useTransportTime } from "../hooks";
+import { onStreamChange } from "../../stash/streams";
+import { LocalMediaBadge } from "../localMedia";
 import { StartPanel } from "../StartPanel";
 import { PreviewEngine } from "./engine";
 
@@ -31,8 +33,11 @@ export function PreviewPlayer() {
     const engine = new PreviewEngine([aRef.current!, bRef.current!], overlayRef.current!, blurRef.current);
     engineRef.current = engine;
     const off = transport.subscribe(() => engine.render(transport.time, transport.playing));
+    // PC ↔ Stash: re-cue the players, also while paused
+    const offStream = onStreamChange(() => engine.render(transport.time, transport.playing));
     return () => {
       off();
+      offStream();
       engine.dispose();
     };
   }, [transport]);
@@ -84,6 +89,7 @@ export function PreviewPlayer() {
           {formatTime(time)} / {formatTime(projectDuration(project))}
         </span>
         <span className="pmv-mono pmv-dim">{formatBarBeat(time, project.beatGrid)}</span>
+        <LocalMediaBadge />
       </div>
     </div>
   );

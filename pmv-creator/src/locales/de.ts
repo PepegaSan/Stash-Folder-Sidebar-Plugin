@@ -552,6 +552,17 @@ const de: Record<string, string> = {
   Checked: "Angehakt",
   Page: "Seite",
 
+  // --- ui/localMedia.tsx – videos from the render helper on this PC
+  "from PC": "vom PC",
+  "from Stash": "von Stash",
+  "Videos come from {name} ({folders}) – click: from Stash instead": "Videos kommen von {name} ({folders}) – Klick: stattdessen von Stash",
+  "Videos come from Stash – click: from {name} ({folders}), without the NAS converting them": "Videos kommen von Stash – Klick: von {name} ({folders}), ohne Umrechnen auf dem NAS",
+  "The render helper on {name} is too old to play videos from the PC – download it again under Render → On my PC.": "Der Render-Helfer auf {name} ist zu alt, um Videos vom PC abzuspielen – unter Rendern → Auf meinem PC neu herunterladen.",
+  "The render helper on {name} doesn't answer from this browser (firewall? Stash over https?) – videos come from Stash.": "Der Render-Helfer auf {name} antwortet diesem Browser nicht (Firewall? Stash über https?) – Videos kommen von Stash.",
+  "This page still has Stash's old security settings – reload it once with Ctrl+F5, then the videos come from {name}.": "Diese Seite hat noch Stashs alte Sicherheitseinstellungen – einmal mit Strg+F5 neu laden, dann kommen die Videos von {name}.",
+  "The preview uses these folders too: while the helper runs, the editor plays their videos from this PC (💻 next to the player).": "Die Vorschau nutzt diese Ordner auch: Solange der Helfer läuft, spielt der Editor ihre Videos von diesem PC (💻 neben dem Player).",
+  "Download the helper again (below) and the preview plays the videos of these folders from this PC, too.": "Den Helfer neu herunterladen (unten), dann spielt auch die Vorschau die Videos dieser Ordner von diesem PC.",
+
   // --- ui/preview/PreviewPlayer.tsx
   "The timeline is empty": "Die Timeline ist leer",
   "Previous cut": "Voriger Schnitt",

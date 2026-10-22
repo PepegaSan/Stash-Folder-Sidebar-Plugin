@@ -15,6 +15,9 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -354,6 +357,57 @@ def main():
         assert stream.requests and all(k == "k3y" for k in stream.keys), (stream.requests[:3], stream.keys[:3])
         assert not list((data / "pc-jobs").glob("*")), "job files cleaned up"
         print(f"ok  render on a PC: broker task + helper, {len(stream.requests)} stream requests with API key -> {Path(pc['file']).name}")
+
+        # 5c) the helper's media server: the editor's preview streams mapped files from the PC as fragmented MP4
+        #     that starts exactly at ?start= (token, nothing outside the mapped folder)
+        call({"op": "helper_hello", "info": {"name": "TEST PC", "serve": {"url": "http://10.0.0.5:9978", "token": "t0k"}}})
+        assert call({"op": "helper_list"})[0]["serve"] == {"url": "http://10.0.0.5:9978", "token": "t0k"}
+        call({"op": "helper_hello", "info": {"name": "TEST PC"}})
+        assert "serve" not in call({"op": "helper_list"})[0], "an older helper has no media server"
+        lib = tmp / "lib" / "sub dir"
+        lib.mkdir(parents=True)
+        shutil.copy(a, lib / "a.mp4")
+        shutil.copy(a, tmp / "secret.mp4")
+        (lib / "notes.txt").write_text("x")
+        media = hb.MediaServer("127.0.0.1", FFMPEG, "s3cret", ports=(0,))
+        media.mappings = [{"from": "/data/", "to": str(tmp / "lib")}]
+
+        def get(path):
+            try:
+                with urllib.request.urlopen(media.url + path, timeout=30) as r:
+                    return r.status, dict(r.headers), r.read()
+            except urllib.error.HTTPError as e:
+                return e.code, dict(e.headers), e.read()
+
+        q = lambda p: urllib.parse.quote(p)  # noqa: E731
+        a_path = q("/data/sub dir/a.mp4")
+        try:
+            assert get("/v1/ping?k=wrong")[0] == 403
+            st, hd, body = get("/v1/ping?k=s3cret")
+            assert st == 200 and json.loads(body)["folders"] == ["/data/"] and hd["Access-Control-Allow-Origin"] == "*", (st, hd, body)
+            for bad in ("/data/../secret.mp4", "/data/sub dir/../../secret.mp4", "/other/a.mp4", "/data/sub dir/notes.txt", "/data/sub dir/missing.mp4"):
+                assert get(f"/v1/stream?k=s3cret&path={q(bad)}")[0] == 404, bad
+            src_dur = float(probe(lib / "a.mp4")["format"]["duration"])
+            st, hd, body = get(f"/v1/stream?k=s3cret&start=1.5&path={a_path}")
+            assert st == 200 and hd["Content-Type"] == "video/mp4" and body[4:8] == b"ftyp" and b"moof" in body, (st, hd, body[:16])
+            live = tmp / "stream.mp4"
+            live.write_bytes(body)
+            info = probe(live)
+            vs = next(s for s in info["streams"] if s["codec_type"] == "video")
+            assert [s for s in info["streams"] if s["codec_type"] == "audio"], "audio as AAC"
+            # the stream starts exactly at 1.5 s of the source (the player shifts it there) and runs to the end
+            assert abs(float(info["format"]["duration"]) - (src_dur - 1.5)) < 0.3, (info["format"], src_dur)
+            sh([FFMPEG, "-v", "error", "-y", "-ss", "1.5", "-i", str(lib / "a.mp4"), "-frames:v", "1", str(tmp / "want.png")])
+            sh([FFMPEG, "-v", "error", "-y", "-i", str(live), "-frames:v", "1", str(tmp / "got.png")])
+            psnr = sh([FFMPEG, "-v", "info", "-i", str(tmp / "got.png"), "-i", str(tmp / "want.png"), "-lavfi", "psnr", "-f", "null", "-"]).stderr
+            db = float(psnr.split("average:")[1].split()[0])
+            assert db > 30, f"first frame is not the one at 1.5 s (PSNR {db} dB)"
+            st, _, body = get(f"/v1/stream?k=s3cret&a=0&start=0&path={a_path}")
+            (tmp / "stream-mute.mp4").write_bytes(body)
+            assert not [s for s in probe(tmp / "stream-mute.mp4")["streams"] if s["codec_type"] == "audio"], "a=0 has no audio track"
+        finally:
+            media.httpd.shutdown()
+        print(f"ok  helper media server: token, folder guard, fMP4 from exactly 1.5 s ({vs['width']}x{vs['height']}, first frame {db:.0f} dB)")
 
         # 6) a plan produced by the TypeScript frontend (multi-track, overlay, gap, transitions, speed)
         npx = shutil.which("npx")

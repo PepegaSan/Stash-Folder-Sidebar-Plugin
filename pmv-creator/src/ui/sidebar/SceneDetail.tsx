@@ -19,7 +19,7 @@ import { clipEnd } from "../../model/project";
 import { probeKeyframes } from "../../stash/backend";
 import { stashUrl } from "../../stash/graphql";
 import { invalidateScene, useScene } from "../../stash/sceneCache";
-import { VideoSlot } from "../../stash/streams";
+import { VideoSlot, onStreamChange } from "../../stash/streams";
 import { type StashMarker, type StashScene, markerLabel, sceneTitle } from "../../stash/types";
 import { useEditor } from "../../state/store";
 import { type ClipSourceInput, findClip } from "../../timeline/ops";
@@ -27,6 +27,7 @@ import { clamp, formatTime } from "../../timeline/time";
 import { NumField, SpriteThumb } from "../common";
 import { insertAction } from "../editing";
 import { useSprites } from "../hooks";
+import { LocalMediaBadge } from "../localMedia";
 import { SourceHostContext, sourceKeys } from "../monitor";
 
 const nearest = (list: number[], x: number) => list.reduce((best, v) => (Math.abs(v - x) < Math.abs(best - x) ? v : best), list[0] ?? x);
@@ -91,6 +92,9 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
     };
     // only the element: the component is keyed by scene id
   }, [videoEl]);
+
+  // PC ↔ Stash: the same spot from the new source
+  useEffect(() => onStreamChange(() => slotRef.current?.sceneId && slotRef.current.assign(scene, slotRef.current.time)), []);
 
   // the scene replaces the PMV preview in the main player – only one of them plays
   useEffect(() => {
@@ -325,6 +329,7 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
           O
         </button>
         {!sel && <span className="pmv-li-meta">{t("I / O or Shift+drag on the bar picks a range")}</span>}
+        <LocalMediaBadge />
         {ui.advanced && (
           <>
             <button className="btn btn-sm btn-secondary" disabled={backend !== "online"} onClick={() => void loadKeyframes()} title={t("I-frames via ffprobe (backend)")}>

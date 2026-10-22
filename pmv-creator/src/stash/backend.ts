@@ -153,6 +153,8 @@ export interface RenderHelper {
   ffmpeg?: string;
   defaultOutput?: string;
   config: HelperConfig;
+  /** Its media server for the preview (helper 0.7+): videos of the mapped folders come from the PC. */
+  serve?: { url: string; token: string };
 }
 
 export const listHelpers = () => runOp<RenderHelper[]>({ op: "helper_list" });

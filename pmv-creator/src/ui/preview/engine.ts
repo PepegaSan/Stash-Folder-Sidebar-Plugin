@@ -265,7 +265,7 @@ export class PreviewEngine {
     const slot = this.slots[slotIdx];
     const src = sourceTimeAt(seg, frame, this.tl!.fps);
     this.applyFit(slot.el, seg);
-    if (slot.sceneId !== scene.id) slot.assign(scene, src);
+    if (slot.sceneId !== scene.id || slot.stale) slot.assign(scene, src);
     const rate = clamp(seg.clip.speed, 0.0625, 16);
     if (slot.el.playbackRate !== rate) slot.el.playbackRate = rate;
     slot.el.muted = seg.clip.volume <= 0;
@@ -286,7 +286,7 @@ export class PreviewEngine {
     const slot = this.slots[slotIdx];
     const src = sourceTimeAt(seg, frame, this.tl!.fps);
     this.applyFit(slot.el, seg);
-    if (slot.sceneId !== scene.id) slot.assign(scene, src);
+    if (slot.sceneId !== scene.id || slot.stale) slot.assign(scene, src);
     else if (Math.abs(slot.time - src) > 0.05) slot.seek(src);
     if (!slot.el.paused) slot.el.pause();
   }

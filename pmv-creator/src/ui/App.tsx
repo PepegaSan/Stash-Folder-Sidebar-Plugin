@@ -12,6 +12,7 @@ import { findClip } from "../timeline/ops";
 import { clamp } from "../timeline/time";
 import { GeneratorDialog } from "./generator/GeneratorDialog";
 import { Inspector } from "./Inspector";
+import { useLocalMediaPolling } from "./localMedia";
 import { Monitor, SourceHostContext, sourceKeys } from "./monitor";
 import { Sidebar } from "./sidebar/Sidebar";
 import { Timeline } from "./timeline/Timeline";
@@ -56,11 +57,12 @@ export function App({ host }: { host?: Host }) {
 }
 
 function Workspace() {
-  const { state } = useEditor();
+  const { state, backend } = useEditor();
   // state, not a ref: the scene drill-down re-renders into the host once it exists
   const [sourceHost, setSourceHost] = useState<HTMLDivElement | null>(null);
   useShortcuts();
   useDeepLinkScenes();
+  useLocalMediaPolling(backend === "online");
   return (
     <SourceHostContext.Provider value={sourceHost}>
       {state.ui.generator && <GeneratorDialog />}

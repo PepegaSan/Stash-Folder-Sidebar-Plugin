@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0 (2026-10-22)
+
+- **Preview from this PC**: while the render helper runs, the preview (PMV and scene player) plays the videos of its mapped folders from the PC instead of the NAS. The helper streams them with the PC's FFmpeg as H.264 from the exact spot – HEVC, MPEG-4 and other codecs the browser can't play no longer need the NAS's live conversion. **💻 from PC** / **🗄 from Stash** next to the player switches; whatever the helper can't serve comes from Stash. Needs the helper 0.7 (download it again under Render → On my PC).
+- Technically: Stash's Content-Security-Policy allows media only from Stash itself, so the editor fetches the helper's stream (plugin CSP `connect-src http://*:9978-9981`) and plays it through Media Source Extensions; the helper only serves files inside the mapped folders and only with its token.
+
 ## 0.6.1 (2026-10-22)
 
 - "✎ Edit source" and the way back share one spot at the top of the inspector: while a scene is in the main player, the button reads **← Back to the PMV (Esc)** – also without a selected clip.
