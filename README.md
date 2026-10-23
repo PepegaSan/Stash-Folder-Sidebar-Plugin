@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.8.0-informational)
+![Version](https://img.shields.io/badge/version-0.9.0-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -584,11 +584,12 @@ Works in classic Stash and in Stash UI.
 - **Beat-grid timeline** — BPM detection/tap, snap, ripple/overwrite modes, trim/slip/split, transitions, speed with beat-safe duration
 - **Scene view in the main player** — a scene opens big in place of the preview (tabs *PMV preview* / *Scene*): pick ranges, move a clip to another spot or put another scene into it
 - **Ground rule** — another part of the scene never changes a clip's place on the timeline
-- **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"; **presets** saved on the server
+- **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"; **presets** saved on the server; clips from one of your **saved Stash filters**
+- **Several PMVs at once** — pick songs, each becomes its own project with the same generator settings and is rendered one after another in Stash's queue (e.g. overnight on the PC)
 - **Cuts like another PMV** — pick a PMV from the library: its cuts and flashes (and its music, if you like) are measured and the generator cuts your clips at exactly those moments
-- **Touching up** — 🎲 another clip for one spot (N), 📌 keep the good ones when generating again (P), ⊘ take a scene out of the PMV (optionally for good, via a Stash tag)
+- **Touching up** — 🎲 another clip for one spot (N), 📌 keep the good ones when generating again (P), ⊘ take a scene out of the PMV (optionally for good, via a Stash tag), ⏮ ⏭ review the cuts one by one ([ ] or ↑ ↓)
 - **Song library** — songs uploaded once can be picked again without a new upload; **PMV with this performer/tag** right from the performer/tag page
-- **Render** — deterministic FFmpeg pipeline as a Stash task (segment cache, exact CFR), plus **Quick record** (real-time WebM in the browser, no server FFmpeg needed); the finished PMV is **labeled in Stash** (title, performers, shared tags, tag "PMV Creator")
+- **Render** — deterministic FFmpeg pipeline as a Stash task (segment cache, exact CFR), plus **Quick record** (real-time WebM in the browser, no server FFmpeg needed); the finished PMV is **labeled in Stash** (title, performers, shared tags, tag "PMV Creator"); renders run on without the dialog, **⏳** in the toolbar lists them and **🔔** tells you when one is done (chime, tab title, desktop notification where the browser allows it)
 - **Render on your PC** (optional) — a render helper on a PC renders with its own FFmpeg and saves to any folder on the PC; set up once in the render dialog. While it runs, the preview plays the videos of its mapped folders from the PC (also HEVC/MPEG-4, converted by the PC instead of the NAS)
 - **Exports** — project JSON, CMX3600 EDL, OpenTimelineIO, render plan, FFmpeg scripts; CLI render without Stash
 - English interface, German when Stash (or Stash UI) is set to German
@@ -616,6 +617,13 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.0
+
+- **📦 Several PMVs at once** (*Project* menu, or *Several songs…* in the generator): one project per song with the same settings (current ones or a preset), generated, saved and queued as renders in Stash – on the server or on the PC with the render helper; they go on without the tab
+- **🔔 Tell me when it is done**: renders no longer depend on the render dialog; **⏳** in the toolbar lists renders on their way and finished ones (↗ Open in Stash, ✎ open the project, ■ cancel); a chime and the tab title when one is done, a desktop notification on HTTPS/localhost
+- **Saved filter** as a clip source of the generator: one of the scene filters saved in Stash's scene list (resolution, duplicates, "is missing" and the rest translated; the dialog shows how many scenes it finds)
+- **⏮ ⏭ Review the cuts**: [ / ] or ↑ / ↓ select the previous/next clip and play from a second before its cut
 
 ### PMV Creator 0.8.0
 

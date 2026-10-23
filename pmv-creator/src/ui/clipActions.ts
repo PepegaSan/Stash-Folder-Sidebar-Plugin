@@ -35,7 +35,7 @@ async function candidates(p: PmvProject): Promise<Candidates> {
   const memo = p.generator;
   if (memo) {
     const o = memo.settings.clips;
-    const key = o.source === "filter" || o.source === "watched" ? JSON.stringify([o, memo.settings.seed]) : null;
+    const key = o.source === "filter" || o.source === "watched" || o.source === "saved" ? JSON.stringify([o, memo.settings.seed]) : null;
     let run = key ? poolCache.get(key) : undefined;
     if (!run) {
       run = collectPools(o, p, memo.settings.seed);

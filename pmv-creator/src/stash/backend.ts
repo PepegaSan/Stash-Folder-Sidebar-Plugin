@@ -204,11 +204,13 @@ export interface JobStatus {
   progress: number | null;
   description: string;
   error: string | null;
+  /** When Stash queued it – tells the job apart from a later one with the same id (ids restart with Stash). */
+  addTime?: string;
 }
 
 export async function findJob(id: string): Promise<JobStatus | null> {
   const data = await gql<{ findJob: JobStatus | null }>(
-    `query PmvJob($id: ID!) { findJob(input: { id: $id }) { id status progress description error } }`,
+    `query PmvJob($id: ID!) { findJob(input: { id: $id }) { id status progress description error addTime } }`,
     { id },
   );
   return data.findJob;

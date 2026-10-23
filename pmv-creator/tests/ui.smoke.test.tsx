@@ -8,6 +8,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createProject } from "../src/model/project";
+import { setPollInterval } from "../src/ui/renders";
 
 const scene = {
   id: "1",
@@ -39,6 +40,10 @@ function fixtureProject() {
 
 const saved: unknown[] = [];
 const tagged: unknown[] = [];
+const tasks: Array<{ id: string; args: Record<string, unknown> }> = [];
+const jobPolls: Record<string, number> = {};
+let lastSceneFilter: unknown = null;
+const RENDER_DESC = "Running plugin task: Render PMV";
 
 function graphql(body: { query: string; variables?: Record<string, any> }) {
   const q = body.query;
@@ -50,13 +55,28 @@ function graphql(body: { query: string; variables?: Record<string, any> }) {
       list_projects: [],
       list_presets: [{ name: "Hypno Mia", settings: { mood: "hypno", clips: { source: "project" } } }],
       list_media: [{ name: "Neon Nights.mp3", path: "/media/neon.mp3", url: "/plugin/pmv-creator/assets/media/neon.mp3", size: 4000000, mtime: 1792000000 }],
+      render_result: { status: "done", file: "/renders/Smoke.mp4", scanned: false, pieces: 3, cached: 0, seconds: 1.5 },
     };
     if (args.op === "save_project") saved.push(args.project);
     return { runPluginOperation: out[args.op] ?? { path: "/x" } };
   }
+  if (q.includes("runPluginTask")) {
+    const id = String(tasks.length + 41);
+    tasks.push({ id, args: body.variables?.args ?? {} });
+    return { runPluginTask: id };
+  }
+  if (q.includes("findJob")) {
+    const id = String(body.variables?.id);
+    const n = (jobPolls[id] = (jobPolls[id] ?? 0) + 1);
+    return { findJob: { id, status: n < 3 ? "RUNNING" : "FINISHED", progress: n < 3 ? 0.5 : 1, description: RENDER_DESC, error: null } };
+  }
+  if (q.includes("findSavedFilters")) {
+    return { findSavedFilters: [{ id: "3", name: "Blondes", find_filter: { q: "", sort: "date", direction: "DESC" }, object_filter: { tags: { modifier: "INCLUDES_ALL", value: { items: [{ id: "9", label: "Tag" }], excluded: [], depth: 0 } } } }] };
+  }
   if (q.includes("findSceneMarkers")) return { findSceneMarkers: { count: 0, scene_markers: [] } };
   if (q.includes("findScenes")) {
     const ids: string[] | undefined = body.variables?.ids;
+    if (body.variables?.scene_filter) lastSceneFilter = body.variables.scene_filter;
     const pool = [scene, { ...scene, id: "2", title: "Scene Two", scene_markers: [] }];
     const scenes = ids ? pool.filter((s) => ids.includes(s.id)) : [scene];
     return { findScenes: { count: scenes.length, scenes } };
@@ -107,7 +127,21 @@ beforeAll(async () => {
   HTMLCanvasElement.prototype.getContext = (() => null) as any;
   document.elementFromPoint = () => null;
   vi.spyOn(console, "error").mockImplementation((...args) => errors.push(args));
-  globalThis.fetch = vi.fn(async (_url: any, init?: any) => {
+  // a song: clicks every half second (120 BPM), decoded by the fake AudioContext below
+  (window as any).AudioContext = class {
+    async decodeAudioData() {
+      const sr = 8000;
+      const n = sr * 20;
+      const d = new Float32Array(n);
+      for (let i = 0; i < n; i += sr / 2) for (let k = 0; k < 120; k++) d[i + k] = 0.8 * Math.sin(k * 0.7);
+      return { duration: 20, sampleRate: sr, numberOfChannels: 1, length: n, getChannelData: () => d };
+    }
+    close() {
+      return Promise.resolve();
+    }
+  };
+  globalThis.fetch = vi.fn(async (url: any, init?: any) => {
+    if (String(url).includes("/assets/media/")) return new Response(new ArrayBuffer(16));
     const body = JSON.parse(init?.body ?? "{}");
     return new Response(JSON.stringify({ data: graphql(body) }), { headers: { "Content-Type": "application/json" } });
   }) as any;
@@ -388,6 +422,89 @@ describe("PMV Creator UI (mocked Stash)", () => {
     await waitFor(() => saved.length > 0, 4000);
     const last = saved[saved.length - 1] as { bin: Array<{ label: string }> };
     expect(last.bin.map((s) => s.label)).toContain("Marker A");
+  });
+
+  it("starts a render, lets the dialog close and follows it to the end in the toolbar", async () => {
+    setPollInterval(20);
+    await fire(byText("Render")!, new MouseEvent("click", { bubbles: true }));
+    await fire(byText("Start render")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => tasks.length === 1 && !!$(".pmv-modal .pmv-progress"));
+    expect(tasks[0].args).toMatchObject({ mode: "render", renderId: expect.any(String) });
+    expect($(".pmv-modal")!.textContent).toContain("You can close this window");
+    await fire($$(".pmv-modal button").find((b) => b.textContent === "✕")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-modal")).toBeNull();
+    // the watch goes on without the dialog
+    await waitFor(() => !!byText("✓ 1"));
+    await fire(byText("✓ 1")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-renders")!.textContent).toContain("Smoke.mp4");
+    expect(byText("🎬")).not.toBeNull(); // looked at: no longer counted
+    await fire(document.body, new MouseEvent("mousedown", { bubbles: true }));
+    expect($(".pmv-renders")).toBeNull();
+  });
+
+  it("steps through the cuts with ] and [ (AltGr on German keyboards too)", async () => {
+    const key = (k: string, extra: KeyboardEventInit = {}) => fire(document.body, new KeyboardEvent("keydown", { key: k, bubbles: true, ...extra }));
+    await key("Escape");
+    await key("Home");
+    const selected = () => $(".pmv-clip.is-selected");
+    await key("]");
+    expect(selected()).not.toBeNull();
+    const first = selected()!.style.left;
+    await key("]", { ctrlKey: true, altKey: true, modifierAltGraph: true } as KeyboardEventInit);
+    expect(selected()!.style.left).not.toBe(first);
+    await key("ArrowUp");
+    expect(selected()!.style.left).toBe(first);
+    await key(" ");
+    // behind a dialog the arrows belong to the dialog
+    await fire(byText("?")!, new MouseEvent("click", { bubbles: true }));
+    await key("ArrowDown");
+    expect(selected()!.style.left).toBe(first);
+    await fire($$(".pmv-modal button").find((b) => b.textContent === "✕")!, new MouseEvent("click", { bubbles: true }));
+    await key("Escape");
+  });
+
+  it("generates from a filter saved in Stash", async () => {
+    await fire(byText("⚡ Generate PMV")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => $$(".pmv-gen .pmv-seg button").some((b) => b.textContent === "Saved filter"));
+    await fire($$(".pmv-gen .pmv-seg button").find((b) => b.textContent === "Saved filter")!, new MouseEvent("click", { bubbles: true }));
+    expect(byText("⚡ Generate")!.hasAttribute("disabled")).toBe(true);
+    const select = $$(".pmv-gen select").find((s) => s.querySelector("option[value='3']")) as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "3");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await waitFor(() => !!$(".pmv-gen")?.textContent?.includes("1 scene matches it right now"));
+    await fire(byText("⚡ Generate")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-gen .pmv-success") || !!$(".pmv-gen .pmv-error"));
+    expect($(".pmv-gen .pmv-error")).toBeNull();
+    expect(lastSceneFilter).toEqual({ tags: { value: ["9"], modifier: "INCLUDES_ALL", depth: 0 } });
+    await fire(byText("Done – fine-tune")!, new MouseEvent("click", { bubbles: true }));
+    await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+  });
+
+  it("makes several PMVs at once: one project per song, rendered one after another", async () => {
+    await fire(byText("Project")!, new MouseEvent("click", { bubbles: true }));
+    await fire(byText("📦 Several PMVs at once…")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-batch"));
+    expect($(".pmv-batch")!.textContent).toContain("saved filter “Blondes”");
+    await fire($$(".pmv-batch button").find((b) => b.textContent?.startsWith("🎵 From the library"))!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-songs")?.textContent?.includes("Neon Nights.mp3"));
+    await fire($$(".pmv-songs .pmv-list-item")[0], new MouseEvent("click", { bubbles: true }));
+    await fire(byText("Add 1 song")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-songs")).toBeNull();
+    expect($(".pmv-batch-songs")!.textContent).toContain("Neon Nights");
+    const before = tasks.length;
+    await fire(byText("⚡ Make 1 PMV and render it")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-batch")?.textContent?.includes("1 PMV is in Stash's queue"), 5000);
+    expect(tasks.length).toBe(before + 1);
+    const made = saved.find((x: any) => x.name === "PMV – Neon Nights") as any;
+    expect(made).toBeTruthy();
+    expect(made.audio).toMatchObject({ name: "Neon Nights.mp3", path: "/media/neon.mp3" });
+    expect(made.tracks.some((tr: any) => tr.clips.length > 0)).toBe(true);
+    expect(made.generator.settings.clips.source).toBe("saved");
+    await waitFor(() => !!$(".pmv-batch")?.textContent?.includes("✓ rendered"));
+    await fire(byText("Close")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-batch")).toBeNull();
   });
 
   it("logged no React errors", () => {

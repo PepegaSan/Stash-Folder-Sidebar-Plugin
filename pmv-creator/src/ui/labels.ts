@@ -23,10 +23,13 @@ export type LabelStatus = { state: "waiting" } | { state: "done"; sceneId: strin
 
 const LS_JOBS = "pmv-creator:label-jobs";
 const LS_ON = "pmv-creator:label";
-/** Polling for the scan after a render; after that the next editor start tries again (for a minute). */
-const ACTIVE_MS = 10 * 60 * 1000;
-const RESUME_MS = 60 * 1000;
+/**
+ * How long the open editor waits for the scan. Stash runs one task at a time, so with several renders queued the
+ * scan of the first one only runs after the last render – hours later; the asking slows down meanwhile.
+ */
+const WAIT_MS = 12 * 3600 * 1000;
 const POLL_MS = 3000;
+const POLL_MAX_MS = 30000;
 /** Jobs older than this are given up. */
 const KEEP_MS = 3 * 24 * 3600 * 1000;
 
@@ -59,15 +62,17 @@ function loadJobs(): LabelJob[] {
 const saveJobs = (jobs: LabelJob[]) => lsSet(LS_JOBS, JSON.stringify(jobs));
 const dropJob = (path: string) => saveJobs(loadJobs().filter((j) => j.path !== path));
 
-/** What the PMV gets in Stash, taken from the project at render time. */
-export function labelJob(p: PmvProject, path: string): LabelJob {
+/** What the PMV gets in Stash, taken from the project at render time (the video's path comes once it exists). */
+export function labelFor(p: PmvProject): Omit<LabelJob, "path" | "queued"> {
   const clips = p.tracks.filter((tr) => !tr.muted).flatMap((tr) => tr.clips);
   const sceneIds = [...new Set(clips.map((c) => c.sceneId))];
   const parts = [t("Made with PMV Creator.")];
   if (p.audio) parts.push(t("Song: {song} ({bpm} BPM).", { song: p.audio.name, bpm: Math.round(p.beatGrid.bpm) }));
   parts.push(t("{clips} clips from {scenes} scenes.", { clips: clips.length, scenes: sceneIds.length }));
-  return { path, title: p.name, details: parts.join(" "), sceneIds, queued: Date.now() };
+  return { title: p.name, details: parts.join(" "), sceneIds };
 }
+
+export const labelJob = (p: PmvProject, path: string): LabelJob => ({ ...labelFor(p), path, queued: Date.now() });
 
 /**
  * The scene update: title and description of the job, the performers of all source scenes, the tags at least a
@@ -108,17 +113,23 @@ export function watchLabel(path: string, cb: (s: LabelStatus) => void): () => vo
 
 const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 
-async function work(job: LabelJob, activeMs: number): Promise<void> {
+/** The scene of a fresh video once Stash has scanned it; asked more slowly the longer it takes. null after maxMs. */
+export async function waitForScene(path: string, maxMs = WAIT_MS): Promise<SceneLabels | null> {
+  const until = Date.now() + maxMs;
+  let scene = await findSceneByFile(path).catch(() => null);
+  for (let wait = POLL_MS; !scene && Date.now() < until; wait = Math.min(POLL_MAX_MS, wait * 1.2)) {
+    await sleep(wait);
+    scene = await findSceneByFile(path).catch(() => null);
+  }
+  return scene;
+}
+
+async function work(job: LabelJob): Promise<void> {
   if (running.has(job.path)) return;
   running.add(job.path);
   emit(job.path, { state: "waiting" });
   try {
-    const until = Date.now() + activeMs;
-    let scene = await findSceneByFile(job.path);
-    while (!scene && Date.now() < until) {
-      await sleep(POLL_MS);
-      scene = await findSceneByFile(job.path);
-    }
+    const scene = await waitForScene(job.path);
     if (!scene) {
       emit(job.path, { state: "error", error: t("Stash hasn't scanned the video yet – it gets labeled the next time the editor opens.") });
       return;
@@ -138,7 +149,7 @@ async function work(job: LabelJob, activeMs: number): Promise<void> {
 /** Remembers the job and starts waiting for the scan. */
 export function queueLabel(job: LabelJob): void {
   saveJobs([...loadJobs().filter((j) => j.path !== job.path), job]);
-  void work(job, ACTIVE_MS);
+  void work(job);
 }
 
 /** Editor start: labels that were still waiting when the editor was closed. */
@@ -146,5 +157,5 @@ export function resumeLabels(): void {
   const jobs = loadJobs();
   const fresh = jobs.filter((j) => Date.now() - j.queued < KEEP_MS);
   if (fresh.length !== jobs.length) saveJobs(fresh);
-  for (const j of fresh) void work(j, RESUME_MS);
+  for (const j of fresh) void work(j);
 }

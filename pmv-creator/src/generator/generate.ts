@@ -92,6 +92,7 @@ export function defaultSettings(trackId: string): GeneratorSettings {
         { tags: [], xtags: [] },
         { tags: [], xtags: [] },
       ],
+      savedFilter: null,
     },
     select: { order: "shuffle", offset: "random", variety: true, followTimeline: false, paceMatch: false, beatSync: false },
     cut: { mode: "auto", pace: "normal", every: 2, pattern: [4, 2, 2], onGrid: true, minBeats: 0, maxBeats: 0 },

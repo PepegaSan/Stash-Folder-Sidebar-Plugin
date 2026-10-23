@@ -13,16 +13,19 @@ import { t, tn } from "../../i18n";
 import { formatTime } from "../../timeline/time";
 import { type PresetEntry, deletePreset, listPresets, savePreset } from "../../stash/backend";
 import { findPerformers, findTags } from "../../stash/queries";
+import { listSavedSceneFilters } from "../../stash/savedFilters";
+import type { StashRef } from "../../stash/types";
 import { rememberAdvanced } from "../../state/prefs";
 import { useEditor } from "../../state/store";
 import { NumField, RefPicker, Seg } from "../common";
 import { CutTemplateBox } from "./CutTemplateBox";
 import { type RunOutcome, runGenerator } from "./run";
+import { SavedFilterPick } from "./SavedFilterPick";
 
 const LS_KEY = "pmv-creator:generator";
 
 /** Last used settings (per browser); the track only if it exists in this project. */
-function loadSaved(fallbackTrack: string, trackIds: string[]): GeneratorSettings {
+export function loadSaved(fallbackTrack: string, trackIds: string[]): GeneratorSettings {
   const base = defaultSettings(fallbackTrack);
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -52,7 +55,7 @@ function save(s: GeneratorSettings): void {
 }
 
 /** Saved settings applied over the defaults (older presets lack newer fields); the target stays. */
-function withPreset(x: GeneratorSettings, ps: Partial<GeneratorSettings>): GeneratorSettings {
+export function withPreset(x: GeneratorSettings, ps: Partial<GeneratorSettings>): GeneratorSettings {
   const base = defaultSettings(x.target.trackId);
   return {
     ...x,
@@ -65,7 +68,7 @@ function withPreset(x: GeneratorSettings, ps: Partial<GeneratorSettings>): Gener
 }
 
 /** Back from "like another PMV" to cutting by the music: the mood's cutting again (custom: automatic). */
-function cutsToMusic(x: GeneratorSettings): GeneratorSettings {
+export function cutsToMusic(x: GeneratorSettings): GeneratorSettings {
   const back = { ...x, cut: { ...x.cut, mode: "auto" as const } };
   return x.mood === "custom" ? back : applyMood(back, x.mood);
 }
@@ -120,6 +123,11 @@ export function GeneratorDialog() {
     // (an older backend doesn't know presets: no row)
     if (!offline) listPresets().then((x) => setPresets(Array.isArray(x) ? x : null), () => setPresets(null));
   }, [offline]);
+  // Stash's saved scene filters – the source only shows when there are some
+  const [savedFilters, setSavedFilters] = useState<StashRef[]>([]);
+  useEffect(() => {
+    listSavedSceneFilters().then(setSavedFilters, () => setSavedFilters([]));
+  }, []);
   const applyPreset = (name: string) => {
     setPresetName(name);
     const p = presets?.find((x) => x.name === name);
@@ -143,6 +151,7 @@ export function GeneratorDialog() {
   };
   const fromPmv = s.cut.mode === "template";
   const needsTemplate = fromPmv && !project.cutTemplate;
+  const needsFilter = c.source === "saved" && !c.savedFilter;
   // without music there is no song range: N bars from the playhead; simple mode always fills the whole song
   const target = !hasAudio ? { ...s.target, range: "bars" as const } : adv ? s.target : { ...s.target, range: "song" as const };
   const range = useMemo(() => generationRange(project, target, transport.time), [project, target.range, target.bars, transport.time]);
@@ -182,9 +191,11 @@ export function GeneratorDialog() {
         ["watched", t("Most watched"), t("The most played scenes of the last 30 days")],
         ["project", t("Project scenes"), t("The scenes of this project (left sidebar)")],
         ["bin", t("My clips ({n})", { n: project.bin.length }), t("The clips you picked under “My clips”")],
+        ...(savedFilters.length || c.source === "saved" ? [["saved", t("Saved filter"), t("A scene filter you saved in Stash's scene list – changed there, it counts on the next run")] as [ClipSource, string, string]] : []),
       ]}
     />
   );
+  const savedPick = c.source === "saved" && <SavedFilterPick filters={savedFilters} value={c.savedFilter} onChange={(v) => setClips({ savedFilter: v })} limit={c.limit} onLimit={(v) => setClips({ limit: v })} />;
 
   return (
     <div className="pmv-modal" onClick={() => !busy && close()}>
@@ -268,6 +279,7 @@ export function GeneratorDialog() {
                 <NumField value={c.limit} onCommit={(v) => setClips({ limit: Math.round(v) })} min={1} max={500} step={5} digits={0} suffix={c.kind === "markers" ? t("markers (random, seed)") : t("scenes (random, seed)")} />
               </div>
             )}
+            {savedPick}
             {c.source === "bin" && !project.bin.length && <div className="pmv-li-meta">{t("“My clips” is empty – pick markers or ranges in a scene first.")}</div>}
             {c.source === "project" && !Object.keys(project.sources).length && <div className="pmv-li-meta">{t("The project has no scenes yet – add some on the left.")}</div>}
             {!hasAudio && (
@@ -344,6 +356,7 @@ export function GeneratorDialog() {
                   )}
                 </>
               )}
+              {savedPick}
               {c.source !== "bin" && !(c.source === "filter" && c.kind === "markers") && (
                 <div className="pmv-row pmv-wrap">
                   <Check label={t("Prefer markers")} title={t("Scenes with markers contribute their markers as clips")} checked={c.preferMarkers} onChange={(v) => setClips({ preferMarkers: v })} />
@@ -502,7 +515,7 @@ export function GeneratorDialog() {
             </div>
           )}
           <div className="pmv-row">
-            <button className="btn btn-primary" disabled={!!busy || range.to <= range.from || needsTemplate} title={needsTemplate ? t("Pick the PMV whose cuts to take over first") : undefined} onClick={() => void run(s.seed)}>
+            <button className="btn btn-primary" disabled={!!busy || range.to <= range.from || needsTemplate || needsFilter} title={needsTemplate ? t("Pick the PMV whose cuts to take over first") : needsFilter ? t("Pick one of your saved filters first.") : undefined} onClick={() => void run(s.seed)}>
               ⚡ {outcome ? t("Generate again") : t("Generate")}
             </button>
             {outcome && (
@@ -511,6 +524,16 @@ export function GeneratorDialog() {
               </button>
             )}
             <span className="pmv-spacer" />
+            {!offline && (
+              <button
+                className="btn btn-secondary"
+                disabled={!!busy || needsFilter}
+                title={t("These settings for several songs: one PMV per song, each saved as a project and rendered one after another")}
+                onClick={() => dispatch({ type: "ui", patch: { generator: null, batch: { settings: { ...s, target } } } })}
+              >
+                📦 {t("Several songs…")}
+              </button>
+            )}
             <button className="btn btn-secondary" disabled={!!busy} onClick={close}>
               {outcome ? t("Done – fine-tune") : t("Close")}
             </button>

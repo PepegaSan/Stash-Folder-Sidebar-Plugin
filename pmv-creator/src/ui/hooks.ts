@@ -43,6 +43,9 @@ export function getAudioAnalysis(url: string): Promise<AudioAnalysis> {
   return p;
 }
 
+/** Drops a decoded song from the cache (several PMVs at once: one song after the other, not all in memory). */
+export const forgetAudioAnalysis = (url: string): void => void analysisCache.delete(url);
+
 export function useAudioAnalysis(url: string | null | undefined): { analysis: AudioAnalysis | null; error: string | null } {
   const [state, setState] = useState<{ analysis: AudioAnalysis | null; error: string | null }>({ analysis: null, error: null });
   useEffect(() => {

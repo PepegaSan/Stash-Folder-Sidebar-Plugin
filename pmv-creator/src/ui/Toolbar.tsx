@@ -5,7 +5,7 @@ import { buildRenderPlan } from "../export/renderPlan";
 import { t, tn } from "../i18n";
 import { uid } from "../model/ids";
 import { type PmvProject, createProject, migrateProject } from "../model/project";
-import { type JobStatus, type ProjectSummary, type RecordingResult, type RenderResult, deleteProject, ffmpegScript, findJob, listProjects, renderResult, saveRecording, startRender, stopJob, uploadFile } from "../stash/backend";
+import { type ProjectSummary, type RecordingResult, deleteProject, ffmpegScript, listProjects, saveRecording, startRender, stopJob, uploadFile } from "../stash/backend";
 import { useScenes } from "../stash/sceneCache";
 import { rememberAdvanced } from "../state/prefs";
 import { openProject, useEditor } from "../state/store";
@@ -15,7 +15,9 @@ import { Menu, Seg } from "./common";
 import { downloadText, safeName } from "./download";
 import { PcRender } from "./PcRender";
 import { useHost } from "../host";
-import { type LabelStatus, labelJob, labelingOn, queueLabel, setLabelingOn, watchLabel } from "./labels";
+import { type LabelStatus, labelFor, labelJob, labelingOn, queueLabel, setLabelingOn, watchLabel } from "./labels";
+import { desktopNotifications, isActive, listRenders, notifyOn, primeSignal, setNotifyOn, watchRender } from "./renders";
+import { RenderTray, useRenders } from "./RenderTray";
 import { RecordCancelled, type RecordProgress, recordSequence, recordingSupported } from "./preview/recorder";
 
 // label functions, not constants: t() needs the language, which is known only once the app runs
@@ -102,6 +104,17 @@ export function Toolbar() {
               }}
             >
               {t("Duplicate")}
+            </button>
+            <button
+              className="pmv-menu-item"
+              disabled={backend !== "online"}
+              title={t("Pick several songs – each becomes a PMV with the same generator settings, rendered one after another")}
+              onClick={() => {
+                dispatch({ type: "ui", patch: { batch: { settings: null } } });
+                close();
+              }}
+            >
+              📦 {t("Several PMVs at once…")}
             </button>
           </>
         )}
@@ -193,6 +206,7 @@ export function Toolbar() {
       <button className="btn btn-sm btn-primary" onClick={() => setRenderOpen(true)}>
         {t("Render")}
       </button>
+      <RenderTray />
       <label className="pmv-check pmv-adv" title={t("Show all settings and tools")}>
         <input
           type="checkbox"
@@ -237,6 +251,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
         [t("Show a clip's scene in the big player"), t("✎ Edit source · double-click the clip")],
         [t("Split at the playhead · replace with the clip selected under “My clips”"), "S · R"],
         [t("Another clip for the selected one · keep it when generating again"), "N · P"],
+        [t("Previous / next cut: select the clip, play from a second before it"), t("[ ] or ↑ ↓ · ⏮ ⏭ above the timeline")],
         [t("Delete · ripple delete"), t("Del · Shift+Del")],
         [t("Timeline marker"), t("M (double-click in the ruler removes it)")],
         [t("Clear selection"), "Esc"],
@@ -353,10 +368,10 @@ function OpenDialog({ onClose, onOpen }: { onClose: () => void; onOpen: (p: PmvP
   );
 }
 
-type RenderTarget = "server" | "pc";
+export type RenderTarget = "server" | "pc";
 const LS_TARGET = "pmv-creator:render-target";
 
-function readTarget(): RenderTarget {
+export function readTarget(): RenderTarget {
   try {
     return localStorage.getItem(LS_TARGET) === "pc" ? "pc" : "server";
   } catch {
@@ -364,20 +379,35 @@ function readTarget(): RenderTarget {
   }
 }
 
-/**
- * 🏷 Labels the finished video in Stash once it is scanned (see labels.ts) and shows how far that is. Only for
- * videos Stash scans; otherwise it says why nothing happens.
- */
-function LabelLine({ project, file, scanned, pc }: { project: PmvProject; file: string | undefined; scanned: boolean; pc: boolean }) {
+export function rememberTarget(v: RenderTarget): void {
+  try {
+    localStorage.setItem(LS_TARGET, v);
+  } catch {
+    /* private mode */
+  }
+}
+
+export function RenderTargetSeg({ value, disabled, onChange }: { value: RenderTarget; disabled: boolean; onChange: (v: RenderTarget) => void }) {
+  return (
+    <Seg<RenderTarget>
+      value={value}
+      disabled={disabled}
+      onChange={onChange}
+      options={[
+        ["server", t("Stash server"), t("FFmpeg in Stash renders the video into the output folder of the plugin settings")],
+        ["pc", t("My PC"), t("The render helper on your PC renders with the PC's FFmpeg and saves the video on the PC")],
+      ]}
+    />
+  );
+}
+
+/** 🏷 How far labeling the finished video in Stash is (see labels.ts) – or why it isn't labeled. */
+function LabelLine({ file, scanned, pc, wanted }: { file: string | undefined; scanned: boolean; pc: boolean; wanted: boolean }) {
   const host = useHost();
   const [status, setStatus] = useState<LabelStatus | null>(null);
-  const [queued] = useState(() => {
-    if (!labelingOn() || !scanned || !file) return false;
-    queueLabel(labelJob(project, file));
-    return true;
-  });
+  const queued = wanted && scanned && !!file;
   useEffect(() => (queued && file ? watchLabel(file, setStatus) : undefined), [queued, file]);
-  if (!labelingOn()) return null;
+  if (!wanted) return null;
   if (!queued) {
     return <div className="pmv-li-meta">🏷 {pc ? t("Not labeled: the video is on the PC outside the folders Stash sees (a mapped folder would be).") : t("Not labeled: Stash doesn't scan the video (plugin setting “Scan after rendering”, output folder inside a library).")}</div>;
   }
@@ -393,67 +423,78 @@ function LabelLine({ project, file, scanned, pc }: { project: PmvProject; file: 
   );
 }
 
+/** 🏷 / 🔔 above the render button – the same two choices for one PMV and for several (BatchDialog). */
+export function AfterRender({ label, onLabel, notify, onNotify }: { label: boolean; onLabel: (v: boolean) => void; notify: boolean; onNotify: (v: boolean) => void }) {
+  const desktop = desktopNotifications();
+  return (
+    <>
+      <label className="pmv-check" title={t("Once Stash has scanned the video: the project name as title, the performers of its scenes, the tags most of them share and the tag “PMV Creator”")}>
+        <input
+          type="checkbox"
+          checked={label}
+          onChange={(e) => {
+            setLabelingOn(e.target.checked);
+            onLabel(e.target.checked);
+          }}
+        />{" "}
+        🏷 {t("Label it in Stash (title, performers, tags)")}
+      </label>
+      <label className="pmv-check" title={t("A chime and the tab title when the render is done – also while you are in another tab; a desktop notification where the browser allows it")}>
+        <input
+          type="checkbox"
+          checked={notify}
+          onChange={(e) => {
+            setNotifyOn(e.target.checked);
+            onNotify(e.target.checked);
+          }}
+        />{" "}
+        🔔 {t("Tell me when it is done")}
+      </label>
+      {notify && desktop === "unavailable" && <div className="pmv-li-meta">{t("Desktop notifications only work over HTTPS (or localhost) – here you get the chime and the tab title.")}</div>}
+      {notify && desktop === "denied" && <div className="pmv-li-meta">{t("The browser blocks notifications for this page – the chime and the tab title still work.")}</div>}
+    </>
+  );
+}
+
 function RenderDialog({ onClose }: { onClose: () => void }) {
   const { state, backend, ffmpegAvailable } = useEditor();
   const [{ plan, warnings }] = useState(() => buildRenderPlan(state.present));
   const [label, setLabel] = useState(labelingOn);
+  const [notify, setNotify] = useState(notifyOn);
   // where it renders: in Stash (server) or on a PC with the render helper (opt-in, remembered per browser)
   const [target, setTargetState] = useState<RenderTarget>(readTarget);
   const [helper, setHelper] = useState<{ id: string; name: string } | null>(null);
   const setTarget = (v: RenderTarget) => {
     setTargetState(v);
-    try {
-      localStorage.setItem(LS_TARGET, v);
-    } catch {
-      /* private mode */
-    }
+    rememberTarget(v);
   };
-  const [job, setJob] = useState<{ jobId: string; renderId: string } | null>(null);
-  const [status, setStatus] = useState<JobStatus | null>(null);
-  const [result, setResult] = useState<RenderResult | null>(null);
+  // the render runs on without this dialog (renders.ts); reopened, the dialog shows it again
+  const [renderId, setRenderId] = useState<string | null>(() => listRenders().find((r) => r.projectId === state.present.id && isActive(r))?.renderId ?? null);
+  const r = useRenders().find((x) => x.renderId === renderId) ?? null;
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const fps = plan.output.fps;
 
-  useEffect(() => {
-    if (!job) return;
-    let alive = true;
-    const poll = async () => {
-      try {
-        const s = await findJob(job.jobId);
-        if (!alive) return;
-        setStatus(s);
-        // finished jobs disappear from the queue after a while, the result file stays
-        if (!s || ["FINISHED", "FAILED", "CANCELLED"].includes(s.status)) {
-          setResult(await renderResult(job.renderId));
-          return;
-        }
-      } catch (e) {
-        setError(String(e));
-      }
-      if (alive) window.setTimeout(poll, 1000);
-    };
-    void poll();
-    return () => {
-      alive = false;
-    };
-  }, [job]);
-
   const start = async () => {
     setError(null);
+    primeSignal();
     try {
-      setJob(await startRender(plan, target === "pc" ? helper?.id : undefined));
+      const p = state.present;
+      const job = await startRender(plan, target === "pc" ? helper?.id : undefined);
+      watchRender({ ...job, name: p.name, projectId: p.id, pc: target === "pc" ? (helper?.name ?? null) : null, label: label ? labelFor(p) : null });
+      setRenderId(job.renderId);
     } catch (e) {
       setError(String(e));
     }
   };
-  const running = (!!job && !result) || recording;
+  const active = !!r && isActive(r);
+  const result = r && !active ? (r.result ?? null) : null;
   const pc = target === "pc";
   const counts = plan.pieces.reduce<Record<string, number>>((acc, x) => ((acc[x.kind] = (acc[x.kind] ?? 0) + 1), acc), {});
   const yes = (b: boolean) => (b ? t("yes") : t("no"));
 
   return (
-    <div className="pmv-modal" onClick={() => !running && onClose()}>
+    <div className="pmv-modal" onClick={() => !recording && onClose()}>
       <div className="pmv-modal-body" onClick={(e) => e.stopPropagation()}>
         <div className="pmv-section-head is-static">
           {t("Render")} <span className="pmv-spacer" />
@@ -475,41 +516,24 @@ function RenderDialog({ onClose }: { onClose: () => void }) {
         )}
         <div className="pmv-row pmv-wrap">
           <span className="pmv-gen-label">{t("Render on")}</span>
-          <Seg<RenderTarget>
-            value={target}
-            disabled={running}
-            onChange={setTarget}
-            options={[
-              ["server", t("Stash server"), t("FFmpeg in Stash renders the video into the output folder of the plugin settings")],
-              ["pc", t("My PC"), t("The render helper on your PC renders with the PC's FFmpeg and saves the video on the PC")],
-            ]}
-          />
+          <RenderTargetSeg value={target} disabled={active || recording} onChange={setTarget} />
         </div>
-        {pc && backend === "online" && <PcRender disabled={running} onHelper={(id, name) => setHelper(id && name ? { id, name } : null)} />}
-        <label className="pmv-check" title={t("Once Stash has scanned the video: the project name as title, the performers of its scenes, the tags most of them share and the tag “PMV Creator”")}>
-          <input
-            type="checkbox"
-            checked={label}
-            onChange={(e) => {
-              setLabelingOn(e.target.checked);
-              setLabel(e.target.checked);
-            }}
-          />{" "}
-          🏷 {t("Label it in Stash (title, performers, tags)")}
-        </label>
+        {pc && backend === "online" && <PcRender disabled={active || recording} onHelper={(id, name) => setHelper(id && name ? { id, name } : null)} />}
+        <AfterRender label={label} onLabel={setLabel} notify={notify} onNotify={setNotify} />
         {backend !== "online" && <div className="pmv-error">{t("Backend unreachable. Export the render plan and render with the CLI (see README).")}</div>}
         {!pc && backend === "online" && !ffmpegAvailable && <div className="pmv-error">{t("FFmpeg was not found on the server – set its path in the plugin settings.")}</div>}
-        {status && !result && (
-          <div className="pmv-progress">
-            <div style={{ width: `${Math.round((status.progress ?? 0) * 100)}%` }} />
-            <span>
-              {pc && !status.progress && status.status === "RUNNING" ? t("waiting for {pc}…", { pc: helper?.name ?? "PC" }) : `${status.status} ${Math.round((status.progress ?? 0) * 100)} %`}
-            </span>
-          </div>
+        {r && active && (
+          <>
+            <div className="pmv-progress">
+              <div style={{ width: `${Math.round(r.progress * 100)}%` }} />
+              <span>{r.state === "queued" ? t("waiting in Stash's task queue") : r.pc && !r.progress ? t("waiting for {pc}…", { pc: r.pc }) : `${Math.round(r.progress * 100)} %`}</span>
+            </div>
+            <div className="pmv-li-meta">{t("You can close this window – the render goes on; ⏳ in the toolbar shows how far it is.")}</div>
+          </>
         )}
         {result?.status === "done" && (
           <div className="pmv-success">
-            {result.helper ? t("Done on {pc}:", { pc: helper?.name ?? result.helper }) : t("Done:")} <code>{result.file}</code>
+            {result.helper ? t("Done on {pc}:", { pc: r?.pc ?? result.helper }) : t("Done:")} <code>{result.file}</code>
             <br />
             {t("{pieces} segments, {cached} from the cache, {seconds} s", { pieces: result.pieces ?? 0, cached: result.cached ?? 0, seconds: result.seconds?.toFixed(1) ?? "?" })}
           </div>
@@ -519,29 +543,29 @@ function RenderDialog({ onClose }: { onClose: () => void }) {
             <li>⚠ {result.warning}</li>
           </ul>
         )}
-        {result?.status === "done" && <LabelLine key={result.file} project={state.present} file={result.stashFile ?? result.file} scanned={!!result.scanned} pc={!!result.helper} />}
-        {result?.status === "error" && <div className="pmv-error">{result.error}</div>}
-        {status?.status === "CANCELLED" && <div className="pmv-error">{t("Cancelled.")}</div>}
+        {result?.status === "done" && r && <LabelLine key={r.renderId} file={r.file} scanned={!!result.scanned} pc={!!result.helper} wanted={!!r.label} />}
+        {r?.state === "error" && <div className="pmv-error">{r.error}</div>}
+        {r?.state === "cancelled" && <div className="pmv-error">{t("Cancelled.")}</div>}
         {error && <div className="pmv-error">{error}</div>}
         <div className="pmv-row">
-          {!running ? (
-            <button className="btn btn-sm btn-primary" disabled={backend !== "online" || !plan.pieces.length || (pc && !helper)} onClick={() => void start()}>
-              {pc && helper ? t("Render on {pc}", { pc: helper.name }) : result ? t("Render again") : t("Start render")}
+          {!active ? (
+            <button className="btn btn-sm btn-primary" disabled={backend !== "online" || !plan.pieces.length || (pc && !helper) || recording} onClick={() => void start()}>
+              {pc && helper ? t("Render on {pc}", { pc: helper.name }) : r ? t("Render again") : t("Start render")}
             </button>
           ) : (
-            <button className="btn btn-sm btn-danger" onClick={() => job && void stopJob(job.jobId)}>
+            <button className="btn btn-sm btn-danger" onClick={() => r && void stopJob(r.jobId)}>
               {t("Cancel")}
             </button>
           )}
           <span className="pmv-li-meta">{t("Runs as a Stash task (also visible under Settings → Tasks).")}</span>
         </div>
-        <QuickRecord disabled={running || !plan.pieces.length} onBusy={setRecording} />
+        <QuickRecord disabled={active || !plan.pieces.length} onBusy={setRecording} />
       </div>
     </div>
   );
 }
 
-type RecordPhase = { kind: "idle" } | { kind: "recording"; p: RecordProgress } | { kind: "uploading"; pct: number } | { kind: "done"; result: RecordingResult | null; name: string } | { kind: "error"; error: string };
+type RecordPhase = { kind: "idle" } | { kind: "recording"; p: RecordProgress } | { kind: "uploading"; pct: number } | { kind: "done"; result: RecordingResult | null; name: string; labeled: boolean } | { kind: "error"; error: string };
 
 /**
  * Real-time browser recording of the preview (MediaRecorder, WebM). Needs no FFmpeg on the server;
@@ -568,13 +592,16 @@ function QuickRecord({ disabled, onBusy }: { disabled: boolean; onBusy: (busy: b
       if (backend === "online") {
         setPhase({ kind: "uploading", pct: 0 });
         const up = await uploadFile(rec.blob, name, (pct) => setPhase({ kind: "uploading", pct }));
-        setPhase({ kind: "done", result: await saveRecording(up.path, project.name), name });
+        const result = await saveRecording(up.path, project.name);
+        const labeled = labelingOn();
+        if (labeled && result.scanned && result.file) queueLabel(labelJob(project, result.file));
+        setPhase({ kind: "done", result, name, labeled });
       } else {
         const url = URL.createObjectURL(rec.blob);
         const a = Object.assign(document.createElement("a"), { href: url, download: name });
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
-        setPhase({ kind: "done", result: null, name });
+        setPhase({ kind: "done", result: null, name, labeled: false });
       }
     } catch (e) {
       setPhase(e instanceof RecordCancelled ? { kind: "idle" } : { kind: "error", error: String(e) });
@@ -612,7 +639,7 @@ function QuickRecord({ disabled, onBusy }: { disabled: boolean; onBusy: (busy: b
           <li>⚠ {phase.result.warning}</li>
         </ul>
       )}
-      {phase.kind === "done" && phase.result && <LabelLine key={phase.result.file} project={project} file={phase.result.file} scanned={!!phase.result.scanned} pc={false} />}
+      {phase.kind === "done" && phase.result && <LabelLine key={phase.result.file} file={phase.result.file} scanned={!!phase.result.scanned} pc={false} wanted={phase.labeled} />}
       {phase.kind === "error" && <div className="pmv-error">{phase.error}</div>}
       <div className="pmv-row">
         {!busy ? (

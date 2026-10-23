@@ -18,6 +18,7 @@ import { SpriteThumb, sceneHue, transitionLabel } from "../common";
 import { ClipActions, ClipNotice, ReplaceAllButton, SourceToggle } from "../monitor";
 import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions } from "../editing";
 import { useAudioAnalysis, useSprites, useTransportTime } from "../hooks";
+import { reviewCut } from "../review";
 import { Waveform } from "./Waveform";
 
 const HEAD_W = 120;
@@ -48,7 +49,7 @@ function rulerLabel(t: number, step: number): string {
 }
 
 export function Timeline() {
-  const { state, dispatch, transport } = useEditor();
+  const { state, getState, dispatch, transport } = useEditor();
   const project = state.present;
   const ui = state.ui;
   const zoom = ui.zoom;
@@ -265,6 +266,14 @@ export function Timeline() {
       <div className="pmv-tl-toolbar">
         <span className="pmv-mono">{formatTime(now)}</span>
         <span className="pmv-mono pmv-dim">{formatBarBeat(now, project.beatGrid)}</span>
+        <span className="pmv-btn-group">
+          <button className="btn btn-sm btn-secondary" title={t("Previous cut: selects the clip and plays from a second before it ([ or ↑)")} onClick={() => reviewCut(getState(), dispatch, transport, -1)}>
+            ⏮
+          </button>
+          <button className="btn btn-sm btn-secondary" title={t("Next cut: selects the clip and plays from a second before it (] or ↓) – press again for the one after")} onClick={() => reviewCut(getState(), dispatch, transport, 1)}>
+            ⏭
+          </button>
+        </span>
         <span className="pmv-spacer" />
         <SourceToggle />
         <ReplaceAllButton />

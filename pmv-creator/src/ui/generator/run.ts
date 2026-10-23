@@ -9,6 +9,7 @@ import type { Clip, PmvProject, SourceMedia } from "../../model/project";
 import { grayFrames } from "../../stash/backend";
 import { SKIP_TAG, cachedTagId } from "../../stash/library";
 import { fetchScenes, previewConfig, queryMarkers, queryScenes, tagIdByName } from "../../stash/queries";
+import { savedSceneFilter } from "../../stash/savedFilters";
 import { primeScenes } from "../../stash/sceneCache";
 import type { StashSceneCore } from "../../stash/types";
 import { getAudioAnalysis } from "../hooks";
@@ -34,6 +35,15 @@ async function collectOne(o: ClipOptions, p: PmvProject, seed: number, favId: st
     const byPlays = { per_page: find.per_page, sort: "play_count", direction: "DESC" };
     let r = await queryScenes(recent, byPlays);
     if (r.scenes.length < 8) r = await queryScenes({ play_count: { value: 0, modifier: "GREATER_THAN" } }, byPlays);
+    const scenes = r.scenes.filter(ok);
+    primeScenes(scenes);
+    return { items: scenes.flatMap((s) => sceneItems(s, o)), sources: sourcesOf(scenes) };
+  }
+  if (o.source === "saved") {
+    if (!o.savedFilter) throw new Error(t("Pick one of your saved filters first."));
+    const sf = await savedSceneFilter(o.savedFilter.id);
+    if (!sf) throw new Error(t("The saved filter “{name}” no longer exists in Stash.", { name: o.savedFilter.name }));
+    const r = await queryScenes(sf.filter, { ...find, q: sf.q || undefined });
     const scenes = r.scenes.filter(ok);
     primeScenes(scenes);
     return { items: scenes.flatMap((s) => sceneItems(s, o)), sources: sourcesOf(scenes) };

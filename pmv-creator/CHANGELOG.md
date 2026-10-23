@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 (2026-10-23)
+
+- **📦 Several PMVs at once** (*Project* menu, or *Several songs…* in the generator): pick songs from the song library or upload them; every song becomes its own project with the same generator settings (the current ones or a preset, each song with its own seed), generated one after another, saved, and rendered on the server or on the PC. The renders queue up in Stash and go on without the tab – a batch overnight on the PC is the idea. ✎ opens a project to fine-tune it.
+- **🔔 Tell me when it is done** (render dialog, on): renders no longer depend on the dialog – close it and work on. **⏳** in the toolbar lists every render on its way and the ones finished lately (progress, waiting in Stash's queue or for the PC, ↗ Open in Stash, ✎ open its project, ■ cancel). Done: a chime, the tab title in a background tab ("⏳ 45 % · …" while it runs, then "✓ … is rendered"), and a desktop notification where the browser allows it (HTTPS or localhost only – on a LAN address over HTTP the chime and the title remain). Its click opens the scene in Stash. Renders started earlier are picked up again when the editor opens; 🏷 labels then wait as long as Stash's queue needs (its scans run after the renders queued before them).
+- **Saved filter** as a clip source of the generator: one of the scene filters saved in Stash's scene list, read fresh on every run (tags with depth and excludes, performers, studios, rating, duration, dates, resolution, orientation, flags …). The dialog shows how many scenes it finds right now and names criteria it can't translate. 🎲 Another clip draws from it too.
+- **⏮ ⏭ Review the cuts**: [ / ] (or ↑ / ↓, or the buttons next to the time above the timeline) select the previous/next clip and play from a second before its cut. [ and ] also work with AltGr on German keyboards.
+
 ## 0.8.0 (2026-10-22)
 
 After generating – in the bar above the timeline (a clip selected):

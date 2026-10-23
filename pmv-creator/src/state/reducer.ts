@@ -5,7 +5,7 @@
  * reducer trivial, makes edits replayable/loggable, and lets the timeline preview a drag by simply
  * running applyEdit(project, pendingAction) before committing it.
  */
-import { type GenerationResult, applyGeneration } from "../generator/generate";
+import { type GenerationResult, type GeneratorSettings, applyGeneration } from "../generator/generate";
 import type { ClipSource } from "../generator/material";
 import type { StashRef } from "../stash/types";
 import { type MaterialChange, applyMaterial } from "../generator/reroll";
@@ -249,6 +249,8 @@ export interface UiState {
   generator: { source?: ClipSource } | null;
   /** All settings and tools visible (off = simple mode). */
   advanced: boolean;
+  /** Open "several PMVs at once" dialog with the generator settings it starts from (null = the last used ones). */
+  batch: { settings: GeneratorSettings | null } | null;
 }
 
 export interface EditorState {
@@ -290,6 +292,7 @@ export const DEFAULT_UI: UiState = {
   saveState: "saved",
   generator: null,
   advanced: readAdvanced(),
+  batch: null,
 };
 
 export function initialEditorState(project: PmvProject, ui: Partial<UiState> = {}): EditorState {

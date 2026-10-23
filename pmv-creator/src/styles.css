@@ -1377,3 +1377,44 @@
 .pmv-list-item.is-pickable:hover {
   outline: 1px solid #ff922b;
 }
+
+/* ---------------------------------------------------------------- renders in the toolbar, several PMVs at once */
+.pmv-renders {
+  width: min(420px, 92vw);
+  max-height: 60vh;
+  padding: 4px;
+  gap: 2px;
+}
+.pmv-render-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 6px;
+  border-radius: 3px;
+}
+.pmv-render-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.pmv-render-item.is-done {
+  box-shadow: inset 3px 0 0 var(--pmv-ok);
+}
+.pmv-render-item.is-error {
+  box-shadow: inset 3px 0 0 var(--pmv-bad);
+}
+.pmv-render-item .pmv-li-meta,
+.pmv-render-item .pmv-error {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pmv-progress.is-thin {
+  height: 4px;
+  margin-top: 3px;
+}
+.pmv-batch {
+  width: min(640px, 94vw);
+}
+.pmv-batch-songs {
+  max-height: 34vh;
+  overflow: auto;
+}

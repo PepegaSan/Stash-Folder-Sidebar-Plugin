@@ -10,7 +10,8 @@ export interface MaterialItem {
   fixedStart: boolean;
 }
 
-export type ClipSource = "filter" | "watched" | "project" | "bin";
+/** saved = one of Stash's own saved scene filters (stash/savedFilters.ts). */
+export type ClipSource = "filter" | "watched" | "project" | "bin" | "saved";
 export type ClipKind = "scenes" | "markers";
 export type AllAny = "all" | "any";
 export type Shape = "all" | "portrait" | "landscape";
@@ -50,6 +51,8 @@ export interface ClipOptions {
   markerLength: number;
   stagesOn: boolean;
   stages: TagStage[];
+  /** source "saved": the saved filter (read fresh from Stash on every run). */
+  savedFilter: StashRef | null;
 }
 
 const MAX_RES: Record<number, string> = { 720: "FULL_HD", 1080: "QUAD_HD", 1440: "VR_HD" }; // "up to …" = below the next size

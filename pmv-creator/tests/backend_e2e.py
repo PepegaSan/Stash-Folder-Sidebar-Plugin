@@ -28,7 +28,8 @@ FPS = 30
 
 
 def sh(cmd, **kw):
-    r = subprocess.run(cmd, capture_output=True, text=True, **kw)
+    # UTF-8, not the Windows code page: the frontend bundle carries characters like ⏮ that cp1252 can't decode
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", **kw)
     if r.returncode != 0:
         raise AssertionError(f"command failed ({r.returncode}): {cmd}\n{r.stdout}\n{r.stderr}")
     return r

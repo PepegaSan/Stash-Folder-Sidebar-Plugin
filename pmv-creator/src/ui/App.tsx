@@ -13,9 +13,12 @@ import { clamp } from "../timeline/time";
 import { anotherClip } from "./clipActions";
 import { GeneratorDialog } from "./generator/GeneratorDialog";
 import { Inspector } from "./Inspector";
+import { BatchDialog } from "./BatchDialog";
 import { resumeLabels } from "./labels";
+import { resumeRenders } from "./renders";
 import { useLocalMediaPolling } from "./localMedia";
 import { Monitor, SourceHostContext, sourceKeys } from "./monitor";
+import { reviewCut } from "./review";
 import { Sidebar } from "./sidebar/Sidebar";
 import { Timeline } from "./timeline/Timeline";
 import { Toolbar } from "./Toolbar";
@@ -66,11 +69,15 @@ function Workspace() {
   useDeepLinkScenes();
   useDeepLinkClipPreset();
   useLocalMediaPolling(backend === "online");
-  // 🏷 labels of renders whose scan was not through when the editor was closed
-  useEffect(() => resumeLabels(), []);
+  // renders and 🏷 labels that were still on their way when the editor was closed
+  useEffect(() => {
+    resumeRenders();
+    resumeLabels();
+  }, []);
   return (
     <SourceHostContext.Provider value={sourceHost}>
       {state.ui.generator && <GeneratorDialog />}
+      {state.ui.batch && <BatchDialog />}
       <Toolbar />
       <div className="pmv-main">
         <aside className="pmv-sidebar">
@@ -141,7 +148,8 @@ function useShortcuts() {
       const { present: p, ui } = latest.current;
       const sel = ui.selectedClipId;
       const beat = 60 / p.beatGrid.bpm;
-      const mod = e.ctrlKey || e.metaKey;
+      // AltGr (Ctrl+Alt on Windows) types [ and ] on German keyboards – it is no modifier here
+      const mod = (e.ctrlKey || e.metaKey) && !e.getModifierState?.("AltGraph");
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       let handled = true;
       if (!mod && sourceKeys.handle?.(key, e)) {
@@ -174,6 +182,13 @@ function useShortcuts() {
           }
           case "m":
             dispatch({ type: "marker/add", marker: { id: uid("mrk"), time: transport.time, label: `M${p.markers.length + 1}` } });
+            break;
+          case "[":
+          case "]":
+          case "ArrowUp":
+          case "ArrowDown":
+            // not behind a dialog or the render list (there the arrows scroll), and only when there is a clip to go to
+            handled = !document.querySelector(".pmv-modal, .pmv-menu-pop") && reviewCut(latest.current, dispatch, transport, key === "[" || key === "ArrowUp" ? -1 : 1);
             break;
           case "Escape":
             // first leave "replace all" picking, then clear the selection

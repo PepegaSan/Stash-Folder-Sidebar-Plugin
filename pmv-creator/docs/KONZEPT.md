@@ -265,4 +265,4 @@ Eigenschaften:
 * Keine Effekte (Reverse, Freeze, Zoom/Ken-Burns, Farbe), keine Mehrfachauswahl, kein Ducking von Clip-Ton gegen Musik.
 * EDL ist einspurig, nicht-dissolve-Übergänge stehen nur als Kommentar. Strikte CMX-Leser erlauben maximal 999 Events.
 * Abbrechen eines Renders: Stash beendet den Python-Prozess. Bereits laufende Segment-FFmpegs laufen ggf. noch zu Ende (Sekunden).
-* Ideen: „An PMV Creator senden“ aus der Stash-Szenenliste, gespeicherte Stash-Filter als Quelle, Beat-Erkennung im Web-Worker, Stream-Copy-Modus auf Keyframes (ohne Re-Encode), FCPXML-Export.
+* Ideen: „An PMV Creator senden“ aus der Stash-Szenenliste, Beat-Erkennung im Web-Worker, Stream-Copy-Modus auf Keyframes (ohne Re-Encode), FCPXML-Export.

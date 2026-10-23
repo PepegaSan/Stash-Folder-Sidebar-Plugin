@@ -1,11 +1,20 @@
 /** Adding music: upload or server path, analysis, and the beat grid straight away. Shared by the start panel and the inspector. */
 import { useState } from "react";
-import { detectTempo } from "../audio/analysis";
+import { type AudioAnalysis, detectTempo } from "../audio/analysis";
 import { t } from "../i18n";
 import { createAudioTrack } from "../model/project";
 import { type LibrarySong, type MediaResult, importAudio, uploadAudio } from "../stash/backend";
 import { useEditor } from "../state/store";
 import { getAudioAnalysis } from "./hooks";
+
+/** BPM and the grid offset of a song (from its first two minutes) placed at `start`; null when no tempo is found. */
+export function detectSongGrid(a: AudioAnalysis, start: number): { bpm: number; offset: number; confidence: number } | null {
+  const sr = a.sampleRate;
+  const est = detectTempo(a.mono.subarray(0, Math.min(a.mono.length, 120 * sr)), sr);
+  if (!est) return null;
+  const b = 60 / est.bpm;
+  return { bpm: est.bpm, offset: (((start + est.offset) % b) + b) % b, confidence: est.confidence };
+}
 
 export function useMusic() {
   const { state, dispatch, backend } = useEditor();
@@ -21,11 +30,9 @@ export function useMusic() {
     dispatch({ type: "audio/set", audio: { ...createAudioTrack(name, path, url, duration), ...(audio ? { start: audio.start, gainDb: audio.gainDb, fadeIn: audio.fadeIn, fadeOut: audio.fadeOut } : {}) } });
     const notes: string[] = [];
     // the beat grid is what everything is cut to – detect it right away, the inspector can still correct it
-    const sr = a.sampleRate;
-    const est = detectTempo(a.mono.subarray(0, Math.min(a.mono.length, 120 * sr)), sr);
+    const est = detectSongGrid(a, start);
     if (est) {
-      const b = 60 / est.bpm;
-      dispatch({ type: "grid/update", patch: { bpm: est.bpm, offset: (((start + est.offset) % b) + b) % b } });
+      dispatch({ type: "grid/update", patch: { bpm: est.bpm, offset: est.offset } });
       notes.push(t("{bpm} BPM detected", { bpm: est.bpm }) + (est.confidence < 1.5 ? ` ${t("(uncertain – try ×2/÷2)")}` : ""));
     }
     if (probed && Math.abs(probed - a.duration) > 1) notes.push(t("The browser decoded {a} s of a {b} s file – the timeline uses {b} s; waveform and BPM come from the decoded part.", { a: a.duration.toFixed(1), b: probed.toFixed(1) }));
