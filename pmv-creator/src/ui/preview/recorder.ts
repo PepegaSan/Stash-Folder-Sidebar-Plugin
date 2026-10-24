@@ -9,7 +9,7 @@ import { projectDuration } from "../../model/project";
 import type { StashScene } from "../../stash/types";
 import type { Transport } from "../../state/transport";
 import { flattenTimeline, resolveTransitions } from "../../timeline/flatten";
-import { PreviewEngine, type SlotLook } from "./engine";
+import { PREVIEW_SLOTS, PreviewEngine, type SlotLook } from "./engine";
 
 export interface RecordProgress {
   time: number;
@@ -83,14 +83,14 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
   // hidden players – off screen but laid out, so they decode
   const host = document.createElement("div");
   host.style.cssText = `position:fixed;left:-20000px;top:0;width:${width}px;height:${height}px;overflow:hidden;pointer-events:none`;
-  const videos = [0, 1].map(() => {
+  const videos = Array.from({ length: PREVIEW_SLOTS }, () => {
     const v = document.createElement("video");
     v.playsInline = true;
     v.preload = "auto";
     v.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
     host.appendChild(v);
     return v;
-  }) as [HTMLVideoElement, HTMLVideoElement];
+  });
   const overlay = document.createElement("div");
   host.appendChild(overlay);
   document.body.appendChild(host);

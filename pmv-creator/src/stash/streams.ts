@@ -126,21 +126,24 @@ class HelperFeed {
     return this.loading ? this.target : this.el.currentTime || 0;
   }
 
-  /** Can t be reached in what is buffered or arriving? Then only the playhead moves. */
-  seek(t: number): boolean {
-    if (this.loading) {
-      if (t < this.from - 0.05 || t > this.from + 3) return false;
-      this.target = t;
-      return true;
-    }
+  /** The first data of a new stream is still on its way. */
+  get pending(): boolean {
+    return this.loading;
+  }
+
+  /** Is t buffered or arriving? Then a seek only moves the playhead. */
+  reaches(t: number): boolean {
+    if (this.loading) return t >= this.from - 0.05 && t <= this.from + 3;
     const b = this.el.buffered;
-    for (let i = 0; i < b.length; i++) {
-      if (t >= b.start(i) - 0.05 && t <= b.end(i) + 1) {
-        if (Math.abs(this.el.currentTime - t) > 0.01) this.el.currentTime = t;
-        return true;
-      }
-    }
+    for (let i = 0; i < b.length; i++) if (t >= b.start(i) - 0.05 && t <= b.end(i) + 1) return true;
     return false;
+  }
+
+  seek(t: number): boolean {
+    if (!this.reaches(t)) return false;
+    if (this.loading) this.target = t;
+    else if (Math.abs(this.el.currentTime - t) > 0.01) this.el.currentTime = t;
+    return true;
   }
 
   open(info: StreamInfo, t: number): void {
@@ -241,7 +244,9 @@ async function append(sb: SourceBuffer, data: Uint8Array<ArrayBuffer>, el: HTMLV
 
 /**
  * One <video> element bound to whichever scene it currently shows. `time` is always the absolute
- * source time, also for transcoded streams that restart at ?start=.
+ * source time, also for transcoded streams that restart at ?start=. The slot knows whether it has a
+ * picture yet and measures how long its seeks and new streams take, so a player can aim where its clock
+ * will be once the picture is there.
  */
 export class VideoSlot {
   sceneId: string | null = null;
@@ -250,9 +255,22 @@ export class VideoSlot {
   private base = 0;
   private gen = -1;
   private feed: HelperFeed | null = null;
+  /** A frame of the current stream is decoded (false from a new source until its first picture). */
+  private picture = false;
+  /** Target that waits for the seek on its way, so every seek gets to show its frame (scrubbing). */
+  private queued: number | null = null;
+  /** Start of the seek or load on its way (0 = none), to measure it. */
+  private opStart = 0;
+  private opLoad = false;
+  /** Seconds until a picture after a seek in the open stream / after opening a new one (running averages). */
+  private seekSecs = 0.15;
+  private loadSecs = 0.6;
 
   constructor(readonly el: HTMLVideoElement) {
     el.addEventListener("error", this.onError);
+    el.addEventListener("loadstart", this.onLoadStart);
+    el.addEventListener("loadeddata", this.onFrame);
+    el.addEventListener("seeked", this.onFrame);
   }
 
   get time(): number {
@@ -260,8 +278,32 @@ export class VideoSlot {
     return this.base + (this.el.currentTime || 0);
   }
 
-  get ready(): boolean {
-    return this.el.readyState >= 2;
+  /** There is a picture of this slot's stream – an older one while a seek is on its way. */
+  get hasPicture(): boolean {
+    return !!this.info && this.picture;
+  }
+
+  /** A seek or a new stream is on its way; `time` is its target meanwhile. */
+  get busy(): boolean {
+    if (!this.info) return false;
+    if (this.info.seek === "mse") return !!this.feed?.pending || this.el.seeking;
+    return this.el.seeking || !this.picture;
+  }
+
+  /** Expected seconds until a picture of scene `sceneId` at source time t shows in this slot. */
+  eta(sceneId: string, t: number): number {
+    const info = this.info;
+    if (!info || this.sceneId !== sceneId || this.stale) return this.loadSecs;
+    if (info.seek === "native") return this.seekSecs;
+    if (info.seek === "mse") return this.feed?.reaches(t) ? this.seekSecs : this.loadSecs;
+    return this.inTranscode(t) ? this.seekSecs : this.loadSecs;
+  }
+
+  /** Length of the loaded file in source time (0 = unknown). */
+  get duration(): number {
+    const d = this.el.duration;
+    if (this.info && this.info.seek !== "param" && Number.isFinite(d) && d > 0) return d;
+    return this.scene?.files[0]?.duration ?? 0;
   }
 
   /** The videos' source changed (PC ↔ Stash) since this slot loaded – assign() reloads it. */
@@ -280,20 +322,30 @@ export class VideoSlot {
     if (this.info) this.load(t);
   }
 
-  seek(t: number): void {
-    if (!this.info) return;
-    if (this.info.seek === "native") {
-      if (Math.abs(this.el.currentTime - t) > 0.01) this.el.currentTime = t;
-      return;
-    }
-    if (this.info.seek === "mse") {
+  /**
+   * While a seek is on its way, t waits until it is through (`force` starts over at once): an interrupted
+   * seek never shows its frame, and slow seeks interrupted on every frame left the picture frozen.
+   * The helper's stream handles this itself.
+   */
+  seek(t: number, force = false): void {
+    const info = this.info;
+    if (!info) return;
+    if (info.seek === "mse") {
       if (!this.feed?.seek(t)) this.load(t);
       return;
     }
-    const rel = t - this.base;
-    const buffered = this.el.buffered.length ? this.el.buffered.end(this.el.buffered.length - 1) : 0;
-    if (rel < 0 || rel > buffered + 0.5) this.load(t);
-    else this.el.currentTime = rel;
+    if (this.el.seeking && !force) {
+      this.queued = t;
+      return;
+    }
+    this.queued = null;
+    if (info.seek === "native") {
+      if (Math.abs(this.el.currentTime - t) > 0.01) this.measure(false, () => (this.el.currentTime = t));
+    } else if (this.inTranscode(t)) {
+      this.measure(false, () => (this.el.currentTime = t - this.base));
+    } else {
+      this.load(t);
+    }
   }
 
   release(): void {
@@ -304,16 +356,39 @@ export class VideoSlot {
     this.sceneId = null;
     this.scene = null;
     this.info = null;
+    this.picture = false;
+    this.queued = null;
+    this.opStart = 0;
   }
 
   dispose(): void {
     this.el.removeEventListener("error", this.onError);
+    this.el.removeEventListener("loadstart", this.onLoadStart);
+    this.el.removeEventListener("loadeddata", this.onFrame);
+    this.el.removeEventListener("seeked", this.onFrame);
     this.release();
+  }
+
+  /** A transcoded stream restarted at `base` has t buffered (or about to). */
+  private inTranscode(t: number): boolean {
+    const rel = t - this.base;
+    const b = this.el.buffered;
+    return rel >= 0 && rel <= (b.length ? b.end(b.length - 1) : 0) + 0.5;
+  }
+
+  private measure(load: boolean, op: () => void): void {
+    this.opStart = performance.now();
+    this.opLoad = load;
+    op();
   }
 
   private load(t: number): void {
     const info = this.info!;
     this.gen = generation;
+    this.queued = null;
+    this.picture = false;
+    this.opStart = performance.now();
+    this.opLoad = true;
     if (info.seek === "mse") {
       this.base = 0;
       this.feed ??= new HelperFeed(this.el, this.onError);
@@ -330,6 +405,28 @@ export class VideoSlot {
       this.el.src = withStart(info.url, t);
     }
   }
+
+  private onLoadStart = () => {
+    this.picture = false;
+  };
+
+  /** A picture arrived (a stream's first frame, a finished seek): note how long it took, then the queued target. */
+  private onFrame = () => {
+    if (this.el.readyState < 2) return;
+    this.picture = true;
+    if (this.el.seeking) return;
+    if (this.opStart) {
+      const secs = Math.min(5, Math.max(0.02, (performance.now() - this.opStart) / 1000));
+      if (this.opLoad) this.loadSecs = (this.loadSecs + secs) / 2;
+      else this.seekSecs = (this.seekSecs + secs) / 2;
+      this.opStart = 0;
+    }
+    if (this.queued !== null) {
+      const t = this.queued;
+      this.queued = null;
+      if (Math.abs(this.time - t) > 0.01) this.seek(t);
+    }
+  };
 
   /** Fallbacks: the helper can't serve it → Stash; Stash's direct stream not decodable → Stash's transcode. */
   private onError = () => {

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.3 (2026-10-24)
+
+- **Preview without black clips and frozen pictures**: some videos showed only one still frame in the PMV preview, or the picture went black for a moment – mostly long files over a NAS or Wi-Fi (their index sits at the end of the file and takes a second or more to load) and short clips. The preview now loads the next clips ahead in four players (up to 12 s, the nearest first), starts a waiting clip a moment before its cut so it is already moving, and keeps the last picture instead of black while a file still opens. A slow seek is no longer restarted on every frame (that left the picture frozen for the whole clip); seeks aim where the music will be once they are through, small drift is evened out with the playback speed. Both sides of a transition play. Edits and the scene list on the left no longer reload the players. Quick record uses the same preview and gains the same.
+- Scene player: scrubbing shows the frames along the way – a new seek waits for the one on its way instead of cancelling it.
+
 ## 0.9.2 (2026-10-24)
 
 - Generator: your own PMVs (scenes with the tag `PMV Creator`, which 🏷 gives every render) are no longer picked as material – from tags/performers, *Most watched*, a saved filter or the project's scenes. Asking for the tag `PMV Creator` in the generator's tags still uses them; *Selection* (your snippets) is not filtered. 🎲 Another clip follows the same rule.

@@ -9,15 +9,14 @@ import { useTransportPlaying, useTransportTime } from "../hooks";
 import { onStreamChange } from "../../stash/streams";
 import { LocalMediaBadge } from "../localMedia";
 import { StartPanel } from "../StartPanel";
-import { PreviewEngine } from "./engine";
+import { PREVIEW_SLOTS, PreviewEngine } from "./engine";
 
 export function PreviewPlayer() {
   const { state, transport } = useEditor();
   const project = state.present;
   const playing = useTransportPlaying(transport);
   const time = useTransportTime(transport, 100);
-  const aRef = useRef<HTMLVideoElement>(null);
-  const bRef = useRef<HTMLVideoElement>(null);
+  const videoRefs = useRef<HTMLVideoElement[]>([]);
   const overlayRef = useRef<HTMLDivElement>(null);
   const blurRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<PreviewEngine | null>(null);
@@ -30,7 +29,7 @@ export function PreviewPlayer() {
   const fps = project.output.fps;
 
   useEffect(() => {
-    const engine = new PreviewEngine([aRef.current!, bRef.current!], overlayRef.current!, blurRef.current, () => transport.listenLevel);
+    const engine = new PreviewEngine(videoRefs.current.slice(0, PREVIEW_SLOTS), overlayRef.current!, blurRef.current, () => transport.listenLevel);
     engineRef.current = engine;
     const off = transport.subscribe(() => engine.render(transport.time, transport.playing));
     // PC ↔ Stash: re-cue the players, also while paused
@@ -60,8 +59,9 @@ export function PreviewPlayer() {
     <div className="pmv-preview">
       <div className="pmv-stage" style={{ ["--pmv-ar" as string]: project.output.width / project.output.height }} onClick={() => transport.toggle()}>
         <canvas ref={blurRef} className="pmv-stage-blur" />
-        <video ref={aRef} muted playsInline preload="auto" />
-        <video ref={bRef} muted playsInline preload="auto" />
+        {Array.from({ length: PREVIEW_SLOTS }, (_, k) => (
+          <video key={k} ref={(el) => void (el && (videoRefs.current[k] = el))} muted playsInline preload="auto" />
+        ))}
         <div ref={overlayRef} className="pmv-stage-overlay" />
         {!tracks.some((tr) => tr.clips.length) && (
           <div className="pmv-stage-empty" title={t("The timeline is empty")}>

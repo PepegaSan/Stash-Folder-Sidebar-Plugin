@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.2-informational)
+![Version](https://img.shields.io/badge/version-0.9.3-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -617,6 +617,11 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.3
+
+- **Preview without black or frozen clips**: the next clips are loaded ahead in four players (long files keep their index at the end and need a second or more to open over a NAS or Wi-Fi), a waiting clip starts a moment before its cut, the last picture stays instead of black while a file still opens, and a slow seek is no longer restarted on every frame (that froze the picture for the whole clip); both sides of a transition play, Quick record gains the same
+- Scene player: scrubbing shows the frames along the way
 
 ### PMV Creator 0.9.2
 

@@ -1,5 +1,5 @@
 /** Session cache of full Stash scenes (markers, streams, sprites) keyed by scene ID. */
-import { useEffect, useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 import { fetchScenes } from "./queries";
 import type { StashScene } from "./types";
 
@@ -52,10 +52,14 @@ function useCacheVersion(): number {
   return version;
 }
 
-/** Re-renders when scenes arrive; dependencies are keyed by the joined IDs, not the array identity. */
+/**
+ * Re-renders when scenes arrive; dependencies are keyed by the joined IDs, not the array identity. The result keeps
+ * its identity while these scenes stay the same – other scenes arriving (the scene list) must not re-cue the preview.
+ */
 export function useScenes(ids: string[]): Record<string, StashScene> {
   const version = useCacheVersion();
   const key = ids.join(",");
+  const last = useRef<Record<string, StashScene>>({});
   useEffect(() => {
     void ensureScenes(key ? key.split(",") : []).catch(() => undefined);
   }, [key]);
@@ -65,7 +69,10 @@ export function useScenes(ids: string[]): Record<string, StashScene> {
       const s = cache.get(id);
       if (s) out[id] = s;
     }
-    return out;
+    const prev = last.current;
+    const same = Object.keys(out).length === Object.keys(prev).length && Object.keys(out).every((id) => prev[id] === out[id]);
+    if (!same) last.current = out;
+    return last.current;
   }, [key, version]);
 }
 

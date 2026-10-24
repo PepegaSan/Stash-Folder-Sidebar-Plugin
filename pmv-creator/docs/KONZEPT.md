@@ -78,7 +78,7 @@ pmv-creator/
 ```
 ┌ Toolbar: Projekt · Undo/Redo · Modus (Einrasten/Ripple/Überschreiben) · Snap+Raster · Export · Rendern ┐
 ├──────────────────────┬───────────────────────────────────────────────┬──────────────────────────────┤
-│ Sidebar              │ Preview (A/B-Video, Musik als Master-Clock)    │ Inspector                    │
+│ Sidebar              │ Preview (4 Player, Musik als Master-Clock)     │ Inspector                    │
 │ [Szenen|Marker|Ausw.]│                                               │ Clip: Start, Dauer (s/Beats),│
 │ Suche → Szene →      │                                               │ In/Out, Speed, Übergang, Ton │
 │ Drill-Down:          │                                               │ sonst: Musik, Raster, Ausgabe│
@@ -106,7 +106,7 @@ pmv-creator/
 
 **Audio**: Musik hochladen oder per Server-Pfad einbinden. Die Waveform wird aus dekodierten Peaks gezeichnet, nur der sichtbare Ausschnitt. BPM und Beat-Phase werden erkannt (Onset-Hüllkurve → Autokorrelation mit Oktav-Korrektur → Kammfilter-Feinsuche auf 0,01 BPM), alternativ Tap-Tempo oder „Offset = Playhead“.
 
-**Preview**: Zwei `<video>`-Elemente arbeiten im A/B-Wechsel. Das unsichtbare ist bereits auf das nächste Segment vorgespult, ein Schnitt ist damit nur ein Sichtbarkeitswechsel. Die Musik ist die Master-Clock, Bild-Drift über 150 ms wird nachgeführt. Direktstreams werden bevorzugt, sonst Stash-Transcodes mit `?start=`. Übergänge werden per Opacity oder Farb-Overlay angenähert.
+**Preview**: Ein Pool aus vier `<video>`-Elementen ([engine.ts](../src/ui/preview/engine.ts)). Eines spielt den aktuellen Clip, die anderen laden die nächsten Clips (bis 12 s voraus, höchstens zwei Dateien gleichzeitig, der nächste zuerst) und warten pausiert auf ihrem ersten Bild; ein Schnitt ist damit nur ein Sichtbarkeitswechsel. Der wartende Clip startet 0,1 s vor seinem Schnitt unsichtbar und stumm, damit er beim Schnitt schon läuft. Lange Dateien haben ihren `moov`-Index oft am Ende (mehrere MB), das Öffnen dauert über NAS/WLAN dann eine Sekunde und mehr – deshalb das Vorladen. Die Musik ist die Master-Clock: kleine Bild-Drift gleicht die Abspielrate aus (±8 %), ab 250 ms wird gesprungen, und zwar dorthin, wo die Uhr steht, wenn der Seek fertig ist (Seek- und Ladezeit misst jeder Player selbst). Ein laufender Seek wird nie vom nächsten abgebrochen – sonst kommt bei langsamen Seeks nie ein Bild an. Hat der aktuelle Clip noch kein Bild, bleibt das letzte stehen statt Schwarz. Direktstreams werden bevorzugt, sonst Stash-Transcodes mit `?start=` (davon höchstens einer im Voraus). Übergänge werden per Opacity, Ausschnitt, Verschiebung oder Farb-Overlay angenähert; beide Seiten laufen dabei.
 
 ## Generator
 
