@@ -1364,6 +1364,10 @@
   width: auto;
   max-width: 260px;
 }
+.pmv-gen-trans {
+  width: auto;
+  max-width: 260px;
+}
 .pmv-songs {
   width: min(520px, 92vw);
 }

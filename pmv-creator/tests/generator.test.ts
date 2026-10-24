@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type FillOptions, fillSlots, timelineWindow } from "../src/generator/assemble";
-import { allowedParts, applyBeatSync, applyGeneration, buildGeneration, defaultSettings, generationRange } from "../src/generator/generate";
+import { type FillOptions, MIX_TRANSITIONS, fillSlots, timelineWindow } from "../src/generator/assemble";
+import { allowedParts, applyBeatSync, applyGeneration, buildGeneration, defaultSettings, generationRange, upgradeStyle } from "../src/generator/generate";
 import { type ClipOptions, type MaterialItem, buildMarkerFilter, buildSceneFilter, clientAnyTags } from "../src/generator/material";
 import { actionMotion, beatFit, makePercentile, previewPieces, rhythmOf } from "../src/generator/motion";
 import { mulberry32 } from "../src/generator/random";
@@ -30,7 +30,8 @@ const fill = (o: Partial<FillOptions> = {}): FillOptions => ({
   paceMatch: false,
   speed: 1,
   speedRamps: false,
-  transitions: "none",
+  transitionOn: "none",
+  transitionType: "fade",
   flashDrops: true,
   ...o,
 });
@@ -164,6 +165,48 @@ describe("selection", () => {
     const loud = mean(clips.filter((_, i) => loudSlots[i].energy >= 0.5).map(pctOf));
     expect(calm).toBeLessThan(0.3);
     expect(loud).toBeGreaterThan(0.7);
+  });
+});
+
+describe("transitions", () => {
+  // a cut on every beat (0.5 s), bars of 2 s, phrases of 8 s
+  const slots = planCuts(analyzeBeats(GRID, 0, 16), GRID, 0, 16, { mode: "fixed", pace: "normal", every: 1, pattern: [], onGrid: true, minBeats: 0, maxBeats: 0 });
+  const pool = Array.from({ length: 30 }, (_, i) => item(`s${i}`, 0, 60));
+  const run = (o: Partial<FillOptions>) => fillSlots(project(), slots, slots.map(() => 0), [pool], fill(o), noMaps);
+
+  it("on every bar: only the cuts on the “one”, a flash stays a blink", () => {
+    const clips = run({ transitionOn: "bar", transitionType: "fadewhite" });
+    expect(clips.filter((c) => c.transitionIn).map((c) => c.start)).toEqual([2, 4, 6, 8, 10, 12, 14]);
+    expect(clips[4].transitionIn).toEqual({ type: "fadewhite", duration: 0.12 });
+  });
+
+  it("on every cut and per phrase, with lengths that keep the beat", () => {
+    const wipes = run({ transitionOn: "cut", transitionType: "wipeleft" });
+    expect(wipes[0].transitionIn).toBeNull();
+    expect(wipes.slice(1).every((c) => c.transitionIn?.type === "wipeleft")).toBe(true);
+    expect(wipes[1].transitionIn!.duration).toBeCloseTo(0.5 / 3);
+    expect(run({ transitionOn: "cut", transitionType: "fade" })[1].transitionIn!.duration).toBeCloseTo(0.15);
+    const phrase = run({ transitionOn: "phrase", transitionType: "circleopen" });
+    expect(phrase.filter((c) => c.transitionIn).map((c) => [c.start, c.transitionIn])).toEqual([[8, { type: "circleopen", duration: 0.5 }]]);
+  });
+
+  it("mix: a different one each time, the same per seed – and the clips are the same as without", () => {
+    const mixed = run({ transitionOn: "cut", transitionType: "mix", seed: 3 });
+    const types = mixed.slice(1).map((c) => c.transitionIn!.type);
+    types.slice(1).forEach((x, i) => expect(x).not.toBe(types[i]));
+    expect(new Set(types).size).toBeGreaterThan(5);
+    expect(types.every((x) => MIX_TRANSITIONS.includes(x))).toBe(true);
+    expect(run({ transitionOn: "cut", transitionType: "mix", seed: 3 }).map((c) => c.transitionIn)).toEqual(mixed.map((c) => c.transitionIn));
+    const plain = run({ transitionOn: "none", seed: 3 });
+    expect(plain.every((c) => !c.transitionIn)).toBe(true);
+    expect(plain.map((c) => [c.sceneId, c.sourceIn])).toEqual(mixed.map((c) => [c.sceneId, c.sourceIn]));
+  });
+
+  it("reads the transitions of settings saved before 0.9.4", () => {
+    expect(upgradeStyle({ transitions: "flashBar" })).toEqual({ transitionOn: "bar", transitionType: "fadewhite" });
+    expect(upgradeStyle({ transitions: "fadeAll", speed: 2 })).toEqual({ transitionOn: "cut", transitionType: "fade", speed: 2 });
+    expect(upgradeStyle({ transitions: "none" })).toEqual({ transitionOn: "none", transitionType: "fade" });
+    expect(upgradeStyle({ transitionOn: "phrase", transitionType: "radial" })).toEqual({ transitionOn: "phrase", transitionType: "radial" });
   });
 });
 

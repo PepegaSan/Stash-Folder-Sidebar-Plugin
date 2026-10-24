@@ -121,6 +121,6 @@ describe("cuts like another PMV: generating", () => {
     const s = settings(project());
     const m = applyMood(s, "maximal");
     expect(m.cut.mode).toBe("template");
-    expect(m.style.transitions).toBe("flashBar");
+    expect(m.style).toMatchObject({ transitionOn: "bar", transitionType: "fadewhite" });
   });
 });

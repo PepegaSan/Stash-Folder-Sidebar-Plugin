@@ -8,7 +8,7 @@ import type { Clip, PmvProject, Snippet, SourceMedia } from "../model/project";
 import { audioEnd, clipEnd } from "../model/project";
 import { carve } from "../timeline/ops";
 import { EPS, beatLength, nearestGridTime } from "../timeline/time";
-import { type FillContext, type FillOptions, type OffsetMode, type PickOrder, type TransitionPolicy, fillSlots } from "./assemble";
+import { type FillContext, type FillOptions, type OffsetMode, type PickOrder, type TransitionPick, type TransitionPolicy, type TransitionWhen, fillSlots } from "./assemble";
 import type { ClipOptions, MaterialItem } from "./material";
 import { type Rhythm, beatFit } from "./motion";
 import { type CutOptions, type EnergyFn, analyzeBeats, assignStages, planCuts } from "./rhythm";
@@ -31,8 +31,24 @@ export interface SelectOptions {
 export interface StyleOptions {
   speed: number;
   speedRamps: boolean;
-  transitions: TransitionPolicy;
+  /** On which cuts a transition goes … */
+  transitionOn: TransitionWhen;
+  /** … and which one. */
+  transitionType: TransitionPick;
   flashDrops: boolean;
+}
+
+const LEGACY_TRANSITIONS: Record<TransitionPolicy, Pick<StyleOptions, "transitionOn" | "transitionType">> = {
+  none: { transitionOn: "none", transitionType: "fade" },
+  flashBar: { transitionOn: "bar", transitionType: "fadewhite" },
+  fadePhrase: { transitionOn: "phrase", transitionType: "fade" },
+  fadeAll: { transitionOn: "cut", transitionType: "fade" },
+};
+
+/** Style of saved settings and presets: before 0.9.4 one `transitions` value said where and which. */
+export function upgradeStyle(style: Partial<StyleOptions> & { transitions?: TransitionPolicy } = {}): Partial<StyleOptions> {
+  const { transitions, ...rest } = style;
+  return transitions && LEGACY_TRANSITIONS[transitions] && !rest.transitionOn ? { ...LEGACY_TRANSITIONS[transitions], ...rest } : rest;
 }
 
 export interface TargetOptions {
@@ -57,10 +73,10 @@ export interface GeneratorSettings {
 
 /** `label` is an i18n key – translate it with t() where it is shown. */
 export const MOODS: Record<Exclude<Mood, "custom">, { label: string; cut: Partial<CutOptions>; style: Partial<StyleOptions> }> = {
-  classic: { label: "PMV classic", cut: { mode: "auto", pace: "normal", onGrid: true }, style: { transitions: "none", flashDrops: true, speedRamps: false } },
-  maximal: { label: "Maximal", cut: { mode: "fixed", every: 1, onGrid: true }, style: { transitions: "flashBar", flashDrops: true, speedRamps: true } },
-  hypno: { label: "Hypno", cut: { mode: "fixed", every: 2, onGrid: true }, style: { transitions: "fadeAll", flashDrops: false, speedRamps: true } },
-  clean: { label: "Clean", cut: { mode: "auto", pace: "normal", onGrid: true }, style: { transitions: "none", flashDrops: false, speedRamps: false } },
+  classic: { label: "PMV classic", cut: { mode: "auto", pace: "normal", onGrid: true }, style: { transitionOn: "none", flashDrops: true, speedRamps: false } },
+  maximal: { label: "Maximal", cut: { mode: "fixed", every: 1, onGrid: true }, style: { transitionOn: "bar", transitionType: "fadewhite", flashDrops: true, speedRamps: true } },
+  hypno: { label: "Hypno", cut: { mode: "fixed", every: 2, onGrid: true }, style: { transitionOn: "cut", transitionType: "fade", flashDrops: false, speedRamps: true } },
+  clean: { label: "Clean", cut: { mode: "auto", pace: "normal", onGrid: true }, style: { transitionOn: "none", flashDrops: false, speedRamps: false } },
 };
 
 export function defaultSettings(trackId: string): GeneratorSettings {
@@ -96,7 +112,7 @@ export function defaultSettings(trackId: string): GeneratorSettings {
     },
     select: { order: "shuffle", offset: "random", variety: true, followTimeline: false, paceMatch: false, beatSync: false },
     cut: { mode: "auto", pace: "normal", every: 2, pattern: [4, 2, 2], onGrid: true, minBeats: 0, maxBeats: 0 },
-    style: { speed: 1, speedRamps: false, transitions: "none", flashDrops: true },
+    style: { speed: 1, speedRamps: false, transitionOn: "none", transitionType: "fade", flashDrops: true },
     target: { range: "song", bars: 16, trackId, replaceTrack: false, addToBin: true },
   };
 }

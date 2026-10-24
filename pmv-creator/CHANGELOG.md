@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.4 (2026-10-24)
+
+- Generator: **when to cut** right in the simple view, like the PMV Generator – *Automatic* (with its pace slow/normal/fast), *Every beat*, *Every 2 beats*, *Every 4 beats* (one cut per bar, on its “one”) or *Like another PMV*. A mood keeps its name while its own cutting stays.
+- Generator: **transitions** – any of the 13 transitions of the timeline (flash, crossfade, fade through black, dissolve, wipes, slides, circle, zoom, blur, pixelate, clock wipe) or **Mix** (a different one each time, the same for the same seed), on every cut, on every bar or per phrase (4 bars); also in the simple view. Settings and presets saved before keep their transitions.
+
 ## 0.9.3 (2026-10-24)
 
 - **Preview without black clips and frozen pictures**: some videos showed only one still frame in the PMV preview, or the picture went black for a moment – mostly long files over a NAS or Wi-Fi (their index sits at the end of the file and takes a second or more to load) and short clips. The preview now loads the next clips ahead in four players (up to 12 s, the nearest first), starts a waiting clip a moment before its cut so it is already moving, and keeps the last picture instead of black while a file still opens. A slow seek is no longer restarted on every frame (that left the picture frozen for the whole clip); seeks aim where the music will be once they are through, small drift is evened out with the playback speed. Both sides of a transition play. Edits and the scene list on the left no longer reload the players. Quick record uses the same preview and gains the same.

@@ -136,7 +136,8 @@ Die Pipeline ist in [src/generator/](../src/generator/) in reine, getestete Stuf
 | Clips aus: Filter, Playlist, Versus, Meistgesehen | Filter, Oft angesehen (30 Tage, sonst insgesamt), Projekt-Szenen, Auswahl. Playlists/Versus (Stash UI) fehlen noch |
 | Szenen / Bilder / Marker; Tags alle/eines/ausschließen, Haupt-Tags, Performer, Favoriten, Bewertung, Mindestlänge, Auflösung, Format, Ordner | gleiche Filterlogik (`buildFilter` portiert, inkl. „Haupt-Tags + eines“ auf dem Client). Ordner als „Pfad enthält“, keine Bilder |
 | Tag-Stufen A → B → C, letzte auf Drops (2 Takte) und im Finale (letztes Zehntel) | gleich (`assignStages`). Eine leere Stufe leiht sich Clips von den anderen |
-| Schnitt automatisch nach Energie, Pace 8·4·2 / 4·2·1 / 2·1·1, Schwellen 0,4/0,72; fest alle N Beats; auf dem Taktraster; kürzester/längster Clip | gleich, zusätzlich *Muster* (z. B. `4,2,2`, auch halbe Beats) |
+| Schnitt automatisch nach Energie, Pace 8·4·2 / 4·2·1 / 2·1·1, Schwellen 0,4/0,72; fest alle N Beats; auf dem Taktraster; kürzester/längster Clip | gleich, in der einfachen Ansicht wie dort *Automatisch / Jeder Beat / Alle 2 Beats / Alle 4 Beats* (auf der „1“); zusätzlich *Muster* (z. B. `4,2,2`, auch halbe Beats) |
+| Übergänge beim Schnitt: Whip (Bewegungsunschärfe), Zoom-Einstieg, Flash | die 13 xfade-Übergänge der Timeline (Blitz, Überblenden, Schwarzblende, Auflösen, Wischen, Schieben, Kreis, Zoom, Unschärfe, Verpixeln, Uhr) oder *Mix* (jedes Mal ein anderer, nie zweimal derselbe, eigene Zufallsfolge – die Clips eines Seeds bleiben gleich); auf jedem Schnitt, jedem Takt oder pro Phrase. Längen: Blitz ≤ 0,12 s, Phrase 1 Beat, sonst ≤ 0,3 s bzw. ein Drittel des Clips |
 | Drop: Energie +0,35 gegenüber einem Takt davor, > 0,6, höchstens alle 16 Beats | gleich. Am Drop wird immer geschnitten, optional mit Flash |
 | Vielfalt: Szene nicht in den letzten 24 Clips, Performer möglichst nicht in den letzten 4 | gleich |
 | Szenen-Zeitleiste folgen (±12 %) | gleich |
@@ -261,7 +262,7 @@ Eigenschaften:
 * Preview, EDL, OTIO und Render teilen sich `flattenTimeline` und `resolveTransitions`.
 
 ## 9. Grenzen & Ausbaustufen
-* **Preview** ist eine Annäherung: Bei Übergängen steht die Gegenseite als Standbild, und Transcode-Streams (nicht browserfähige Codecs) springen beim Spulen. Abhilfe wäre ein Proxy-Render (Backend-Op, niedrige Auflösung, All-Intra).
+* **Preview** ist eine Annäherung: Übergänge sind per CSS nachgebildet, und Transcode-Streams (nicht browserfähige Codecs) springen beim Spulen. Über eine langsame Verbindung (große `moov`-Indizes) bleibt bei sehr kurzen Clips das letzte Bild stehen, bis der nächste Clip geladen ist. Abhilfe wäre ein Proxy-Render (Backend-Op, niedrige Auflösung, All-Intra).
 * Keine Effekte (Reverse, Freeze, Zoom/Ken-Burns, Farbe), keine Mehrfachauswahl, kein Ducking von Clip-Ton gegen Musik.
 * EDL ist einspurig, nicht-dissolve-Übergänge stehen nur als Kommentar. Strikte CMX-Leser erlauben maximal 999 Events.
 * Abbrechen eines Renders: Stash beendet den Python-Prozess. Bereits laufende Segment-FFmpegs laufen ggf. noch zu Ende (Sekunden).

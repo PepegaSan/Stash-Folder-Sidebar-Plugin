@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.3-informational)
+![Version](https://img.shields.io/badge/version-0.9.4-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -584,7 +584,7 @@ Works in classic Stash and in Stash UI.
 - **Beat-grid timeline** — BPM detection/tap, snap, ripple/overwrite modes, trim/slip/split, transitions, speed with beat-safe duration; music volume right on the music lane, 🔊 listening volume for the preview
 - **Scene view in the main player** — a scene opens big in place of the preview (tabs *PMV preview* / *Scene*): pick ranges, move a clip to another spot or put another scene into it
 - **Ground rule** — another part of the scene never changes a clip's place on the timeline
-- **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"; **presets** saved on the server; clips from one of your **saved Stash filters**; your own rendered PMVs are never picked as material
+- **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy or on every beat / every 2 / every 4 beats, transitions of your choice (or a mix) on every cut, bar or phrase, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"; **presets** saved on the server; clips from one of your **saved Stash filters**; your own rendered PMVs are never picked as material
 - **Several PMVs at once** — pick songs, each becomes its own project with the same generator settings and is rendered one after another in Stash's queue (e.g. overnight on the PC)
 - **Cuts like another PMV** — pick a PMV from the library: its cuts and flashes (and its music, if you like) are measured and the generator cuts your clips at exactly those moments
 - **Touching up** — 🎲 another clip for one spot (N), 📌 keep the good ones when generating again (P), ⊘ take a scene out of the PMV (optionally for good, via a Stash tag), ⏮ ⏭ review the cuts one by one ([ ] or ↑ ↓)
@@ -617,6 +617,11 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.4
+
+- Generator: **when to cut** right in the simple view, like the PMV Generator – *Automatic* (pace slow/normal/fast), *Every beat*, *Every 2 beats*, *Every 4 beats* (on the bar's "one") or *Like another PMV*
+- Generator: **transitions** – any of the 13 transitions of the timeline (flash, crossfade, fade through black, wipes, slides, circle, zoom, blur, pixelate, clock wipe …) or **Mix** (a different one each time), on every cut, on every bar or per phrase; older settings and presets keep theirs
 
 ### PMV Creator 0.9.3
 

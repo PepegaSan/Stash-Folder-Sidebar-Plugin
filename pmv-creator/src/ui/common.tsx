@@ -185,7 +185,8 @@ export function More({ label, children, defaultOpen = false }: { label?: string;
 }
 
 /** Segmented control (one of a few options). */
-export function Seg<T extends string | number>({ value, options, onChange, disabled }: { value: T; options: Array<[T, string, string?]>; onChange: (v: T) => void; disabled?: boolean }) {
+/** Segmented buttons; `value` null = none of them on. */
+export function Seg<T extends string | number>({ value, options, onChange, disabled }: { value: T | null; options: Array<[T, string, string?]>; onChange: (v: T) => void; disabled?: boolean }) {
   return (
     <div className="pmv-seg">
       {options.map(([v, label, title]) => (

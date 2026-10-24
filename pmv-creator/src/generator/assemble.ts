@@ -1,6 +1,6 @@
 /** Generator stage "selection": which clip and which spot of it goes into each slot. */
 import { uid } from "../model/ids";
-import type { Clip, PmvProject, Transition } from "../model/project";
+import type { Clip, PmvProject, Transition, TransitionType } from "../model/project";
 import { EPS, beatLength, clamp } from "../timeline/time";
 import type { MaterialItem } from "./material";
 import type { SpeedSpot } from "./motion";
@@ -11,6 +11,11 @@ import type { Slot } from "./rhythm";
 export type PickOrder = "shuffle" | "interleave" | "source";
 /** Non-marker clips start at a seeded random spot, at the beginning, or where their last use stopped. */
 export type OffsetMode = "random" | "start" | "continue";
+/** Which cuts get a transition: none, every cut, the bar's "one", the start of a 4-bar phrase. */
+export type TransitionWhen = "none" | "cut" | "bar" | "phrase";
+/** One of the xfade transitions, or "mix": a different one each time (seeded). */
+export type TransitionPick = TransitionType | "mix";
+/** Settings saved before 0.9.4 named place and kind of the transitions in one value. */
 export type TransitionPolicy = "none" | "flashBar" | "fadePhrase" | "fadeAll";
 
 export interface FillOptions {
@@ -26,7 +31,8 @@ export interface FillOptions {
   speed: number;
   /** Slow motion in calm parts, faster in loud ones, a burst on drops. */
   speedRamps: boolean;
-  transitions: TransitionPolicy;
+  transitionOn: TransitionWhen;
+  transitionType: TransitionPick;
   flashDrops: boolean;
 }
 
@@ -107,18 +113,19 @@ class Pool {
   }
 }
 
-function transitionFor(o: FillOptions, slot: Slot, beat: number): Transition | null {
+/** What "mix" draws from – the flash and the black dip are choices of their own. */
+export const MIX_TRANSITIONS: TransitionType[] = ["fade", "wipeleft", "wiperight", "slideleft", "slideright", "circleopen", "zoomin", "hblur", "radial", "pixelize"];
+
+function transitionFor(o: FillOptions, slot: Slot, beat: number, mix: () => TransitionType): Transition | null {
   if (slot.flash || (slot.drop && o.flashDrops)) return { type: "fadewhite", duration: Math.min(0.15, beat / 3) };
-  switch (o.transitions) {
-    case "flashBar":
-      return slot.downbeat ? { type: "fadewhite", duration: Math.min(0.12, beat / 4) } : null;
-    case "fadePhrase":
-      return slot.phrase ? { type: "fade", duration: beat } : null;
-    case "fadeAll":
-      return { type: "fade", duration: Math.min(0.15, slot.duration / 3) };
-    case "none":
-      return null;
-  }
+  const on = o.transitionOn === "cut" || (o.transitionOn === "bar" && slot.downbeat) || (o.transitionOn === "phrase" && slot.phrase);
+  if (!on) return null;
+  const type = o.transitionType === "mix" ? mix() : o.transitionType;
+  // a flash is a blink, a phrase gets a whole beat; else short, so the clips keep their beat
+  if (type === "fadewhite") return { type, duration: Math.min(0.12, beat / 4) };
+  if (o.transitionOn === "phrase") return { type, duration: beat };
+  if (o.transitionOn === "cut" && (type === "fade" || type === "dissolve")) return { type, duration: Math.min(0.15, slot.duration / 3) };
+  return { type, duration: Math.min(0.3, beat / 2, slot.duration / 3) };
 }
 
 function rampedSpeed(o: FillOptions, slot: Slot): number {
@@ -138,6 +145,14 @@ export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools:
   const rnd = mulberry32(o.seed ^ 0x9e3779b9);
   const queues = pools.map((items) => new Pool(items, o.order, rnd));
   const beat = beatLength(p.beatGrid);
+  // transitions draw from their own sequence: the clips of a seed stay the same whatever transition is chosen
+  const mixRnd = mulberry32(o.seed ^ 0x2f6b3c1d);
+  let lastMix: TransitionType | null = null;
+  const mix = (): TransitionType => {
+    const from = MIX_TRANSITIONS.filter((x) => x !== lastMix);
+    lastMix = from[Math.floor(mixRnd() * from.length)];
+    return lastMix;
+  };
   const recentScenes: string[] = [];
   const recentPerformers: string[][] = [];
   const usedSpots = new Map<string, number[]>();
@@ -237,7 +252,7 @@ export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools:
       sourceIn: start,
       speed,
       volume: 0,
-      transitionIn: k === 0 ? null : transitionFor(o, slot, beat),
+      transitionIn: k === 0 ? null : transitionFor(o, slot, beat, mix),
       fit: null,
       label: s.label,
     });

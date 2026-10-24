@@ -5,8 +5,8 @@
  * to an offline cut; split screens and live effects are left out).
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import type { PickOrder, TransitionPolicy } from "../../generator/assemble";
-import { type GeneratorSettings, MOODS, type Mood, applyMood, defaultSettings, generationRange, pinnedClips } from "../../generator/generate";
+import type { PickOrder, TransitionPick, TransitionWhen } from "../../generator/assemble";
+import { type GeneratorSettings, MOODS, type Mood, type StyleOptions, applyMood, defaultSettings, generationRange, pinnedClips, upgradeStyle } from "../../generator/generate";
 import type { ClipOptions, ClipSource, TagStage } from "../../generator/material";
 import type { CutOptions, Pace } from "../../generator/rhythm";
 import { t, tn } from "../../i18n";
@@ -17,7 +17,7 @@ import { listSavedSceneFilters } from "../../stash/savedFilters";
 import type { StashRef } from "../../stash/types";
 import { rememberAdvanced } from "../../state/prefs";
 import { useEditor } from "../../state/store";
-import { NumField, RefPicker, Seg } from "../common";
+import { NumField, RefPicker, Seg, transitionLabel } from "../common";
 import { CutTemplateBox } from "./CutTemplateBox";
 import { type RunOutcome, runGenerator } from "./run";
 import { SavedFilterPick } from "./SavedFilterPick";
@@ -38,7 +38,7 @@ export function loadSaved(fallbackTrack: string, trackIds: string[]): GeneratorS
       clips: { ...base.clips, ...s.clips },
       select: { ...base.select, ...s.select },
       cut: { ...base.cut, ...s.cut },
-      style: { ...base.style, ...s.style },
+      style: { ...base.style, ...upgradeStyle(s.style) },
       target: { ...base.target, ...s.target, trackId },
     };
   } catch {
@@ -63,7 +63,7 @@ export function withPreset(x: GeneratorSettings, ps: Partial<GeneratorSettings>)
     clips: { ...base.clips, ...ps.clips },
     select: { ...base.select, ...ps.select },
     cut: { ...base.cut, ...ps.cut },
-    style: { ...base.style, ...ps.style },
+    style: { ...base.style, ...upgradeStyle(ps.style) },
   };
 }
 
@@ -71,6 +71,53 @@ export function withPreset(x: GeneratorSettings, ps: Partial<GeneratorSettings>)
 export function cutsToMusic(x: GeneratorSettings): GeneratorSettings {
   const back = { ...x, cut: { ...x.cut, mode: "auto" as const } };
   return x.mood === "custom" ? back : applyMood(back, x.mood);
+}
+
+/** "When to cut" in the simple view, like the PMV Generator: by the music, every 1/2/4 beats, or like another PMV. */
+export type CutChoice = "auto" | "1" | "2" | "4" | "template";
+
+export function cutChoiceOf(cut: CutOptions): CutChoice | null {
+  if (cut.mode === "template" || cut.mode === "auto") return cut.mode;
+  return cut.mode === "fixed" && [1, 2, 4].includes(cut.every) ? (String(cut.every) as CutChoice) : null;
+}
+
+/** The mood keeps its name only while its own cutting stays; every 4 beats sits on the bar's "one". */
+export function chooseCut(x: GeneratorSettings, v: CutChoice): GeneratorSettings {
+  if (v === "template") return { ...x, cut: { ...x.cut, mode: "template" } };
+  const cut: CutOptions = v === "auto" ? { ...x.cut, mode: "auto", onGrid: true } : { ...x.cut, mode: "fixed", every: Number(v), onGrid: true };
+  const own = x.mood === "custom" ? null : MOODS[x.mood].cut;
+  const kept = !!own && own.mode === cut.mode && (cut.mode !== "fixed" || own.every === cut.every);
+  return { ...x, mood: kept ? x.mood : "custom", cut };
+}
+
+/** The generator's transitions in the order of the list: the PMV classics first. */
+const GEN_TRANSITIONS = ["fadewhite", "fade", "fadeblack", "dissolve", "wipeleft", "wiperight", "slideleft", "slideright", "circleopen", "zoomin", "hblur", "pixelize", "radial"] as const;
+
+/** Which transition the generator puts on its cuts, and on which ones. */
+function TransitionChoice({ style, onChange }: { style: StyleOptions; onChange: (patch: Partial<StyleOptions>) => void }) {
+  const kind = style.transitionOn === "none" ? "none" : style.transitionType;
+  const pick = (v: string) =>
+    v === "none" ? onChange({ transitionOn: "none" }) : onChange({ transitionType: v as TransitionPick, ...(style.transitionOn === "none" ? { transitionOn: "bar" as const } : {}) });
+  return (
+    <span className="pmv-row">
+      <select className="form-control form-control-sm pmv-gen-trans" value={kind} title={t("Which transition the generator puts on the cuts")} onChange={(e) => pick(e.target.value)}>
+        <option value="none">{t("Hard cuts")}</option>
+        {GEN_TRANSITIONS.map((x) => (
+          <option key={x} value={x}>
+            {x === "fadewhite" ? t("Flash") : transitionLabel(x)}
+          </option>
+        ))}
+        <option value="mix">{t("Mix – a different one each time")}</option>
+      </select>
+      {style.transitionOn !== "none" && (
+        <select className="form-control form-control-sm pmv-gen-trans" value={style.transitionOn} title={t("On which cuts")} onChange={(e) => onChange({ transitionOn: e.target.value as TransitionWhen })}>
+          <option value="cut">{t("on every cut")}</option>
+          <option value="bar">{t("on every bar")}</option>
+          <option value="phrase">{t("per phrase (4 bars)")}</option>
+        </select>
+      )}
+    </span>
+  );
 }
 
 const Check = ({ label, checked, onChange, title, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; title?: string; disabled?: boolean }) => (
@@ -244,19 +291,35 @@ export function GeneratorDialog() {
         )}
         {clipPreset && <div className="pmv-li-meta">{t("Clips with {name} – change it below.", { name: clipPreset.label })}</div>}
         {!adv && (
-          <div className="pmv-row pmv-wrap">
-            <span className="pmv-gen-label">{t("Cuts")}</span>
-            <Seg<"music" | "template">
-              value={fromPmv ? "template" : "music"}
-              onChange={(v) => setS((x) => (v === "template" ? { ...x, cut: { ...x.cut, mode: "template" } } : cutsToMusic(x)))}
-              options={[
-                ["music", t("To the music"), t("Cut on the beat, the way the mood says")],
-                ["template", t("Like another PMV"), t("Takes over the cuts and flashes of a PMV from your library")],
-              ]}
-            />
-          </div>
+          <>
+            <div className="pmv-row pmv-wrap">
+              <span className="pmv-gen-label">{t("Cutting")}</span>
+              <Seg<CutChoice>
+                value={cutChoiceOf(s.cut)}
+                onChange={(v) => setS((x) => chooseCut(x, v))}
+                options={[
+                  ["auto", t("Automatic"), t("By the music's energy: calm long, loud short")],
+                  ["1", t("Every beat")],
+                  ["2", t("Every 2 beats")],
+                  ["4", t("Every 4 beats"), t("One cut per bar, on its “one”")],
+                  ["template", t("Like another PMV"), t("Takes over the cuts and flashes of a PMV from your library")],
+                ]}
+              />
+              {!cutChoiceOf(s.cut) && <span className="pmv-li-meta">{t("own cutting – see Advanced")}</span>}
+            </div>
+            {s.cut.mode === "auto" && (
+              <div className="pmv-row pmv-wrap">
+                <span className="pmv-gen-label">{t("Pace")}</span>
+                <Seg<Pace> value={s.cut.pace} onChange={(v) => setCut({ pace: v })} options={[["slow", t("Slow"), t("calm 8 · medium 4 · loud 2 beats")], ["normal", t("Normal"), t("calm 4 · medium 2 · loud 1 beat")], ["fast", t("Fast"), t("calm 2 · medium 1 · loud 1 beat")]]} />
+              </div>
+            )}
+            {fromPmv && <CutTemplateBox disabled={!!busy} />}
+            <div className="pmv-row pmv-wrap">
+              <span className="pmv-gen-label">{t("Transitions")}</span>
+              <TransitionChoice style={s.style} onChange={setStyle} />
+            </div>
+          </>
         )}
-        {!adv && fromPmv && <CutTemplateBox disabled={!!busy} />}
 
         {!adv ? (
           // ---------------------------------------------------------------- simple: what is needed, nothing else
@@ -434,12 +497,7 @@ export function GeneratorDialog() {
                   <NumField value={s.cut.maxBeats} onCommit={(v) => setCut({ maxBeats: Math.round(v) })} min={0} max={32} step={1} digits={0} suffix={t("max beats")} title={t("Longest clip in beats (0 = off)")} />
                 </span>
                 <label>{t("Transitions")}</label>
-                <select className="form-control form-control-sm" value={s.style.transitions} onChange={(e) => setStyle({ transitions: e.target.value as TransitionPolicy })}>
-                  <option value="none">{t("Hard cuts")}</option>
-                  <option value="flashBar">{t("Flash on every bar")}</option>
-                  <option value="fadePhrase">{t("Dissolve per phrase (4 bars)")}</option>
-                  <option value="fadeAll">{t("Short dissolve on every cut")}</option>
-                </select>
+                <TransitionChoice style={s.style} onChange={setStyle} />
                 <label>{t("Speed")}</label>
                 <NumField value={s.style.speed} onCommit={(v) => setStyle({ speed: v })} min={0.25} max={4} step={0.05} suffix="×" />
               </div>

@@ -361,9 +361,13 @@ describe("PMV Creator UI (mocked Stash)", () => {
     await fire($$(".pmv-gen .pmv-seg button").find((b) => b.textContent === "Like another PMV")!, new MouseEvent("click", { bubbles: true }));
     await waitFor(() => $$(".pmv-gen-pmv").length > 0);
     expect(byText("⚡ Generate")!.hasAttribute("disabled")).toBe(true);
-    await fire($$(".pmv-gen .pmv-seg button").find((b) => b.textContent === "To the music")!, new MouseEvent("click", { bubbles: true }));
+    await fire($$(".pmv-gen .pmv-seg button").find((b) => b.textContent === "Every 2 beats")!, new MouseEvent("click", { bubbles: true }));
     expect($(".pmv-gen-template")).toBeNull();
     expect(byText("⚡ Generate")!.hasAttribute("disabled")).toBe(false);
+    // Hypno cuts every 2 beats itself: the mood stays; the transitions are offered right here too
+    expect(on()).toEqual(expect.arrayContaining(["Hypno", "Every 2 beats"]));
+    const kinds = $$(".pmv-gen select").find((s) => s.querySelector("option[value='mix']"));
+    expect(kinds && [...kinds.querySelectorAll("option")].map((o) => o.textContent)).toEqual(expect.arrayContaining(["Hard cuts", "Flash", "Crossfade", "Wipe to the left", "Mix – a different one each time"]));
     await fire(byText("Close")!, new MouseEvent("click", { bubbles: true }));
     // the song library next to the upload (inspector, nothing selected)
     await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
