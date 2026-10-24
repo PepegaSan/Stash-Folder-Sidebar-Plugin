@@ -30,7 +30,7 @@ export function PreviewPlayer() {
   const fps = project.output.fps;
 
   useEffect(() => {
-    const engine = new PreviewEngine([aRef.current!, bRef.current!], overlayRef.current!, blurRef.current);
+    const engine = new PreviewEngine([aRef.current!, bRef.current!], overlayRef.current!, blurRef.current, () => transport.listenLevel);
     engineRef.current = engine;
     const off = transport.subscribe(() => engine.render(transport.time, transport.playing));
     // PC ↔ Stash: re-cue the players, also while paused

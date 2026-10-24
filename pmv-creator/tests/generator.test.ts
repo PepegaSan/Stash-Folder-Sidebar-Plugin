@@ -76,6 +76,29 @@ describe("cutting (Pepega rules)", () => {
     expect(slots.map((s) => s.duration)).toEqual([0.5, 0.25, 0.25, 0.5, 0.25, 0.25, 0.5, 0.25, 0.25, 0.5, 0.25, 0.25]);
   });
 
+  it("a song whose first beat comes a few ms in gets no sliver clip at the start", () => {
+    const late = { ...GRID, offset: 0.005 };
+    const lb = analyzeBeats(late, 0, 8);
+    expect(lb[0]).toMatchObject({ t: 0, downbeat: true, phrase: true });
+    expect(lb[1].t).toBeCloseTo(0.505);
+    const slots = planCuts(lb, late, 0, 8, { mode: "fixed", pace: "normal", every: 1, pattern: [], onGrid: true, minBeats: 0, maxBeats: 0 });
+    expect(slots[0]).toMatchObject({ start: 0, downbeat: true });
+    expect(slots[0].duration).toBeCloseTo(0.505);
+    expect(Math.min(...slots.map((s) => s.duration))).toBeGreaterThan(0.49);
+    // more than half a beat before the first one stays a beat of its own (a pickup)
+    expect(analyzeBeats({ ...GRID, offset: 0.3 }, 0, 4)[0].t).toBe(0);
+    expect(analyzeBeats({ ...GRID, offset: 0.3 }, 0, 4)[1].t).toBeCloseTo(0.3);
+  });
+
+  it("pattern mode keeps its cuts on the beat grid when the range starts between beats", () => {
+    const off = { ...GRID, offset: 0.3 };
+    const slots = planCuts(analyzeBeats(off, 0, 10), off, 0, 10, { mode: "pattern", pace: "normal", every: 2, pattern: [2, 1], onGrid: true, minBeats: 0, maxBeats: 0 });
+    expect(slots[0].start).toBe(0);
+    for (const s of slots.slice(1)) expect(Math.abs(((s.start - 0.3) / 0.5) % 1)).toBeLessThan(1e-6);
+    expect(slots.slice(1, 4).map((s) => +s.start.toFixed(3))).toEqual([1.3, 1.8, 2.8]);
+    expect(slots.reduce((n, s) => n + s.duration, 0)).toBeCloseTo(10);
+  });
+
   it("tag stages: last stage on drops (2 bars) and in the finale", () => {
     const slots = planCuts(beats, GRID, 0, 32, { mode: "fixed", pace: "normal", every: 4, pattern: [], onGrid: true, minBeats: 0, maxBeats: 0 });
     const st = assignStages(slots, 3, 0.5);

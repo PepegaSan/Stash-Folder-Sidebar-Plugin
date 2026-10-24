@@ -17,7 +17,7 @@ import { EPS, beatLength, clamp, formatBarBeat, formatTime, snapRange, snapTime 
 import { SpriteThumb, sceneHue, transitionLabel } from "../common";
 import { ClipActions, ClipNotice, ReplaceAllButton, SourceToggle } from "../monitor";
 import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions } from "../editing";
-import { useAudioAnalysis, useSprites, useTransportTime } from "../hooks";
+import { useAudioAnalysis, useListen, useSprites, useTransportTime } from "../hooks";
 import { reviewCut } from "../review";
 import { Waveform } from "./Waveform";
 
@@ -274,6 +274,7 @@ export function Timeline() {
             ⏭
           </button>
         </span>
+        <ListenVolume />
         <span className="pmv-spacer" />
         <SourceToggle />
         <ReplaceAllButton />
@@ -363,8 +364,11 @@ export function Timeline() {
           </div>
 
           <div className="pmv-tl-row" style={{ height: AUDIO_H }}>
-            <div className="pmv-tl-head" title={project.audio?.name}>
-              ♪ {project.audio ? project.audio.name || t("Music") : t("no music")}
+            <div className="pmv-tl-head pmv-tl-head-audio">
+              <span className="pmv-track-name" title={project.audio?.name}>
+                ♪ {project.audio ? project.audio.name || t("Music") : t("no music")}
+              </span>
+              {project.audio && <MusicLevel gainDb={project.audio.gainDb} />}
             </div>
             <div className="pmv-lane pmv-lane-audio" style={{ ...gridStyle, height: AUDIO_H }} onPointerDown={seekFromPointer}>
               {project.audio && (
@@ -452,6 +456,46 @@ function TrackHead({ track, canRemove }: { track: Track; canRemove: boolean }) {
         </button>
       )}
     </div>
+  );
+}
+
+// a slider keeps the focus after a drag – hand it back so Space plays again
+const blurAfterDrag = (e: React.PointerEvent<HTMLInputElement>) => e.currentTarget.blur();
+
+/** 🔊 How loud the preview plays in this browser – the rendered PMV and a quick recording keep their level. */
+function ListenVolume() {
+  const { transport } = useEditor();
+  const listen = useListen(transport);
+  const off = listen.muted || listen.volume <= 0;
+  return (
+    <span className="pmv-vol">
+      <button className="btn btn-sm btn-secondary" title={off ? t("Sound on") : t("Mute the preview")} onClick={() => transport.setListen(off ? { muted: false, volume: listen.volume || 1 } : { muted: true })}>
+        {off ? "🔇" : "🔊"}
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={listen.muted ? 0 : listen.volume}
+        title={t("Listening volume: how loud the preview plays in this browser – the PMV itself stays as it is")}
+        onChange={(e) => transport.setListen({ volume: +e.target.value, muted: false })}
+        onPointerUp={blurAfterDrag}
+      />
+    </span>
+  );
+}
+
+/** ♪ Volume of the music in the PMV (the render's gain in dB, shown as %), right at the music lane. */
+function MusicLevel({ gainDb }: { gainDb: number }) {
+  const { dispatch } = useEditor();
+  const amp = 10 ** (gainDb / 20);
+  const set = (v: number) => dispatch({ type: "audio/update", patch: { gainDb: v > 0 ? clamp(Math.round(200 * Math.log10(v)) / 10, -60, 24) : -60 } });
+  return (
+    <span className="pmv-vol" title={t("Music volume in the PMV – above 100 % only the render gets louder · double-click: 100 %")}>
+      <input type="range" min={0} max={2} step={0.05} value={Math.min(2, amp)} onChange={(e) => set(+e.target.value)} onDoubleClick={() => set(1)} onPointerUp={blurAfterDrag} />
+      <span className="pmv-mono">{Math.round(amp * 100)}%</span>
+    </span>
   );
 }
 

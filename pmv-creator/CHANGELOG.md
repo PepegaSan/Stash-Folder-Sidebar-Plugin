@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.1 (2026-10-24)
+
+- **Volume in the timeline**: the music lane (♪) has a slider for the music's volume in the PMV (0–200 %, the render's level – the same value as *Level* in the inspector, double-click = 100 %; the preview plays up to 100 %). **🔊** above the timeline sets how loud the preview plays in this browser (also the scene in the big player), remembered per browser; a click mutes it. It never changes the render or a Quick record – the recording keeps the PMV's own level while the speakers follow 🔊.
+- Generator: a song whose first beat comes a few milliseconds in no longer gets a sliver clip at the very start – less than half a beat before the first full beat joins it. *Pattern* cutting now counts from the first full beat, so its cuts stay on the beat grid when the song (or the range) starts between two beats.
+
 ## 0.9.0 (2026-10-23)
 
 - **📦 Several PMVs at once** (*Project* menu, or *Several songs…* in the generator): pick songs from the song library or upload them; every song becomes its own project with the same generator settings (the current ones or a preset, each song with its own seed), generated one after another, saved, and rendered on the server or on the PC. The renders queue up in Stash and go on without the tab – a batch overnight on the PC is the idea. ✎ opens a project to fine-tune it.

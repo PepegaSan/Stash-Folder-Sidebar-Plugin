@@ -11,7 +11,8 @@ export function Waveform({ audio, analysis, zoom, left, width, height }: { audio
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.max(1, Math.floor(width * dpr));
     canvas.height = Math.floor(height * dpr);
-    const g = canvas.getContext("2d")!;
+    const g = canvas.getContext("2d");
+    if (!g) return;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, width, height);
     if (!analysis) return;

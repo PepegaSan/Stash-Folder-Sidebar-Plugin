@@ -38,8 +38,12 @@ export function analyzeBeats(grid: BeatGrid, from: number, to: number, energy?: 
   const raw = beatIndexAt(from, grid);
   const idx: number[] = [];
   for (let b = Math.abs(raw - Math.round(raw)) < 1e-6 ? Math.round(raw) : raw; timeOfBeat(b, grid) < to - EPS; b = Math.floor(b + 1 + 1e-9)) idx.push(b);
+  // less than half a beat before the first full one joins it – no cut a few milliseconds into the range
+  const lead = idx.length > 1 && idx[1] - idx[0] < 0.5;
+  if (lead) idx.shift();
+  const at = (i: number) => (i === 0 && lead ? from : timeOfBeat(idx[i], grid));
 
-  const rawE = idx.map((b) => (energy ? energy(timeOfBeat(b, grid), timeOfBeat(b, grid) + beat) : 0));
+  const rawE = idx.map((b, i) => (energy ? energy(at(i), timeOfBeat(b, grid) + beat) : 0));
   const sorted = [...rawE].sort((a, b) => a - b);
   const lo = sorted[Math.floor(0.1 * (sorted.length - 1))] ?? 0;
   const hi = sorted[Math.floor(0.9 * (sorted.length - 1))] ?? 0;
@@ -53,7 +57,7 @@ export function analyzeBeats(grid: BeatGrid, from: number, to: number, energy?: 
     // a drop: clearly louder than a bar ago, loud, and not right after the last one
     const drop = !!energy && i >= 4 && e - norm(rawE[i - 4]) > 0.35 && e > 0.6 && i - lastDrop >= 16;
     if (drop) lastDrop = i;
-    return { t: timeOfBeat(b, grid), e, pos, downbeat, phrase: downbeat && Math.round(b / bpb) % 4 === 0, drop };
+    return { t: at(i), e, pos, downbeat, phrase: downbeat && Math.round(b / bpb) % 4 === 0, drop };
   });
 }
 
@@ -109,10 +113,13 @@ export function planCuts(beats: BeatInfo[], grid: BeatGrid, from: number, to: nu
 
   if (o.mode === "pattern") {
     const pattern = o.pattern.filter((x) => x > 0);
-    let b = beatIndexAt(beats[0].t, grid);
-    for (let k = 0; timeOfBeat(b, grid) < to - EPS; k++) {
-      starts.push(timeOfBeat(b, grid));
+    starts.push(beats[0].t);
+    // counted from the first full beat, so a range that starts between beats keeps its cuts on the grid
+    let b = Math.ceil(beatIndexAt(beats[0].t, grid) - 1e-6);
+    for (let k = 0; ; k++) {
       b += pattern.length ? pattern[k % pattern.length] : 2;
+      if (timeOfBeat(b, grid) >= to - EPS) break;
+      starts.push(timeOfBeat(b, grid));
     }
   } else {
     const bpb = grid.beatsPerBar;

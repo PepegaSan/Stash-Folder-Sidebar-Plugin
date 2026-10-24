@@ -28,7 +28,7 @@ import { clamp, formatTime } from "../../timeline/time";
 import { allowAgain } from "../clipActions";
 import { NumField, SpriteThumb } from "../common";
 import { insertAction } from "../editing";
-import { useSprites } from "../hooks";
+import { useListen, useSprites } from "../hooks";
 import { LocalMediaBadge } from "../localMedia";
 import { SourceHostContext, sourceKeys } from "../monitor";
 
@@ -97,6 +97,12 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
 
   // PC ↔ Stash: the same spot from the new source
   useEffect(() => onStreamChange(() => slotRef.current?.sceneId && slotRef.current.assign(scene, slotRef.current.time)), []);
+
+  // 🔊 above the timeline sets how loud the scene plays, too – muting stays with the button here
+  const listen = useListen(transport);
+  useEffect(() => {
+    if (videoEl) videoEl.volume = listen.volume;
+  }, [videoEl, listen.volume]);
 
   // the scene replaces the PMV preview in the main player – only one of them plays
   useEffect(() => {

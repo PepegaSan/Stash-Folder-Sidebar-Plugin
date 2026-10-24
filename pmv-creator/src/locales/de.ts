@@ -598,6 +598,10 @@ const de: Record<string, string> = {
   "⚠ overlaps an excluded range": "⚠ überlappt einen ausgeschlossenen Bereich",
   "Drag: move · edges: trim · Alt+drag: slip · Shift: no snapping · double-click: edit the source": "Ziehen: verschieben · Kanten: trimmen · Alt+Ziehen: slippen · Shift: kein Einrasten · Doppelklick: Quelle bearbeiten",
   "📌 kept when generating again": "📌 bleibt beim erneuten Erzeugen",
+  "Sound on": "Ton an",
+  "Mute the preview": "Vorschau stummschalten",
+  "Listening volume: how loud the preview plays in this browser – the PMV itself stays as it is": "Abhör-Lautstärke: wie laut die Vorschau in diesem Browser spielt – das PMV selbst bleibt, wie es ist",
+  "Music volume in the PMV – above 100 % only the render gets louder · double-click: 100 %": "Lautstärke der Musik im PMV – über 100 % wird nur der Render lauter · Doppelklick: 100 %",
 
   // --- clip actions: another clip, keep, scene out (monitor.tsx, clipActions.ts)
   "Another clip": "Anderer Clip",

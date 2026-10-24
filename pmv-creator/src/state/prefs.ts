@@ -17,3 +17,30 @@ export function rememberAdvanced(on: boolean): void {
     /* private mode */
   }
 }
+
+const KEY_LISTEN = "pmv-creator:listen";
+
+/** How loud the preview plays in this browser (🔊 above the timeline) – never part of the render or a recording. */
+export interface Listen {
+  /** 0..1 */
+  volume: number;
+  muted: boolean;
+}
+
+export function readListen(): Listen {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY_LISTEN) ?? "null") as Partial<Listen> | null;
+    if (v && typeof v.volume === "number" && Number.isFinite(v.volume)) return { volume: Math.min(1, Math.max(0, v.volume)), muted: !!v.muted };
+  } catch {
+    /* private mode / garbage */
+  }
+  return { volume: 1, muted: false };
+}
+
+export function rememberListen(l: Listen): void {
+  try {
+    localStorage.setItem(KEY_LISTEN, JSON.stringify(l));
+  } catch {
+    /* private mode */
+  }
+}

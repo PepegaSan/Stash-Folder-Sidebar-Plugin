@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { type AudioAnalysis, analyzeAudio } from "../audio/analysis";
 import { stashUrl } from "../stash/graphql";
 import { type SpriteSheet, loadSprites } from "../stash/sprites";
+import type { Listen } from "../state/prefs";
 import type { Transport } from "../state/transport";
 
 /** Transport time as React state, throttled (for displays, not for the playhead line). */
@@ -24,6 +25,13 @@ export function useTransportPlaying(transport: Transport): boolean {
   const [p, setP] = useState(transport.playing);
   useEffect(() => transport.subscribe(() => setP(transport.playing)), [transport]);
   return p;
+}
+
+/** Listening volume of the preview (🔊 above the timeline). */
+export function useListen(transport: Transport): Listen {
+  const [l, setL] = useState(transport.listen);
+  useEffect(() => transport.subscribe(() => setL(transport.listen)), [transport]);
+  return l;
 }
 
 const analysisCache = new Map<string, Promise<AudioAnalysis>>();

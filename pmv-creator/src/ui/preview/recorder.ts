@@ -47,13 +47,24 @@ export function recordingSupported(): boolean {
 // one AudioContext per page; a media element can be captured only once, the node then owns its output
 let audioCtx: AudioContext | null = null;
 const sources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
-function captureElement(el: HTMLMediaElement, toSpeakers: boolean): MediaElementAudioSourceNode {
+function captureElement(el: HTMLMediaElement): MediaElementAudioSourceNode {
   audioCtx ??= new AudioContext();
   let node = sources.get(el);
   if (!node) {
     node = audioCtx.createMediaElementSource(el);
-    if (toSpeakers) node.connect(audioCtx.destination);
     sources.set(el, node);
+  }
+  return node;
+}
+
+/** The music keeps playing to the speakers – through the listening volume, which the recording never gets. */
+function captureMusic(transport: Transport): MediaElementAudioSourceNode {
+  const known = sources.has(transport.audio);
+  const node = captureElement(transport.audio);
+  if (!known) {
+    const speaker = audioCtx!.createGain();
+    node.connect(speaker).connect(audioCtx!.destination);
+    transport.routeSpeaker(speaker);
   }
   return node;
 }
@@ -96,7 +107,7 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
   const ctx = (audioCtx ??= new AudioContext());
   await ctx.resume().catch(() => undefined);
   const dest = ctx.createMediaStreamDestination();
-  const nodes = [captureElement(transport.audio, true), ...videos.map((v) => captureElement(v, false))];
+  const nodes = [captureMusic(transport), ...videos.map((v) => captureElement(v))];
   nodes.forEach((n) => n.connect(dest));
 
   const stream = new MediaStream([...canvas.captureStream(fps).getVideoTracks(), ...dest.stream.getAudioTracks()]);

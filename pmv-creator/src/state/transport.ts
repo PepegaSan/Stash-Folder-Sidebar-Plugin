@@ -6,6 +6,7 @@
 import type { AudioTrack } from "../model/project";
 import { stashUrl } from "../stash/graphql";
 import { clamp } from "../timeline/time";
+import { type Listen, readListen, rememberListen } from "./prefs";
 
 export class Transport {
   readonly audio: HTMLAudioElement;
@@ -17,6 +18,9 @@ export class Transport {
   private cfg: AudioTrack | null = null;
   private listeners = new Set<() => void>();
   private raf = 0;
+  private _listen: Listen = readListen();
+  /** Speaker branch of the music once a quick recording has routed it through Web Audio (recorder.ts). */
+  private speaker: GainNode | null = null;
 
   constructor() {
     this.audio = new Audio();
@@ -29,6 +33,32 @@ export class Transport {
 
   get playing(): boolean {
     return this._playing;
+  }
+
+  /** Listening volume of the preview (this browser only). */
+  get listen(): Listen {
+    return this._listen;
+  }
+
+  /** What the preview multiplies its sound with: 0 when muted. */
+  get listenLevel(): number {
+    return this._listen.muted ? 0 : this._listen.volume;
+  }
+
+  setListen(patch: Partial<Listen>): void {
+    this._listen = { ...this._listen, ...patch, volume: clamp(patch.volume ?? this._listen.volume, 0, 1) };
+    rememberListen(this._listen);
+    this.syncAudio(false);
+    this.emit();
+  }
+
+  /**
+   * A recording taps the music element itself (it can be captured only once, so for good): from then on
+   * the element plays at render level and the listening volume goes to the speaker branch only.
+   */
+  routeSpeaker(gain: GainNode): void {
+    this.speaker = gain;
+    this.syncAudio(false);
   }
 
   /** Called on every project change; only re-seeks when the music placement really changed. */
@@ -122,7 +152,9 @@ export class Transport {
     // music gain incl. fades, preview approximation of the render
     const fadeIn = a.fadeIn > 0 ? clamp((this._time - a.start) / a.fadeIn, 0, 1) : 1;
     const fadeOut = a.fadeOut > 0 ? clamp((this.duration - this._time) / a.fadeOut, 0, 1) : 1;
-    this.audio.volume = clamp(10 ** (a.gainDb / 20), 0, 1) * fadeIn * fadeOut;
+    const level = clamp(10 ** (a.gainDb / 20), 0, 1) * fadeIn * fadeOut;
+    if (this.speaker) this.speaker.gain.value = this.listenLevel;
+    this.audio.volume = this.speaker ? level : level * this.listenLevel;
     if (!this._playing || !inRange) {
       if (!this.audio.paused) this.audio.pause();
       if (force && inRange && this.audio.readyState > 0) this.audio.currentTime = local;

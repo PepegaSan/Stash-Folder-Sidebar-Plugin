@@ -507,6 +507,40 @@ describe("PMV Creator UI (mocked Stash)", () => {
     expect($(".pmv-batch")).toBeNull();
   });
 
+  it("sets the listening volume above the timeline and the music volume at the music lane", async () => {
+    const slide = async (el: HTMLInputElement, value: string) =>
+      act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, value);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    const stored = () => JSON.parse(localStorage.getItem("pmv-creator:listen") ?? "null");
+    // 🔊 listening volume: this browser only, remembered, not part of the project
+    const listen = $(".pmv-tl-toolbar .pmv-vol input[type=range]") as HTMLInputElement;
+    const mute = () => $(".pmv-tl-toolbar .pmv-vol button")!;
+    await slide(listen, "0.4");
+    expect(stored()).toEqual({ volume: 0.4, muted: false });
+    await fire(mute(), new MouseEvent("click", { bubbles: true }));
+    expect(stored()).toEqual({ volume: 0.4, muted: true });
+    expect(mute().textContent).toBe("🔇");
+    expect(listen.value).toBe("0");
+    await fire(mute(), new MouseEvent("click", { bubbles: true }));
+    expect(stored()).toEqual({ volume: 0.4, muted: false });
+    expect(listen.value).toBe("0.4");
+    // ♪ music volume: the render's gain, shown as % at the music lane
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await fire(byText("🎵 From the library…")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-songs")?.textContent?.includes("Neon Nights.mp3"));
+    await fire($$(".pmv-songs li").find((li) => li.textContent?.includes("Neon Nights.mp3"))!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-tl-head-audio .pmv-vol"));
+    const level = () => $(".pmv-tl-head-audio .pmv-vol")!.textContent;
+    expect(level()).toBe("100%");
+    await slide($(".pmv-tl-head-audio input[type=range]") as HTMLInputElement, "0.5");
+    expect(level()).toBe("50%");
+    await waitFor(() => (saved[saved.length - 1] as { audio?: { gainDb: number } }).audio?.gainDb === -6, 4000);
+    await fire($(".pmv-tl-head-audio input[type=range]")!, new MouseEvent("dblclick", { bubbles: true }));
+    expect(level()).toBe("100%");
+  });
+
   it("logged no React errors", () => {
     expect(errors).toEqual([]);
   });

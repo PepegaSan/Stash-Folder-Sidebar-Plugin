@@ -92,6 +92,8 @@ export class PreviewEngine {
     els: [HTMLVideoElement, HTMLVideoElement],
     private overlay: HTMLElement,
     private blur: HTMLCanvasElement | null = null,
+    /** Listening volume of the on-screen preview; a recording keeps the clips' own level. */
+    private listen: () => number = () => 1,
   ) {
     this.slots = els.map((el) => new VideoSlot(el));
     // paused: nothing re-renders when the picture arrives later – redraw the backdrop then
@@ -268,8 +270,9 @@ export class PreviewEngine {
     if (slot.sceneId !== scene.id || slot.stale) slot.assign(scene, src);
     const rate = clamp(seg.clip.speed, 0.0625, 16);
     if (slot.el.playbackRate !== rate) slot.el.playbackRate = rate;
-    slot.el.muted = seg.clip.volume <= 0;
-    slot.el.volume = clamp(seg.clip.volume, 0, 1);
+    const level = clamp(seg.clip.volume, 0, 1) * this.listen();
+    slot.el.muted = level <= 0;
+    slot.el.volume = level;
     const drift = Math.abs(slot.time - src);
     if (playing) {
       if (drift > DRIFT_PLAYING) slot.seek(src);
