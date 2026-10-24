@@ -2,6 +2,7 @@
 import { uid } from "../model/ids";
 import type { Clip, PmvProject, Transition, TransitionType } from "../model/project";
 import { EPS, beatLength, clamp } from "../timeline/time";
+import { shapeFits } from "./layouts";
 import type { MaterialItem } from "./material";
 import type { SpeedSpot } from "./motion";
 import { mulberry32 } from "./random";
@@ -88,10 +89,10 @@ class Pool {
   }
 
   /**
-   * `reuse`: if nothing in line fits well, clips used before count too (less with every use) –
+   * `reuse`: if nothing in line costs less than `threshold`, clips used before count too (less with every use) –
    * a fast scene has more than one fast spot, and on a long loud part the fast ones in line run out.
    */
-  take(cost: (it: MaterialItem) => number, reuse = false): MaterialItem {
+  take(cost: (it: MaterialItem) => number, reuse = false, threshold = REUSE_THRESHOLD): MaterialItem {
     if (!this.queue.length) this.queue = this.order === "shuffle" ? shuffle(this.items, this.rnd) : this.order === "interleave" ? interleave(this.items) : this.items.slice();
     let best = 0;
     let low = Infinity;
@@ -100,7 +101,7 @@ class Pool {
       if (c < low) [low, best] = [c, i];
     }
     let pick: MaterialItem | null = null;
-    if (reuse && low > REUSE_THRESHOLD) {
+    if (reuse && low > threshold) {
       for (const [it, n] of this.uses) {
         if (this.queue.includes(it)) continue;
         const c = cost(it) + REUSE_PENALTY * n;
@@ -136,12 +137,27 @@ function rampedSpeed(o: FillOptions, slot: Slot): number {
   return o.speed;
 }
 
-/**
- * One clip per slot. `pools[stage]` holds the candidates of each tag stage, `stages[i]` the stage of slot i.
- * A slot whose middle lies in a pinned clip stays empty – the pinned clip plays there and counts for variety.
- * Deterministic: all randomness comes from `o.seed`.
- */
+/** In a split screen's field: cost per |log(clip shape / field shape)| (Pepega's) – a portrait clip in a wide field ≈ 1.2. */
+const SHAPE_COST = 1;
+/** A clip of the wrong shape for its layout ("portrait only" …) – taken only when nothing that fits is in line. */
+const WRONG_SHAPE = 200;
+/** The scene another field of the split screen shows right now – the same scene twice at once looks like a mistake. */
+const ON_SCREEN = 150;
+
+/** One clip per slot, in timeline order (see fillGroups). */
 export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools: MaterialItem[][], o: FillOptions, ctx: FillContext, pinned: Clip[] = []): Clip[] {
+  return fillGroups(p, slots, stages, pools, o, ctx, [pinned])
+    .flat()
+    .sort((a, b) => a.start - b.start);
+}
+
+/**
+ * One clip per slot, per field group (a split screen fills several tracks). `pools[stage]` holds the candidates of
+ * each tag stage, `stages[i]` the stage of slot i. A slot whose middle lies in a pinned clip of its group stays empty –
+ * the pinned clip plays there and counts for variety. In a split screen's field the clips whose shape fits it come
+ * first. Deterministic: all randomness comes from `o.seed`.
+ */
+export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools: MaterialItem[][], o: FillOptions, ctx: FillContext, pinned: Clip[][] = []): Clip[][] {
   const rnd = mulberry32(o.seed ^ 0x9e3779b9);
   const queues = pools.map((items) => new Pool(items, o.order, rnd));
   const beat = beatLength(p.beatGrid);
@@ -176,16 +192,22 @@ export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools:
     return d;
   };
 
-  const out: Clip[] = [];
+
+  const out: Clip[][] = [];
+  // what each field shows (scene, until when)
+  const showing: Array<{ sceneId: string; until: number } | undefined> = [];
   slots.forEach((slot, k) => {
+    const group = slot.group ?? 0;
     const mid = slot.start + slot.duration / 2;
-    const pin = pinned.find((c) => c.start <= mid && c.start + c.duration > mid);
+    const pin = (pinned[group] ?? []).find((c) => c.start <= mid && c.start + c.duration > mid);
     if (pin) {
       recentScenes.push(pin.sceneId);
       recentPerformers.push([]);
       usedSpots.set(pin.sceneId, [...(usedSpots.get(pin.sceneId) ?? []), pin.sourceIn].slice(-8));
+      showing[group] = { sceneId: pin.sceneId, until: pin.start + pin.duration };
       return;
     }
+    const others = new Set(showing.flatMap((x, g) => (x && g !== group && x.until > slot.start + EPS ? [x.sceneId] : [])));
     const pool = queues[stages[k]] ?? queues[0];
     const speed = rampedSpeed(o, slot);
     const need = slot.duration * speed;
@@ -197,8 +219,15 @@ export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools:
         for (const perfs of recentPerformers.slice(-RECENT_PERFORMERS)) for (const id of cand.performers) if (perfs.includes(id)) c += 0.6;
       }
       if (o.paceMatch && !cand.fixedStart) c += 2.5 * (paceFit(cand, need, slot) ?? 0.3);
+      const src = slot.aspect || slot.shape ? p.sources[cand.snippet.sceneId] : undefined;
+      if (src && src.width > 0 && src.height > 0) {
+        if (slot.aspect) c += SHAPE_COST * Math.abs(Math.log(src.width / src.height / slot.aspect));
+        if (!shapeFits(slot.shape, src.width, src.height)) c += WRONG_SHAPE;
+      }
+      if (others.has(cand.snippet.sceneId)) c += ON_SCREEN;
       return c;
-    }, o.paceMatch);
+      // in a split screen, when only scenes on screen are left in line, clips used before count too
+    }, o.paceMatch || others.size > 0, o.paceMatch ? REUSE_THRESHOLD : ON_SCREEN - 1);
     const s = it.snippet;
     const len = s.out - s.in;
     let start = s.in;
@@ -242,7 +271,7 @@ export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools:
     recentPerformers.push(it.performers);
     usedSpots.set(s.sceneId, [...(usedSpots.get(s.sceneId) ?? []), start].slice(-8));
 
-    out.push({
+    (out[group] ??= []).push({
       id: uid("clip"),
       sceneId: s.sceneId,
       snippetId: s.id,
@@ -252,12 +281,13 @@ export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools:
       sourceIn: start,
       speed,
       volume: 0,
-      transitionIn: k === 0 ? null : transitionFor(o, slot, beat, mix),
+      transitionIn: k === 0 || slot.hard ? null : transitionFor(o, slot, beat, mix),
       fit: null,
       label: s.label,
     });
+    showing[group] = { sceneId: s.sceneId, until: slot.start + slot.duration };
   });
-  return out;
+  return Array.from(out, (x) => x ?? []);
 }
 
 /** The part of [a, b] that matches song progress p (±12 % of the length). */

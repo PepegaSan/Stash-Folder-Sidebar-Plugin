@@ -8,6 +8,7 @@
  * Invariant per track: clips sorted by start, no overlaps.
  */
 import { uid } from "../model/ids";
+import { LAYOUT_INFO, type LayoutRange, carveLayouts, cleanLayouts } from "../model/layouts";
 import { type Clip, type PmvProject, type Snippet, type Track, type Transition, clipEnd, clipSourceOut, createTrack } from "../model/project";
 import { EPS, clamp } from "./time";
 
@@ -440,6 +441,24 @@ export function addTrack(p: PmvProject): PmvProject {
   let n = p.tracks.length + 1;
   while (used.has(`V${n}`)) n++;
   return { ...p, tracks: [createTrack(`V${n}`), ...p.tracks] };
+}
+
+/** At least `n` tracks – a split screen's fields come from the bottom ones (new tracks go on top). */
+export function ensureTracks(p: PmvProject, n: number): PmvProject {
+  let q = p;
+  while (q.tracks.length < n) q = addTrack(q);
+  return q;
+}
+
+/** A split screen added or changed: where it lies it replaces others, its fields get their tracks. */
+export function putLayout(p: PmvProject, range: LayoutRange): PmvProject {
+  const r = { ...range, start: Math.max(0, range.start), duration: Math.max(0, range.duration) };
+  const others = carveLayouts(
+    p.layouts.filter((x) => x.id !== r.id),
+    r.start,
+    r.start + r.duration,
+  );
+  return ensureTracks({ ...p, layouts: cleanLayouts([...others, r]) }, LAYOUT_INFO[r.kind].groups);
 }
 
 export function removeTrack(p: PmvProject, trackId: string): PmvProject {

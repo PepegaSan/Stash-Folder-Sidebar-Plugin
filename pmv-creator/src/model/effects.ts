@@ -3,15 +3,16 @@
  * and what a frame looks like is worked out in fx/timeline.ts.
  */
 
-/** In the order the editor lists them: on the beat, on drops, through the whole song. */
-export const EFFECTS = ["zoom", "shake", "stutter", "strobe", "rgb", "glitch", "tunnel", "invert", "echo", "text", "hue"] as const;
+/** In the order the editor lists them: on the beat, on drops, through the whole song, in split screens. */
+export const EFFECTS = ["zoom", "shake", "stutter", "strobe", "rgb", "glitch", "tunnel", "invert", "echo", "text", "hue", "flash", "lines"] as const;
 export type EffectId = (typeof EFFECTS)[number];
 
-export type EffectGroup = "beat" | "drops" | "song";
+export type EffectGroup = "beat" | "drops" | "song" | "split";
 export const EFFECT_GROUPS: Array<[EffectGroup, EffectId[]]> = [
   ["beat", ["zoom", "shake", "stutter", "strobe"]],
   ["drops", ["rgb", "glitch", "tunnel", "invert", "echo", "text"]],
   ["song", ["hue"]],
+  ["split", ["flash", "lines"]],
 ];
 
 /** The zoom pulse on every beat, on beats 1 and 3, or on the bar's "one" (drops always pulse). */
@@ -37,6 +38,8 @@ export const DEFAULT_EFFECTS: EffectSettings = {
   echo: false,
   text: false,
   hue: false,
+  flash: false,
+  lines: false,
   pulseAmount: 1,
   pulseOn: "beat",
   words: "",

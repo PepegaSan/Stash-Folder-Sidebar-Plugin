@@ -6,8 +6,10 @@
  * (pmv_backend.py: fx_pre_graph, grade_graph, fx_post_graph).
  */
 import { type EffectFrame, type EffectTimeline, ECHO_ZOOM, FX_FONT, GLITCH_SHIFT, GLITCH_STRIPES, REF_W, TEXT_FADE_AT, TEXT_SECONDS, TUNNEL_SIZES, effectFrame, fxHash } from "../../fx/timeline";
+import { type LayoutKind, type SplitDir, dividerRects, fitInField, layoutFields } from "../../model/layouts";
 import type { ColorGrade } from "../../model/look";
-import type { PreviewView, SlotLook } from "./engine";
+import { clamp } from "../../timeline/time";
+import type { PreviewLayer, PreviewView, SlotLook } from "./engine";
 
 /** Width of the small copy behind a "blur" clip – blurred there and scaled up, cheap at any canvas size. */
 const BACKDROP_W = 160;
@@ -64,13 +66,18 @@ export class Compositor {
     // the colour rush turns the clips' colours, before the look (like FFmpeg's hue before the colour matrix)
     const colour = [fx?.hue != null ? `hue-rotate(${Math.round((fx.hue % 360) * 100) / 100}deg) saturate(1.3)` : "", grade?.css ?? ""].join(" ").trim();
     g.save();
-    // zoom pulse and shaking move the whole picture (FFmpeg: zoompan after the transition)
-    if (fx && (fx.zoom !== 1 || fx.dx || fx.dy)) {
+    // zoom pulse and shaking move the whole picture (FFmpeg: zoompan after the transition) – in a split screen each field's
+    if (fx && !view.layout && (fx.zoom !== 1 || fx.dx || fx.dy)) {
       g.translate(W / 2 + fx.dx * W, H / 2 + fx.dy * W);
       g.scale(fx.zoom, fx.zoom);
       g.translate(-W / 2, -H / 2);
     }
-    for (const { el: v, look, fit } of view.layers) {
+    for (const layer of view.layers) {
+      if (layer.field) {
+        this.drawField(g, layer, W, H, fx, colour);
+        continue;
+      }
+      const { el: v, look, fit } = layer;
       // during a seek the browser keeps drawing the last frame; only a player without any picture is skipped
       if (look.opacity <= 0 || !v.videoWidth || v.readyState < 1) continue;
       g.save();
@@ -84,7 +91,7 @@ export class Compositor {
       }
       const cover = Math.max(W / v.videoWidth, H / v.videoHeight);
       const contain = Math.min(W / v.videoWidth, H / v.videoHeight);
-      if (fit === "blur") this.drawBackdrop(g, v, W, H, colour);
+      if (fit === "blur") this.drawBackdrop(g, v, 0, 0, W, H, colour);
       g.filter = [look.blur ? `blur(${Math.round(look.blur * H)}px)` : "", colour].join(" ").trim() || "none";
       const s = fit === "cover" ? cover : contain;
       g.drawImage(v, (W - v.videoWidth * s) / 2, (H - v.videoHeight * s) / 2, v.videoWidth * s, v.videoHeight * s);
@@ -98,12 +105,52 @@ export class Compositor {
       g.globalAlpha = 1;
     }
     if (grade) this.drawGrade(g, grade, W, H);
+    if (view.layout) this.drawDividers(g, view.layout, W, H, fx?.lines ?? 0);
     if (fx && effects) this.drawEffects(g, fx, effects.tl, W, H);
     g.restore();
   }
 
-  /** The whole picture's surroundings: a blurred, slightly darker copy that fills the frame. */
-  private drawBackdrop(g: CanvasRenderingContext2D, v: HTMLVideoElement, W: number, H: number, colour: string): void {
+  /**
+   * A field of a split screen: the clip fitted into it (a clip of nearly the field's shape fills it), mirrored where
+   * the layout says so; zoom pulse and shaking inside the field, never out of it (like FFmpeg's zoompan per field).
+   */
+  private drawField(g: CanvasRenderingContext2D, layer: PreviewLayer, W: number, H: number, fx: EffectFrame | null, colour: string): void {
+    const v = layer.el;
+    const f = layer.field!;
+    if (layer.look.opacity <= 0 || !v.videoWidth || v.readyState < 1) return;
+    const x = f.x * W;
+    const y = f.y * H;
+    const w = f.w * W;
+    const h = f.h * H;
+    g.save();
+    g.beginPath();
+    g.rect(x, y, w, h);
+    g.clip();
+    const z = fx?.zoom ?? 1;
+    const dx = clamp((fx?.dx ?? 0) * W, (-(z - 1) * w) / 2, ((z - 1) * w) / 2);
+    const dy = clamp((fx?.dy ?? 0) * W, (-(z - 1) * h) / 2, ((z - 1) * h) / 2);
+    g.translate(x + w / 2 + dx, y + h / 2 + dy);
+    g.scale(f.fx ? -z : z, f.fy ? -z : z);
+    const fit = fitInField(layer.fit, v.videoWidth / v.videoHeight, w / h);
+    if (fit === "blur") this.drawBackdrop(g, v, -w / 2, -h / 2, w, h, colour);
+    g.filter = colour || "none";
+    const s = fit === "cover" ? Math.max(w / v.videoWidth, h / v.videoHeight) : Math.min(w / v.videoWidth, h / v.videoHeight);
+    g.drawImage(v, (-v.videoWidth * s) / 2, (-v.videoHeight * s) / 2, v.videoWidth * s, v.videoHeight * s);
+    g.restore();
+  }
+
+  /** The lines between the fields – dark, glowing pink on the beat (glow 0…0.9). */
+  private drawDividers(g: CanvasRenderingContext2D, layout: { kind: LayoutKind; dir: SplitDir }, W: number, H: number, glow: number): void {
+    g.filter = "none";
+    const rects = dividerRects(layoutFields(layout.kind, layout.dir), W, H);
+    for (const fill of glow > 0 ? ["#0a0309", `rgba(255, 62, 138, ${glow})`] : ["#0a0309"]) {
+      g.fillStyle = fill;
+      for (const [x, y, w, h] of rects) g.fillRect(x, y, w, h);
+    }
+  }
+
+  /** The surroundings of a clip that fits in: a blurred, slightly darker copy that fills the rectangle (x, y, w, h). */
+  private drawBackdrop(g: CanvasRenderingContext2D, v: HTMLVideoElement, X: number, Y: number, W: number, H: number, colour: string): void {
     const w = BACKDROP_W;
     const h = Math.max(2, Math.round((BACKDROP_W * H) / W));
     const c = (this.backdrop ??= document.createElement("canvas"));
@@ -114,11 +161,13 @@ export class Compositor {
     const b = c.getContext("2d");
     if (!b) return;
     const s = Math.max(w / v.videoWidth, h / v.videoHeight);
-    b.filter = "blur(2.5px)";
+    // as blurred as the render's copy: a box blur of a 24th of the short side, twice (σ ≈ 3.4 % of that side) –
+    // a narrow field of a split screen gets as much as the whole picture
+    b.filter = `blur(${((0.034 * Math.min(W, H) * w) / W).toFixed(2)}px)`;
     b.drawImage(v, (w - v.videoWidth * s) / 2, (h - v.videoHeight * s) / 2, v.videoWidth * s, v.videoHeight * s);
     g.filter = `brightness(0.85) ${colour}`.trim();
     // a little larger than the frame: the blur fades out at the copy's edges
-    g.drawImage(c, -W * 0.04, -H * 0.04, W * 1.08, H * 1.08);
+    g.drawImage(c, X - W * 0.04, Y - H * 0.04, W * 1.08, H * 1.08);
   }
 
   /** The look over the whole picture: soft-light layers (tint, brightness) and dark corners. */
@@ -162,7 +211,7 @@ export class Compositor {
     return c;
   }
 
-  /** After the look, in FFmpeg's order: echo, tunnel, glitch, RGB split, negative, strobe, word. */
+  /** After the look, in FFmpeg's order: echo, tunnel, glitch, RGB split, negative, flash, strobe, word. */
   private drawEffects(g: CanvasRenderingContext2D, fx: EffectFrame, tl: EffectTimeline, W: number, H: number): void {
     g.filter = "none";
     g.globalAlpha = 1;
@@ -226,6 +275,10 @@ export class Compositor {
       g.fillStyle = "#fff";
       g.fillRect(0, 0, W, H);
       g.globalCompositeOperation = "source-over";
+    }
+    if (fx.flash) {
+      g.fillStyle = `rgba(${fx.flash.color.join(", ")}, ${fx.flash.a})`;
+      g.fillRect(0, 0, W, H);
     }
     if (fx.strobe) {
       g.fillStyle = "rgba(255, 255, 255, 0.92)";

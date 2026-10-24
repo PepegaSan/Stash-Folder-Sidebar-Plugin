@@ -375,6 +375,10 @@ def main():
         assert hb.unmap_path("Z:\\c\\x.mp4", [{"from": "/data/", "to": "Y:\\"}, {"from": "/data/clips/", "to": "Z:\\c"}]) == "/data/clips/x.mp4"
         assert hb.unmap_path("Z:\\cc\\x.mp4", [{"from": "/data/clips/", "to": "Z:\\c"}]) is None
         assert hb.unmap_path("I:\\PMVs\\x.mp4", [{"from": "/data/", "to": "Y:\\"}]) is None
+        # split screens: every field group's source is found like a clip's (the path itself, a mapped one, or Stash's stream)
+        lay = {"pieces": [{"kind": "layout", "frames": 10, "groups": [src(a, 1.0), None, {**src(a, 2.0), "path": "/data/nowhere.mp4", "sceneId": "7"}], "fields": [], "dividers": []}]}
+        g = hb.prepare_pc_plan(lay, {"mappings": [{"from": "/nope/", "to": "Q:\\"}]}, "http://nas:9999", "k3y")["pieces"][0]["groups"]
+        assert g[0]["path"] == str(a) and g[1] is None and g[2]["path"] == "http://nas:9999/scene/7/stream" and g[2]["inputArgs"], g
         assert call({"op": "helper_progress", "jobId": "nope"}) == {"cancel": True}
         call({"op": "helper_hello", "info": {"name": "TEST PC", "version": "t", "ffmpeg": FFMPEG, "defaultOutput": str(tmp / "pc-default")}})
         helpers = call({"op": "helper_list"})
@@ -530,6 +534,52 @@ def main():
             sh(["cmd", "/c", str(script)] if shell == "cmd" else ["bash", str(script)], env=env, cwd=sdir)
             check_output(next(sdir.glob("*.mp4")), fx_plan["totalFrames"])
             print(f"ok  {shell} script with effects (longest line {longest} characters)")
+
+            # 8) split screens: every layout, a black field, glowing dividers – rendered, cached, and as a script
+            bundle = sh([npx, "esbuild", str(ROOT / "tests" / "samplePlanSplit.ts"), "--bundle", "--platform=node", "--log-level=warning"], cwd=ROOT).stdout
+            built = json.loads(sh(["node", "-"], input=bundle).stdout)
+            assert built["warnings"] == [], built["warnings"]
+            text = json.dumps(built["plan"])
+            for key, path in {"{A}": a, "{B}": b, "{C}": c, "{M}": music}.items():
+                text = text.replace(json.dumps(key)[1:-1], json.dumps(str(path))[1:-1])
+            sp_plan = json.loads(text)
+            kinds = [p["kind"] for p in sp_plan["pieces"]]
+            assert kinds.count("layout") == 5, kinds
+            assert sp_plan["clipAudio"], "V3's sound in the fields"
+            sp_path = tmp / "plan-split.json"
+            sp_path.write_text(json.dumps(sp_plan), encoding="utf-8")
+            res = json.loads(sh([sys.executable, str(BACKEND), "render", str(sp_path), "-o", str(tmp / "split.mp4"), "--ffmpeg", FFMPEG, "--jobs", "3", "--cache", str(cache)]).stdout)
+            check_output(tmp / "split.mp4", sp_plan["totalFrames"])
+            again = json.loads(sh([sys.executable, str(BACKEND), "render", str(sp_path), "-o", str(tmp / "split2.mp4"), "--ffmpeg", FFMPEG, "--cache", str(cache)]).stdout)
+            assert again["cached"] == len(sp_plan["pieces"]), again
+
+            def full_frame(path, n):
+                r = subprocess.run([FFMPEG, "-v", "error", "-ss", f"{(n - 0.25) / FPS:.6f}", "-i", str(path), "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True)
+                assert len(r.stdout) == 640 * 360 * 3, f"frame {n} not decoded"
+                return r.stdout
+
+            def luma(d, x0, y0, x1, y1):
+                vals = [0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] for y in range(y0, y1) for x in range(x0, x1) for i in [(y * 640 + x) * 3]]
+                return sum(vals) / len(vals)
+
+            # the 4-way (3 … 4.5 s): V4 has no clip – its field (bottom right) is black, the one of V1 (top left) is not
+            quad = full_frame(tmp / "split.mp4", 112)
+            assert luma(quad, 340, 200, 630, 350) < 12 and luma(quad, 10, 10, 300, 170) > 40, (luma(quad, 340, 200, 630, 350), luma(quad, 10, 10, 300, 170))
+            # the 3-way's divider at x = 214 glows pink on the beat (2 s) and is dark again before the next one
+            on, off = luma(full_frame(tmp / "split.mp4", 60), 214, 20, 215, 340), luma(full_frame(tmp / "split.mp4", 73), 214, 20, 215, 340)
+            assert on > 60 and off < 40, (on, off)
+            print(f"ok  split screens: {kinds.count('layout')} layout pieces, black field, dividers {off:.0f} -> {on:.0f} on the beat – {res['seconds']} s")
+
+            sdir = tmp / "script-split"
+            sdir.mkdir()
+            script = sdir / ("render.cmd" if shell == "cmd" else "render.sh")
+            body = sh([sys.executable, str(BACKEND), "script", str(sp_path), "--shell", shell]).stdout
+            longest = max(len(line) for line in body.splitlines())
+            assert longest < 8191, f"a line of the {shell} script is {longest} characters long"
+            script.write_text(body, encoding="utf-8", newline="")
+            sh(["cmd", "/c", str(script)] if shell == "cmd" else ["bash", str(script)], env=env, cwd=sdir)
+            check_output(next(sdir.glob("*.mp4")), sp_plan["totalFrames"])
+            print(f"ok  {shell} script with split screens (longest line {longest} characters)")
     print("all backend checks passed")
     return 0
 

@@ -198,14 +198,20 @@ export async function runGenerator(p: PmvProject, s: GeneratorSettings, playhead
 
   status(t("Cutting to the beat…"));
   const built = buildGeneration(p, s, range, { pools, sources, energy, context: { speedMaps, speedPct } });
+  // (with split screens the clips go onto V1, whatever track was chosen)
+  const onto = p.tracks.find((x) => x.id === built.result.trackId);
+  if (onto?.locked) throw new Error(t("Track {name} is locked – unlock it (L) to generate onto it.", { name: onto.name }));
 
   let synced = 0;
   if (s.select.beatSync && built.result.clips.length) {
     const all = { ...p.sources, ...Object.fromEntries(sources.map((x) => [x.sceneId, x])) };
-    const rhythms = await measureRhythms(built.result.clips, all, status);
-    const r = applyBeatSync(built.result.clips, rhythms, p.beatGrid.bpm, (id) => all[id]?.duration ?? 0, (c) => !!c.markerId);
-    built.result.clips = r.clips;
-    synced = r.synced;
+    // the clips of every field of the split screens too
+    const lists = [built.result.clips, ...built.result.fields];
+    const rhythms = await measureRhythms(lists.flat(), all, status);
+    const done = lists.map((list) => applyBeatSync(list, rhythms, p.beatGrid.bpm, (id) => all[id]?.duration ?? 0, (c) => !!c.markerId));
+    built.result.clips = done[0].clips;
+    built.result.fields = done.slice(1).map((x) => x.clips);
+    synced = done.reduce((n, x) => n + x.synced, 0);
   }
   return { ...built, synced, mapped: Object.keys(speedMaps).length };
 }

@@ -24,11 +24,13 @@ export function dropDuration(p: PmvProject, ui: UiState, s: Snippet): number {
   return Math.max(1, Math.round(len / step)) * step;
 }
 
-export function snapOptions(p: PmvProject, ui: UiState, playhead: number, excludeClipId?: string): SnapOptions | null {
+/** `excludeId`: the clip or split screen range being dragged (its own edges don't count). */
+export function snapOptions(p: PmvProject, ui: UiState, playhead: number, excludeId?: string): SnapOptions | null {
   if (!ui.snap) return null;
   const points = [0, playhead, ...p.markers.map((m) => m.time)];
   if (p.audio) points.push(p.audio.start, audioEnd(p.audio));
-  for (const t of p.tracks) for (const c of t.clips) if (c.id !== excludeClipId) points.push(c.start, clipEnd(c));
+  for (const t of p.tracks) for (const c of t.clips) if (c.id !== excludeId) points.push(c.start, clipEnd(c));
+  for (const r of p.layouts) if (r.id !== excludeId) points.push(r.start, r.start + r.duration);
   return { grid: p.beatGrid, division: ui.snapDivision, points, threshold: 8 / ui.zoom };
 }
 

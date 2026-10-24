@@ -30,12 +30,12 @@ export function PreviewPlayer() {
   const drawRef = useRef<() => void>(() => undefined);
 
   // only what the sequence depends on – culling in the sidebar must not re-cue the players
-  const { tracks, output, audio, sources } = project;
+  const { tracks, output, audio, sources, layouts } = project;
   const fx = useEffects(project);
   const fxRef = useRef(fx);
   fxRef.current = fx;
   // a stutter is a jump back inside a clip: one more segment, cued in another player like any cut
-  const segs = useMemo(() => withStutters(flattenTimeline(project), fx, output.fps), [tracks, output, audio, fx]);
+  const segs = useMemo(() => withStutters(flattenTimeline(project), fx, output.fps), [tracks, output, audio, layouts, fx]);
   const trans = useMemo(() => resolveTransitions(project, segs), [segs, sources]);
   const scenes = useScenes(useMemo(() => Object.keys(project.sources), [project.sources]));
   const fps = project.output.fps;

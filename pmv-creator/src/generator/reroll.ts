@@ -72,6 +72,8 @@ export function rerollClips(p: PmvProject, clipIds: string[], pools: MaterialIte
     const i = lane.findIndex((x) => x.id === c.id);
     const near = lane.slice(Math.max(0, i - NEIGHBOURS), i + NEIGHBOURS + 1).filter((x) => x.id !== c.id);
     const nearScenes = new Set(near.map((x) => x.sceneId));
+    // what plays at the same time on the other tracks – in a split screen the other fields
+    for (const t of cur.tracks) if (t.id !== loc.track.id) for (const x of t.clips) if (x.start < c.start + c.duration - EPS && x.start + x.duration > c.start + EPS) nearScenes.add(x.sceneId);
     const nearPerformers = lane
       .slice(Math.max(0, i - 2), i + 3)
       .filter((x) => x.id !== c.id)

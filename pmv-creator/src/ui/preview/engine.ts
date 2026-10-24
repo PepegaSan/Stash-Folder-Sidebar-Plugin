@@ -6,11 +6,14 @@
  * seek aims where the clock will be once it is through (measured per player), and a seek on its way is never
  * interrupted by the next one – on slow seeks that left the picture frozen. A clip whose player has no picture
  * yet keeps the last picture on screen instead of going black.
- * The engine only says what is on screen (`view`: players with their transition looks and framing, a colour wash);
- * the compositor draws it on a canvas – for the preview and the quick record alike.
+ * In a split screen the clips of all its fields play at once (each field clip goes on while the others cut), and the
+ * field cuts coming up are loaded ahead like any cut.
+ * The engine only says what is on screen (`view`: players with their transition looks, framing and fields, a colour
+ * wash); the compositor draws it on a canvas – for the preview and the quick record alike.
  */
+import { type Field, type LayoutKind, type SplitDir, layoutFields } from "../../model/layouts";
 import type { FitMode, TransitionType } from "../../model/project";
-import { type ResolvedTransition, type Segment, segmentIndexAt, sourceTimeAt } from "../../timeline/flatten";
+import { type ResolvedTransition, type Segment, segmentIndexAt, segmentUnits, sourceTimeAt } from "../../timeline/flatten";
 import { VideoSlot, pickStream } from "../../stash/streams";
 import type { StashScene } from "../../stash/types";
 import { clamp } from "../../timeline/time";
@@ -24,8 +27,11 @@ export interface PreviewTimeline {
   fit: FitMode;
 }
 
-/** <video> elements per preview: the current clip, a transition partner or the last picture, the clips coming up. */
-export const PREVIEW_SLOTS = 4;
+/**
+ * <video> elements per preview: the current clip, a transition partner or the last picture, the clips coming up – in a
+ * 4-way split screen its four clips plus the four of the next layout.
+ */
+export const PREVIEW_SLOTS = 8;
 /** Clips are loaded at most this far ahead (timeline seconds). */
 const LOOKAHEAD = 12;
 /** At most this many clips ahead from Stash's live transcode or the PC helper – each one is an FFmpeg process. */
@@ -93,12 +99,22 @@ export interface PreviewLayer {
   look: SlotLook;
   fit: FitMode;
   z: number;
+  /** In a split screen: the field it fills (a player can fill several – the kaleidoscope). */
+  field?: Field;
 }
 
 /** What the preview shows right now; `wash` is the colour of a fade through black or white. */
 export interface PreviewView {
   layers: PreviewLayer[];
   wash: { color: string; alpha: number };
+  /** The split screen on screen (its dividers are drawn), null = full screen. */
+  layout: { kind: LayoutKind; dir: SplitDir } | null;
+}
+
+/** A clip as the engine plays it, with the first frame it is seen (a transition brings it in earlier). */
+interface Unit {
+  seg: Segment;
+  from: number;
 }
 
 /** A segment's identity across timeline edits (indices shift, clips keep their id). */
@@ -111,6 +127,8 @@ export class PreviewEngine {
   /** Timeline frame of the bound segment – which slot to give up first. */
   private boundFrame: number[];
   private tl: PreviewTimeline | null = null;
+  /** Every clip of the timeline in the order it comes in – what the players load ahead. */
+  private units: Unit[] = [];
   /** Slot whose picture was on screen last – shown on while the current clip has none yet. */
   private shown = -1;
   private lastT = 0;
@@ -128,7 +146,7 @@ export class PreviewEngine {
     this.bound = els.map(() => null);
     this.boundFrame = els.map(() => 0);
     this.fits = els.map(() => "cover");
-    this.view = { layers: [], wash: { color: "transparent", alpha: 0 } };
+    this.view = { layers: [], wash: { color: "transparent", alpha: 0 }, layout: null };
     for (const el of els) for (const ev of ["loadeddata", "seeked"]) el.addEventListener(ev, this.onPicture);
   }
 
@@ -145,6 +163,16 @@ export class PreviewEngine {
   /** Slots keep their scenes and bindings: an edit costs at most a seek, not a reload (that went black). */
   setTimeline(tl: PreviewTimeline): void {
     this.tl = tl;
+    const seen = new Set<Segment>();
+    this.units = [];
+    tl.segs.forEach((seg, i) => {
+      for (const u of segmentUnits(seg)) {
+        if (seen.has(u)) continue;
+        seen.add(u);
+        this.units.push({ seg: u, from: (u === seg ? seg.startFrame - (tl.trans[i]?.before ?? 0) : u.startFrame) });
+      }
+    });
+    this.units.sort((a, b) => a.from - b.from);
   }
 
   dispose(): void {
@@ -163,11 +191,12 @@ export class PreviewEngine {
     this.lastT = t;
     const i = segmentIndexAt(tl.segs, Math.floor(frame));
     const seg = i >= 0 ? tl.segs[i] : null;
+    const split = seg?.layout ?? null;
 
-    // inside a transition window? (centred on the cut into segment j)
+    // inside a transition window? (centred on the cut into segment j; split screens cut hard)
     let j = -1;
     let progress = 0;
-    for (const k of [i, i + 1]) {
+    for (const k of split ? [] : [i, i + 1]) {
       const tr = tl.trans[k];
       if (k < 0 || !tr) continue;
       const cut = tl.segs[k].startFrame;
@@ -180,39 +209,58 @@ export class PreviewEngine {
 
     // slots, most important first: the clip on screen, its transition partner, the last picture, the clips coming up
     const taken = new Set<number>();
-    const want: Array<number | null> = this.slots.map(() => null);
-    const bind = (k: number, segIdx: number): number => {
+    const want: Array<Segment | null> = this.slots.map(() => null);
+    const bind = (k: number, unit: Segment): number => {
       taken.add(k);
-      want[k] = segIdx;
-      this.bound[k] = segKey(tl.segs[segIdx]);
-      this.boundFrame[k] = tl.segs[segIdx].startFrame;
+      want[k] = unit;
+      this.bound[k] = segKey(unit);
+      this.boundFrame[k] = unit.startFrame;
       return k;
     };
-    const take = (segIdx: number, protect: number): number => {
-      const k = this.pick(tl.segs[segIdx], frame, taken, protect);
-      return k >= 0 ? bind(k, segIdx) : -1;
+    const take = (unit: Segment, protect: number): number => {
+      const k = this.pick(unit, frame, taken, protect);
+      return k >= 0 ? bind(k, unit) : -1;
     };
-    const active = seg?.clip && this.scene(seg) ? take(i, this.shown) : -1;
-    const other = partner >= 0 && tl.segs[partner]?.clip && this.scene(tl.segs[partner]) ? take(partner, this.shown) : -1;
-    if (active >= 0) this.drive(active, tl.segs[i], frame, playing, jumped);
-    if (other >= 0) this.drive(other, tl.segs[partner], frame, playing, jumped);
+    const driven = new Set<number>();
+    const drive = (k: number, unit: Segment) => {
+      driven.add(k);
+      this.drive(k, unit, frame, playing, jumped);
+    };
+    // a split screen: every field clip plays – the ones that have their player keep it first, so a field clip coming in
+    // never takes the player of one that goes on
+    const fieldSlots = new Map<Segment, number>();
+    if (split) {
+      const units = segmentUnits(seg!).filter((u) => this.scene(u));
+      const own = units.map((u) => this.slots.findIndex((_, k) => this.bound[k] === segKey(u)));
+      units.forEach((u, i) => own[i] >= 0 && bind(own[i], u));
+      units.forEach((u, i) => {
+        const k = own[i] >= 0 ? own[i] : take(u, -1);
+        if (k < 0) return;
+        fieldSlots.set(u, k);
+        drive(k, u);
+      });
+    }
+    const active = !split && seg?.clip && this.scene(seg) ? take(seg, this.shown) : -1;
+    const other = partner >= 0 && tl.segs[partner]?.clip && this.scene(tl.segs[partner]) ? take(tl.segs[partner], this.shown) : -1;
+    if (active >= 0) drive(active, seg!);
+    if (other >= 0) drive(other, tl.segs[partner]);
     // no picture yet (a new file still opening, the scene not known yet): the last one stays instead of black
-    const blank = !!seg?.clip && (active < 0 || !this.slots[active].hasPicture);
+    const blank = !split && !!seg?.clip && (active < 0 || !this.slots[active].hasPicture);
     const hold = blank && j < 0 && this.shown >= 0 && !taken.has(this.shown) && this.slots[this.shown].hasPicture ? this.shown : -1;
     if (hold >= 0) taken.add(hold);
     const rolling = new Set<number>();
     if (i >= 0) {
       const live = { param: 0, mse: 0 };
-      let opening = [active, other].filter((k) => k >= 0 && !this.slots[k].hasPicture).length;
+      let opening = [...driven].filter((k) => !this.slots[k].hasPicture).length;
       let looked = 0;
-      for (let s = i + 1; s < tl.segs.length && taken.size < this.slots.length && looked < 3 * this.slots.length; s++) {
-        const next = tl.segs[s];
-        if ((next.startFrame - frame) / fps > LOOKAHEAD) break;
+      const now = new Set(want.filter((u): u is Segment => !!u));
+      // the clips coming up, cuts and field cuts alike, in the order they come in
+      for (let u = this.firstUnitAt(Math.floor(frame)); u < this.units.length && taken.size < this.slots.length && looked < 3 * this.slots.length; u++) {
+        const { seg: next, from } = this.units[u];
+        if ((from - frame) / fps > LOOKAHEAD) break;
         const scene = this.scene(next);
-        if (s === partner || !next.clip || !scene) continue;
+        if (now.has(next) || !scene || next.endFrame <= frame) continue;
         looked++;
-        // a cue for a clip that a transition brings in earlier starts there
-        const from = next.startFrame - (tl.trans[s]?.before ?? 0);
         const kind = pickStream(scene)?.seek;
         const ffmpeg = kind === "param" || kind === "mse" ? kind : null;
         if (ffmpeg && live[ffmpeg] >= AHEAD_LIVE[ffmpeg]) continue;
@@ -223,7 +271,7 @@ export class PreviewEngine {
         if (loading && opening >= OPENING) continue;
         if (loading) opening++;
         if (ffmpeg) live[ffmpeg]++;
-        bind(k, s);
+        bind(k, next);
         // waiting on its first frame and about to show: get it moving (starting up takes a few frames)
         const at = Math.max(0, sourceTimeAt(next, from, fps));
         const cued = !loading && !slot.busy && slot.time > at - 0.05 && slot.time < at + 0.5;
@@ -238,29 +286,43 @@ export class PreviewEngine {
 
     // visibility
     const looks: SlotLook[] = this.slots.map(() => ({ opacity: 0 }));
-    const onScreen = hold >= 0 ? hold : active;
-    if (onScreen >= 0) looks[onScreen] = { opacity: 1 };
+    const layers: PreviewLayer[] = [];
     let overlayColor = "transparent";
     let overlayAlpha = 0;
     const tr = j >= 0 ? tl.trans[j] : null;
-    if (tr) {
-      const incomingSlot = want.indexOf(j);
-      const outgoingSlot = j === i ? other : active;
-      if (tr.type === "fadeblack" || tr.type === "fadewhite") {
-        overlayColor = tr.type === "fadeblack" ? "#000" : "#fff";
-        overlayAlpha = 1 - Math.abs(2 * progress - 1);
-      } else if (incomingSlot >= 0) {
-        const { incoming, outgoing } = transitionLooks(tr.type, progress);
-        looks[incomingSlot] = incoming;
-        if (outgoingSlot >= 0) looks[outgoingSlot] = outgoing;
+    if (split) {
+      // every field: the player of its group's clip (the same player may fill several – mirrored)
+      for (const field of layoutFields(split.kind, split.dir)) {
+        const u = split.groups[field.group];
+        const k = u ? fieldSlots.get(u) : undefined;
+        if (k === undefined) continue;
+        looks[k] = { opacity: 1 };
+        layers.push({ el: this.slots[k].el, look: looks[k], fit: this.fits[k], z: 1, field });
       }
+      const first = split.groups[0] ? fieldSlots.get(split.groups[0]) : undefined;
+      this.shown = first !== undefined && this.slots[first].hasPicture ? first : -1;
+    } else {
+      const onScreen = hold >= 0 ? hold : active;
+      if (onScreen >= 0) looks[onScreen] = { opacity: 1 };
+      if (tr) {
+        const incomingSlot = want.indexOf(tl.segs[j]);
+        const outgoingSlot = j === i ? other : active;
+        if (tr.type === "fadeblack" || tr.type === "fadewhite") {
+          overlayColor = tr.type === "fadeblack" ? "#000" : "#fff";
+          overlayAlpha = 1 - Math.abs(2 * progress - 1);
+        } else if (incomingSlot >= 0) {
+          const { incoming, outgoing } = transitionLooks(tr.type, progress);
+          looks[incomingSlot] = incoming;
+          if (outgoingSlot >= 0) looks[outgoingSlot] = outgoing;
+        }
+      }
+      if (active >= 0 && this.slots[active].hasPicture) this.shown = active;
+      else if (onScreen < 0) this.shown = -1;
+      this.slots.forEach((s, k) => {
+        if (looks[k].opacity > 0) layers.push({ el: s.el, look: looks[k], fit: this.fits[k], z: tr && want[k] === tl.segs[j] ? 2 : 1 });
+      });
     }
-    if (active >= 0 && this.slots[active].hasPicture) this.shown = active;
-    else if (onScreen < 0) this.shown = -1;
-    const layers: PreviewLayer[] = [];
     this.slots.forEach((s, k) => {
-      const z = tr && want[k] === j ? 2 : 1;
-      if (looks[k].opacity > 0) layers.push({ el: s.el, look: looks[k], fit: this.fits[k], z });
       // for tests and diagnostics: which player is drawn how strongly
       const op = String(looks[k].opacity);
       if (s.el.dataset.op !== op) s.el.dataset.op = op;
@@ -268,9 +330,21 @@ export class PreviewEngine {
       // canvas then stalls): what the canvas shows, and a clip starting up, stays barely visible above it
       const css = looks[k].opacity > 0 || rolling.has(k) ? "0.001" : "0";
       if (s.el.style.opacity !== css) s.el.style.opacity = css;
-      if (k !== active && k !== other && !rolling.has(k) && !s.el.paused) s.el.pause();
+      if (!driven.has(k) && !rolling.has(k) && !s.el.paused) s.el.pause();
     });
-    this.view = { layers: layers.sort((a, b) => a.z - b.z), wash: { color: overlayColor, alpha: overlayAlpha } };
+    this.view = { layers: layers.sort((a, b) => a.z - b.z), wash: { color: overlayColor, alpha: overlayAlpha }, layout: split ? { kind: split.kind, dir: split.dir } : null };
+  }
+
+  /** Index of the first clip that comes in at or after `frame`. */
+  private firstUnitAt(frame: number): number {
+    let lo = 0;
+    let hi = this.units.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.units[mid].from < frame) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
   }
 
   /**

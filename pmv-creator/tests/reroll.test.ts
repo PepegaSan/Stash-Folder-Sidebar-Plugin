@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyGeneration, buildGeneration, defaultSettings, generationRange } from "../src/generator/generate";
+import { FULL_ONLY } from "../src/generator/layouts";
 import type { MaterialItem } from "../src/generator/material";
 import { rerollClips } from "../src/generator/reroll";
 import { type Clip, clipEnd } from "../src/model/project";
@@ -31,7 +32,9 @@ const pools = () => [["1", "2", "3", "4", "5", "6"].map((id) => item(id, 0, 100)
 describe("📌 kept clips and generating again", () => {
   it("another variant leaves kept clips where they are and fills around them", () => {
     const p0 = songProject();
-    const s = defaultSettings(p0.tracks[1].id);
+    // full screen: every run cuts the same slots (split screens move with the seed)
+    const base = defaultSettings(p0.tracks[1].id);
+    const s = { ...base, style: { ...base.style, layouts: FULL_ONLY } };
     const range = generationRange(p0, s.target, 0);
     let st = initialEditorState(p0);
     st = editorReducer(st, { type: "generate/apply", result: buildGeneration(p0, s, range, { pools: pools(), sources: [], context: noMaps }).result });

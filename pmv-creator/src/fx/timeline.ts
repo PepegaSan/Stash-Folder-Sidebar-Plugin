@@ -7,6 +7,7 @@
  */
 import { type EnergyFn, analyzeBeats } from "../generator/rhythm";
 import { anyEffect, effectWords } from "../model/effects";
+import { cleanLayouts } from "../model/layouts";
 import { type PmvProject, clipEnd, projectDuration } from "../model/project";
 import { type Segment, flattenTimeline } from "../timeline/flatten";
 import { beatIndexAt, beatLength } from "../timeline/time";
@@ -61,6 +62,16 @@ export interface EffectTimeline {
   texts: Array<{ t: number; word: string; size: number }>;
   /** Colour rush per beat: its start, the hue there (degrees) and how fast it turns (degrees per second). */
   hue: Array<{ t: number; angle: number; rate: number }> | null;
+  /** Flashes where the split screen changes: start, strength, colour (pink on a drop). */
+  flashes: Array<{ t: number; a: number; color: [number, number, number] }>;
+  /** Beats the dividers of a split screen glow on (null = they don't). */
+  glow: number[] | null;
+}
+
+/** The dividers glow up on every beat and fade quickly: strength at `since` seconds after the beat (0 when too faint). */
+export function glowAt(since: number): number {
+  const g = 0.9 * Math.exp(-7 * since);
+  return since >= 0 && g > 0.05 ? g : 0;
 }
 
 /** Pseudo-random 0…1 of a frame or beat number – the backend builds the same formula into FFmpeg expressions. */
@@ -89,12 +100,32 @@ export function effectTimeline(p: PmvProject, energy?: EnergyFn, measure?: Measu
     const t0 = snap(t);
     return { t0, t1: Math.max(t0 + 1 / fps, snap(end)) };
   };
-  const tl: EffectTimeline = { fps, aspect: width / height, pulses: [], shakes: [], stutters: [], strobes: [], rgb: [], glitches: [], inverts: [], tunnels: [], echoes: [], texts: [], hue: fx.hue ? [] : null };
+  const tl: EffectTimeline = { fps, aspect: width / height, pulses: [], shakes: [], stutters: [], strobes: [], rgb: [], glitches: [], inverts: [], tunnels: [], echoes: [], texts: [], hue: fx.hue ? [] : null, flashes: [], glow: null };
   const beats = analyzeBeats(grid, 0, duration, energy);
+  if (fx.lines) tl.glow = beats.map((B) => B.t);
+  if (fx.flash) {
+    // where a split screen begins or ends (back to full screen): white, pink on a drop
+    const ranges = cleanLayouts(p.layouts ?? []);
+    const changes = new Set<number>();
+    ranges.forEach((r, k) => {
+      changes.add(snap(r.start));
+      const end = r.start + r.duration;
+      if (!(ranges[k + 1] && Math.abs(ranges[k + 1].start - end) < 1e-6)) changes.add(snap(end));
+    });
+    for (const t of [...changes].sort((a, b) => a - b)) {
+      if (t <= 0 || t >= duration) continue;
+      const drop = beats.some((B) => B.drop && Math.abs(B.t - t) < 1.5 / fps);
+      tl.flashes.push({ t, a: drop ? 0.9 : 0.35, color: drop ? [255, 62, 138] : [255, 255, 255] });
+    }
+  }
   const words = fx.text ? effectWords(fx.words) : [];
   const amount = Math.max(0, Math.min(1.5, fx.pulseAmount));
   // where a clip starts: the RGB split also tears on cuts in loud parts
-  const cuts = new Set(flattenTimeline(p).flatMap((s) => (s.clip && s.startFrame === s.clipStartFrame ? [s.startFrame] : [])));
+  const segs = flattenTimeline(p);
+  const cuts = new Set(segs.flatMap((s) => (s.layout ? s.layout.groups.flatMap((g) => (g ? [g.startFrame] : [])) : s.clip && s.startFrame === s.clipStartFrame ? [s.startFrame] : [])));
+  // where a field of a split screen gets a new clip while the others go on (not where the split screen begins)
+  const rangeStarts = new Set(segs.filter((s, i) => s.layout && segs[i - 1]?.layout?.rangeId !== s.layout.rangeId).map((s) => s.startFrame));
+  const fieldCuts = new Set(segs.flatMap((s) => (s.layout ? s.layout.groups.flatMap((g) => (g && g.startFrame === g.clipStartFrame && !rangeStarts.has(g.startFrame) ? [g.startFrame] : [])) : [])));
   let angle = 0;
 
   beats.forEach((B, k) => {
@@ -106,6 +137,10 @@ export function effectTimeline(p: PmvProject, energy?: EnergyFn, measure?: Measu
     const f = Math.round(B.t * fps);
     const cut = cuts.has(f) || cuts.has(f - 1) || cuts.has(f + 1);
     const t = snap(B.t);
+    // a field cut in a loud part flashes a little – pink on the bar's "one"
+    if (fx.flash && e > 0.5 && (fieldCuts.has(f) || fieldCuts.has(f - 1) || fieldCuts.has(f + 1)) && !tl.flashes.some((x) => Math.abs(x.t - t) < 1.5 / fps)) {
+      tl.flashes.push({ t, a: 0.15 + 0.3 * e, color: bar ? [255, 62, 138] : [255, 255, 255] });
+    }
 
     if (fx.zoom && amount > 0 && (drop || fx.pulseOn === "beat" || (fx.pulseOn === "2" && Math.round(B.pos) % 2 === 0) || (fx.pulseOn === "bar" && bar))) {
       tl.pulses.push({ t: B.t, a: (0.03 + 0.07 * e + (drop ? 0.1 : 0)) * amount, ease: true });
@@ -142,6 +177,7 @@ export function effectTimeline(p: PmvProject, energy?: EnergyFn, measure?: Measu
   const byStart = (a: Span, b: Span) => a.t0 - b.t0;
   tl.pulses.sort((a, b) => a.t - b.t);
   tl.strobes.sort(byStart);
+  tl.flashes.sort((a, b) => a.t - b.t);
   return tl;
 }
 
@@ -168,6 +204,10 @@ export interface EffectFrame {
   strobe: boolean;
   /** A word: size as a share of the height, seconds since it came in. */
   text: { word: string; size: number; tt: number } | null;
+  /** A flash fading out: strength and colour. */
+  flash: { a: number; color: [number, number, number] } | null;
+  /** How strongly the dividers of a split screen glow (0 = dark). */
+  lines: number;
 }
 
 const EPS = 1e-9;
@@ -217,6 +257,9 @@ export function effectFrame(tl: EffectTimeline, t: number): EffectFrame {
   const rp = r ? (t - r.t) / r.dur : Infinity;
   const w = tl.texts[lastAt(tl.texts, t, (x) => x.t)];
   const tt = w ? t - w.t : Infinity;
+  const fl = tl.flashes[lastAt(tl.flashes, t, (x) => x.t)];
+  const flash = fl ? fl.a * Math.exp(-9 * (t - fl.t)) : 0;
+  const beat = tl.glow ? tl.glow[lastAt(tl.glow, t, (x) => x)] : undefined;
   return {
     frame,
     zoom,
@@ -231,6 +274,8 @@ export function effectFrame(tl: EffectTimeline, t: number): EffectFrame {
     invert: !!active(tl.inverts, t),
     strobe: !!active(tl.strobes, t),
     text: w && tt < TEXT_SECONDS - EPS ? { word: w.word, size: w.size, tt } : null,
+    flash: fl && flash > 0.01 ? { a: flash, color: fl.color } : null,
+    lines: beat === undefined ? 0 : glowAt(t - beat),
   };
 }
 

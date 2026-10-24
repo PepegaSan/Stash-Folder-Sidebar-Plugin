@@ -6,13 +6,17 @@
  */
 import { type EffectFrame, type EffectTimeline, FX_FONT, TEXT_SECONDS, effectFrame, withStutters } from "../fx/timeline";
 import { t } from "../i18n";
+import { dividerRects, fieldRect, fitInField, layoutFields } from "../model/layouts";
 import { type ColorGrade, colorGrade } from "../model/look";
 import type { FitMode, OutputSettings, PmvProject, TransitionType } from "../model/project";
 import { type Segment, flattenTimeline, resolveTransitions, sourceTimeAt } from "../timeline/flatten";
 
 export const RENDER_PLAN_VERSION = 1;
-/** A piece with effects is at most this long: its per-frame values become FFmpeg expressions, which must stay short. */
-export const MAX_FX_FRAMES = 150;
+/**
+ * A piece with effects is at most this long: its per-frame values become FFmpeg expressions and commands (a long
+ * filtergraph goes into a file). Rarely reached – a cut in a clip could skip a source frame where the frame rates differ.
+ */
+export const MAX_FX_FRAMES = 1800;
 
 export interface SourceRef {
   sceneId: string;
@@ -48,15 +52,30 @@ export interface PieceFx {
   rgb?: number[];
   invert?: Array<[number, number]>;
   strobe?: Array<[number, number]>;
-  /** Words: first frame (negative = began before this piece), size as a share of the picture height. */
-  text?: Array<{ word: string; from: number; size: number }>;
+  /** Words: first frame (negative = began before this piece), size as a share of the picture height, frames it stays (until the next word comes). */
+  text?: Array<{ word: string; from: number; size: number; frames: number }>;
+  /** Flashes: [frame, strength, r, g, b] for every frame one shows. */
+  flash?: Array<[number, number, number, number, number]>;
+  /** Split screens with glowing dividers: the beats (seconds from the piece's start, the last one before it first). */
+  glow?: number[];
+}
+
+/** A field of a split screen: its rectangle in pixels, the group whose clip it shows, mirrored, how the clip fits in. */
+export interface PieceField {
+  rect: [number, number, number, number];
+  group: number;
+  fx: boolean;
+  fy: boolean;
+  fit: FitMode;
 }
 
 export type RenderPiece =
   | { kind: "clip"; frames: number; src: SourceRef; fx?: PieceFx }
   | { kind: "black"; frames: number; fx?: PieceFx }
   /** a = outgoing, b = incoming; null = black. */
-  | { kind: "xfade"; frames: number; transition: TransitionType; a: SourceRef | null; b: SourceRef | null; fx?: PieceFx };
+  | { kind: "xfade"; frames: number; transition: TransitionType; a: SourceRef | null; b: SourceRef | null; fx?: PieceFx }
+  /** A split screen: per group the clip's source (null = black), the fields, the dividers [x, y, w, h] in pixels. */
+  | { kind: "layout"; frames: number; groups: Array<SourceRef | null>; fields: PieceField[]; dividers: Array<[number, number, number, number]>; fx?: PieceFx };
 
 export interface RenderAudio {
   path: string;
@@ -88,8 +107,8 @@ export interface RenderPlan {
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 const round = (v: number, digits: number) => Math.round(v * 10 ** digits) / 10 ** digits;
 
-/** The effects in frames [from, from + frames) of the timeline; null when none of them does anything there. */
-export function pieceFx(tl: EffectTimeline, from: number, frames: number): PieceFx | null {
+/** The effects in frames [from, from + frames) of the timeline; null when none of them does anything there. `split`: a split screen (its dividers can glow). */
+export function pieceFx(tl: EffectTimeline, from: number, frames: number, split = false): PieceFx | null {
   const fps = tl.fps;
   const fr: EffectFrame[] = Array.from({ length: frames }, (_, i) => effectFrame(tl, (from + i) / fps));
   const fx: PieceFx = { at: from };
@@ -134,31 +153,57 @@ export function pieceFx(tl: EffectTimeline, from: number, frames: number): Piece
     return overlaps(f0, n) ? [[f0 - from, n, round(x.dur, 6)]] : [];
   });
   const textFrames = Math.ceil(TEXT_SECONDS * fps - 1e-6);
-  const text = tl.texts.flatMap((x) => {
+  const text = tl.texts.flatMap((x, k) => {
     const f0 = Math.round(x.t * fps);
-    return overlaps(f0, textFrames) ? [{ word: x.word, from: f0 - from, size: x.size }] : [];
+    // the next word takes over (the preview shows the newest)
+    const next = tl.texts[k + 1] ? Math.round(tl.texts[k + 1].t * fps) : Infinity;
+    const n = Math.max(1, Math.min(textFrames, next - f0));
+    return overlaps(f0, n) ? [{ word: x.word, from: f0 - from, size: x.size, frames: n }] : [];
   });
   if (tunnel.length) fx.tunnel = tunnel;
   if (text.length) fx.text = text;
-  if (shake.length || tunnel.length || text.length) any = true;
+  const flash = fr.flatMap((f, i): Array<[number, number, number, number, number]> => (f.flash ? [[i, round(f.flash.a, 4), ...f.flash.color]] : []));
+  if (flash.length) fx.flash = flash;
+  if (split && tl.glow) {
+    // the beats in this piece and the last one before it – the glow of that one may still be fading
+    const t0 = from / fps;
+    const t1 = (from + frames) / fps;
+    const k = tl.glow.findIndex((b) => b >= t0);
+    const first = k < 0 ? tl.glow.length - 1 : Math.max(0, k - 1);
+    const beats = tl.glow.slice(first).filter((b) => b < t1).map((b) => round(b - t0, 6));
+    if (beats.length) fx.glow = beats;
+  }
+  if (shake.length || tunnel.length || text.length || flash.length || fx.glow) any = true;
   for (const k of Object.keys(fx) as Array<keyof PieceFx>) if (fx[k] === undefined) delete fx[k];
   return any ? fx : null;
 }
 
-/** Long pieces with effects are cut into several (a clip goes on frame-exactly), each gets its effects. */
-function addEffects(pieces: RenderPiece[], tl: EffectTimeline, fps: number): RenderPiece[] {
+/**
+ * Long pieces with effects are cut into several (a clip goes on frame-exactly), each gets its effects. A part never
+ * starts past its file's last frame – FFmpeg would decode nothing there; from it the last picture stays, as unsplit.
+ */
+function addEffects(pieces: RenderPiece[], tl: EffectTimeline, fps: number, sources: PmvProject["sources"]): RenderPiece[] {
   const out: RenderPiece[] = [];
   let at = 0;
+  const later = (src: SourceRef | null, off: number): SourceRef | null => {
+    if (!src) return null;
+    const media = sources[src.sceneId];
+    const last = media && media.duration > 0 ? Math.max(0, media.duration - 1 / (media.fps > 0 ? media.fps : 30)) : Infinity;
+    return { ...src, in: r6(Math.min(last, src.in + (off / fps) * src.speed)) };
+  };
   for (const piece of pieces) {
-    const whole = pieceFx(tl, at, piece.frames);
+    const split = piece.kind === "layout";
+    const whole = pieceFx(tl, at, piece.frames, split);
     if (!whole) out.push(piece);
     else if (piece.kind === "xfade" || piece.frames <= MAX_FX_FRAMES) out.push({ ...piece, fx: whole });
     else {
       for (let off = 0; off < piece.frames; off += MAX_FX_FRAMES) {
         const frames = Math.min(MAX_FX_FRAMES, piece.frames - off);
-        const fx = pieceFx(tl, at + off, frames) ?? undefined;
-        if (piece.kind === "black") out.push({ kind: "black", frames, ...(fx ? { fx } : {}) });
-        else out.push({ kind: "clip", frames, src: { ...piece.src, in: r6(piece.src.in + (off / fps) * piece.src.speed) }, ...(fx ? { fx } : {}) });
+        const fx = pieceFx(tl, at + off, frames, split) ?? undefined;
+        const extra = fx ? { fx } : {};
+        if (piece.kind === "black") out.push({ kind: "black", frames, ...extra });
+        else if (piece.kind === "layout") out.push({ ...piece, frames, groups: piece.groups.map((g) => later(g, off)), ...extra });
+        else out.push({ kind: "clip", frames, src: later(piece.src, off)!, ...extra });
       }
     }
     at += piece.frames;
@@ -214,7 +259,23 @@ export function buildRenderPlan(p: PmvProject, fx: EffectTimeline | null = null)
     else pieces.push(piece);
   };
 
+  // the size the backend renders: rounded down to even numbers (the encoder's chroma) – the fields have to fit into it
+  const W = Math.floor(p.output.width / 2) * 2;
+  const H = Math.floor(p.output.height / 2) * 2;
   segs.forEach((seg, i) => {
+    if (seg.layout) {
+      // a split screen: every group's clip from this segment's first frame, every field in pixels
+      const groups = seg.layout.groups.map((g) => ref(g ?? undefined, seg.startFrame));
+      const fields = layoutFields(seg.layout.kind, seg.layout.dir).map((f): PieceField => {
+        const rect = fieldRect(f, W, H);
+        const src = groups[f.group];
+        const media = src ? p.sources[src.sceneId] : null;
+        const fit = src ? fitInField(src.fit, media && media.height > 0 ? media.width / media.height : 0, rect[2] / rect[3]) : "cover";
+        return { rect, group: f.group, fx: f.fx, fy: f.fy, fit };
+      });
+      push({ kind: "layout", frames: seg.endFrame - seg.startFrame, groups, fields, dividers: dividerRects(layoutFields(seg.layout.kind, seg.layout.dir), W, H) });
+      return;
+    }
     const t = trans[i];
     if (t) {
       const from = seg.startFrame - t.before;
@@ -228,7 +289,7 @@ export function buildRenderPlan(p: PmvProject, fx: EffectTimeline | null = null)
   });
 
   const uses = (s: SourceRef | null) => !!s && s.volume > 0 && s.hasAudio;
-  const clipAudio = pieces.some((x) => (x.kind === "clip" ? uses(x.src) : x.kind === "xfade" ? uses(x.a) || uses(x.b) : false));
+  const clipAudio = pieces.some((x) => (x.kind === "clip" ? uses(x.src) : x.kind === "xfade" ? uses(x.a) || uses(x.b) : x.kind === "layout" ? x.groups.some(uses) : false));
 
   let audio: RenderAudio | null = null;
   if (p.audio?.path) {
@@ -237,9 +298,9 @@ export function buildRenderPlan(p: PmvProject, fx: EffectTimeline | null = null)
   } else if (p.audio) {
     warnings.add(t("The music has no server path – rendering without music"));
   }
-  if (!segs.some((s) => s.clip)) warnings.add(t("The timeline has no clips"));
+  if (!segs.some((s) => s.clip || s.layout?.groups.some((g) => g))) warnings.add(t("The timeline has no clips"));
   const look = colorGrade(p.output);
-  const all = fx ? addEffects(pieces, fx, fps) : pieces;
+  const all = fx ? addEffects(pieces, fx, fps, p.sources) : pieces;
 
   return {
     plan: {

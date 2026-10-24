@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /** The generator dialog's simple choices: when to cut (like the PMV Generator) and settings saved by older versions. */
 import { describe, expect, it } from "vitest";
-import { applyMood, defaultSettings, moodEffects } from "../src/generator/generate";
+import { MOODS, applyMood, defaultSettings, moodEffects } from "../src/generator/generate";
 import { chooseCut, cutChoiceOf, loadSaved, withPreset } from "../src/ui/generator/GeneratorDialog";
-import { HELPER_FOR_LOOKS, olderVersion } from "../src/ui/PcRender";
+import { HELPER_FOR_LOOKS, HELPER_FOR_SPLIT, helperFor, olderVersion } from "../src/ui/PcRender";
 
 describe("render helper versions", () => {
   it("a helper from before the colour looks is told to update", () => {
@@ -12,6 +12,13 @@ describe("render helper versions", () => {
     expect(olderVersion("0.9.5", HELPER_FOR_LOOKS)).toBe(false);
     expect(olderVersion("0.10.0", HELPER_FOR_LOOKS)).toBe(false);
     expect(olderVersion("1.0", "0.9.5")).toBe(false);
+  });
+
+  it("split screens need the helper 0.9.6 – it stops at them before", () => {
+    expect(helperFor({ split: true, looks: false })).toBe(HELPER_FOR_SPLIT);
+    expect(helperFor({ split: false, looks: true })).toBe(HELPER_FOR_LOOKS);
+    expect(helperFor({ split: false, looks: false })).toBeUndefined();
+    expect(olderVersion("0.9.5", HELPER_FOR_SPLIT)).toBe(true);
   });
 });
 
@@ -43,7 +50,8 @@ describe("when to cut", () => {
 describe("settings saved by older versions", () => {
   it("turn their transitions into place and kind, and get their mood's effects", () => {
     localStorage.setItem("pmv-creator:generator", JSON.stringify({ mood: "maximal", style: { speed: 1, speedRamps: true, transitions: "flashBar", flashDrops: true } }));
-    expect(loadSaved("t1", ["t1"]).style).toEqual({ speed: 1, speedRamps: true, transitionOn: "bar", transitionType: "fadewhite", flashDrops: true, fx: moodEffects("maximal") });
+    // … and their mood's split screens
+    expect(loadSaved("t1", ["t1"]).style).toEqual({ speed: 1, speedRamps: true, transitionOn: "bar", transitionType: "fadewhite", flashDrops: true, fx: moodEffects("maximal"), layouts: MOODS.maximal.style.layouts, split: "cols", layoutShape: {} });
     expect(moodEffects("maximal")).toMatchObject({ zoom: true, tunnel: true, hue: true, strobe: false });
     const fromPreset = withPreset(defaultSettings("t1"), { style: { transitions: "fadePhrase" } } as never);
     expect(fromPreset.style).toMatchObject({ transitionOn: "phrase", transitionType: "fade" });

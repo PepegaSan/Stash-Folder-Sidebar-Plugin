@@ -1254,6 +1254,81 @@
   min-width: 0;
 }
 
+/* ---------------------------------------------------------------- split screens (timeline lane, inspector, generator) */
+.pmv-lay-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 10px;
+  margin-right: 4px;
+  vertical-align: -1px;
+  fill: currentColor;
+}
+.pmv-lay {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.pmv-lay-picks button {
+  display: inline-flex;
+  align-items: center;
+}
+.pmv-lay-shapes {
+  align-self: stretch;
+}
+.pmv-lay-shapes label {
+  display: inline-flex;
+  align-items: center;
+}
+.pmv-lane-lay {
+  cursor: text;
+}
+.pmv-lay-block {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  display: flex;
+  align-items: center;
+  padding: 0 7px;
+  overflow: hidden;
+  background: rgba(255, 62, 138, 0.22);
+  border: 1px solid rgba(255, 62, 138, 0.75);
+  border-radius: 3px;
+  color: #ffd0e3;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.pmv-lay-block:active {
+  cursor: grabbing;
+}
+.pmv-lay-block.is-selected {
+  z-index: 2;
+  outline: 2px solid #fff;
+}
+.pmv-lay-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+/* on the track lanes: where a field shows the track, and where a split screen hides it */
+.pmv-lane-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.pmv-lane-band.is-field {
+  background: rgba(255, 62, 138, 0.08);
+  box-shadow: inset 0 2px 0 rgba(255, 62, 138, 0.55);
+}
+.pmv-lane-band.is-hidden {
+  z-index: 1;
+  background: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.32) 0 5px, transparent 5px 10px);
+}
+
 /* ---------------------------------------------------------------- simple mode: start panel, "More…" blocks */
 .pmv-more {
   display: flex;

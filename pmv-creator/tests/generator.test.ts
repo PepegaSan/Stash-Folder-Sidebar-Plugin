@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type FillOptions, MIX_TRANSITIONS, fillSlots, timelineWindow } from "../src/generator/assemble";
 import { allowedParts, applyBeatSync, applyGeneration, buildGeneration, defaultSettings, generationRange, upgradeStyle } from "../src/generator/generate";
+import { FULL_ONLY } from "../src/generator/layouts";
 import { type ClipOptions, type MaterialItem, buildMarkerFilter, buildSceneFilter, clientAnyTags } from "../src/generator/material";
 import { actionMotion, beatFit, makePercentile, previewPieces, rhythmOf } from "../src/generator/motion";
 import { mulberry32 } from "../src/generator/random";
@@ -311,7 +312,9 @@ describe("generate end-to-end", () => {
     const p = project([], [clip("1", 0, 4), clip("2", 40, 4)]);
     p.beatGrid = GRID;
     p.audio = { name: "m", path: "/m.mp3", url: null, duration: 32, sourceIn: 0, start: 0, gainDb: 0, fadeIn: 0, fadeOut: 0 };
-    const s = defaultSettings(p.tracks[1].id);
+    // full screen only – split screens: generatorLayouts.test.ts
+    const base = defaultSettings(p.tracks[1].id);
+    const s = { ...base, style: { ...base.style, layouts: FULL_ONLY } };
     return { p, s };
   };
 

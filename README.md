@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.5-informational)
+![Version](https://img.shields.io/badge/version-0.9.6-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -586,6 +586,7 @@ Works in classic Stash and in Stash UI.
 - **Ground rule** — another part of the scene never changes a clip's place on the timeline
 - **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy or on every beat / every 2 / every 4 beats, transitions of your choice (or a mix) on every cut, bar or phrase, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"; **presets** saved on the server; clips from one of your **saved Stash filters**; your own rendered PMVs are never picked as material
 - **Colour looks and beat/drop effects** — looks (warm, pink, cold, vivid, b&w, noir, own colour) and effects like the PMV Generator's: zoom pulse, shake, stutter, strobe, RGB split, glitch, tunnel, negative, echo, words, colour rush – timed by the beat and the drops, the same in preview, Quick record and render; moods switch them
+- **Split screens** like the PMV Generator's — 2-way, 3-way mirrored, 3-way, 4-way, kaleidoscope, side by side or stacked; each field shows a track (V1, V2, …) and stays editable; a lane above the tracks to add, move and resize them; the generator plans them by the music (calm full screen, loud more fields, drops the fullest), with flashes and glowing dividers
 - **Several PMVs at once** — pick songs, each becomes its own project with the same generator settings and is rendered one after another in Stash's queue (e.g. overnight on the PC)
 - **Cuts like another PMV** — pick a PMV from the library: its cuts and flashes (and its music, if you like) are measured and the generator cuts your clips at exactly those moments
 - **Touching up** — 🎲 another clip for one spot (N), 📌 keep the good ones when generating again (P), ⊘ take a scene out of the PMV (optionally for good, via a Stash tag), ⏮ ⏭ review the cuts one by one ([ ] or ↑ ↓)
@@ -618,6 +619,14 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.6
+
+- **Split screens** like the PMV Generator's: 2-way, 3-way mirrored, 3-way, 4-way and kaleidoscope, side by side or stacked. Each field shows a track (V1 the first, V2 the second …), a field's clip goes on while the others cut. New lane **⊞ Split screens** above the tracks: + adds one at the playhead, drag moves it, its edges change its length, Del removes it; the inspector sets layout, fields, start and length
+- **Generator**: split screens by the music – calm parts full screen, louder parts more fields, drops the fullest; the fields cut in turn, clips whose shape fits a field come first. The moods bring their split screens like the PMV Generator's (*PMV classic*: full screen, 3-way mirrored, 3-way); choose them in the dialog
+- New effects **Flash** and **Glowing dividers** for split screens; preview, Quick record and render show the same
+- Render on a PC: split screens need the helper 0.9.6 – the render dialog offers the new file
+- *Fit (blurred edges)*: preview and render darken and blur the copy behind the clip the same way; fixes for words and colour rush of 0.9.5
 
 ### PMV Creator 0.9.5
 

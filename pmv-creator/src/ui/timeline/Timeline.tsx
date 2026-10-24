@@ -6,6 +6,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { overlapsExclusion } from "../../culling/culling";
 import { uid } from "../../model/ids";
+import { LAYOUT_INFO, type LayoutRange, cleanLayouts } from "../../model/layouts";
 import { type Clip, type Track, audioEnd, clipEnd, clipSourceOut, projectDuration } from "../../model/project";
 import { t } from "../../i18n";
 import { useScenes } from "../../stash/sceneCache";
@@ -13,20 +14,23 @@ import type { StashScene } from "../../stash/types";
 import { type EditAction, applyEdit } from "../../state/reducer";
 import { useEditor } from "../../state/store";
 import { clipFromSnippet, findClip } from "../../timeline/ops";
-import { EPS, beatLength, clamp, formatBarBeat, formatTime, snapRange, snapTime } from "../../timeline/time";
+import { EPS, beatLength, clamp, formatBarBeat, formatTime, nearestGridTime, snapRange, snapTime } from "../../timeline/time";
 import { SpriteThumb, sceneHue, transitionLabel } from "../common";
 import { ClipActions, ClipNotice, ReplaceAllButton, SourceToggle } from "../monitor";
 import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions } from "../editing";
 import { useAudioAnalysis, useListen, useSprites, useTransportTime } from "../hooks";
+import { LayoutIcon, layoutLabel } from "../LayoutFields";
 import { reviewCut } from "../review";
 import { Waveform } from "./Waveform";
 
 const HEAD_W = 120;
 const RULER_H = 30;
 const AUDIO_H = 56;
+const LAY_H = 24;
 const LANE_H = 52;
 
 type DragKind = "move" | "trim-start" | "trim-end" | "slip";
+type LayoutDragKind = Exclude<DragKind, "slip">;
 
 interface DragState {
   kind: DragKind;
@@ -192,7 +196,7 @@ export function Timeline() {
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
-    dispatch({ type: "ui", patch: { selectedClipId: clip.id } });
+    dispatch({ type: "ui", patch: { selectedClipId: clip.id, selectedLayoutId: null } });
     if (track.locked) {
       showClip(clip);
       return;
@@ -211,6 +215,58 @@ export function Timeline() {
     }),
     [],
   );
+
+  // ------------------------------------------------------------------ split screen ranges: move / change length
+  const layDragRef = useRef<{ kind: LayoutDragKind; range: LayoutRange; x0: number; moved: boolean } | null>(null);
+  const onLayMove = (e: PointerEvent) => {
+    const d = layDragRef.current;
+    if (!d) return;
+    if (!d.moved && Math.abs(e.clientX - d.x0) < 3) return;
+    d.moved = true;
+    const { project: p, ui: u } = latest.current;
+    const dx = (e.clientX - d.x0) / u.zoom;
+    const opts = e.shiftKey ? null : snapOptions(p, u, transport.time, d.range.id);
+    const snap = (t: number) => (opts ? snapTime(t, opts) : t);
+    const r = d.range;
+    const end = r.start + r.duration;
+    const min = 1 / p.output.fps;
+    let start = r.start;
+    let stop = end;
+    if (d.kind === "move") {
+      const raw = Math.max(0, r.start + dx);
+      start = Math.max(0, opts ? snapRange(raw, r.duration, opts) : raw);
+      stop = start + r.duration;
+    } else if (d.kind === "trim-start") start = clamp(snap(r.start + dx), 0, end - min);
+    else stop = Math.max(r.start + min, snap(end + dx));
+    setPending({ type: "layout/put", layout: { ...r, start, duration: stop - start } });
+  };
+  const onLayUp = () => {
+    window.removeEventListener("pointermove", onLayMove);
+    const d = layDragRef.current;
+    layDragRef.current = null;
+    if (d?.moved && pendingRef.current) dispatch(pendingRef.current);
+    else if (d && !d.moved && (transport.time < d.range.start - EPS || transport.time >= d.range.start + d.range.duration - EPS)) transport.seek(d.range.start);
+    setPending(null);
+  };
+  const beginLayDrag = (e: React.PointerEvent, range: LayoutRange, kind: LayoutDragKind) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    dispatch({ type: "ui", patch: { selectedLayoutId: range.id, selectedClipId: null } });
+    layDragRef.current = { kind, range, x0: e.clientX, moved: false };
+    window.addEventListener("pointermove", onLayMove);
+    window.addEventListener("pointerup", onLayUp, { once: true });
+  };
+  /** + : a 2-way split screen of two bars from the bar at the playhead (it replaces what lies there). */
+  const addLayout = () => {
+    const { project: p } = latest.current;
+    const bar = beatLength(p.beatGrid) * p.beatGrid.beatsPerBar;
+    let start = Math.max(0, nearestGridTime(transport.time, p.beatGrid, p.beatGrid.beatsPerBar));
+    if (start > transport.time + EPS) start = Math.max(0, start - bar);
+    const layout: LayoutRange = { id: uid("lay"), start, duration: 2 * bar, kind: "duo", dir: "cols" };
+    dispatch({ type: "layout/put", layout });
+    dispatch({ type: "ui", patch: { selectedLayoutId: layout.id, selectedClipId: null } });
+  };
 
   // ------------------------------------------------------------------ drop from the bin
   const dropAction = (e: React.DragEvent): EditAction | null => {
@@ -380,7 +436,31 @@ export function Timeline() {
             </div>
           </div>
 
-          {view.tracks.map((track) => (
+          <div className="pmv-tl-row pmv-tl-lay-row" style={{ height: LAY_H }}>
+            <div className="pmv-tl-head pmv-tl-head-lay">
+              <span className="pmv-track-name" title={t("Split screens: in these ranges the picture shows several tracks at once – V1 (the bottom one) in the first field, V2 in the second …")}>
+                ⊞ {t("Split screens")}
+              </span>
+              <button className="pmv-tbtn" title={t("Add a split screen at the playhead (2-way, two bars) – then pick its layout on the right")} onClick={addLayout}>
+                +
+              </button>
+            </div>
+            <div
+              className="pmv-lane pmv-lane-lay"
+              style={{ ...gridStyle, height: LAY_H }}
+              onPointerDown={(e) => {
+                if (e.target !== e.currentTarget) return;
+                dispatch({ type: "ui", patch: { selectedLayoutId: null } });
+                seekFromPointer(e);
+              }}
+            >
+              {view.layouts.map((r) => (
+                <LayoutBlock key={r.id} range={r} zoom={zoom} selected={ui.selectedLayoutId === r.id} onPointerDown={beginLayDrag} />
+              ))}
+            </div>
+          </div>
+
+          {view.tracks.map((track, trackIdx) => (
             <div key={track.id} className={`pmv-tl-row ${track.muted ? "is-muted" : ""} ${track.locked ? "is-locked" : ""}`} style={{ height: LANE_H }}>
               <TrackHead track={track} canRemove={view.tracks.length > 1} />
               <div
@@ -389,10 +469,11 @@ export function Timeline() {
                 style={{ ...gridStyle, height: LANE_H }}
                 onPointerDown={(e) => {
                   if (e.target !== e.currentTarget) return;
-                  dispatch({ type: "ui", patch: { selectedClipId: null } });
+                  dispatch({ type: "ui", patch: { selectedClipId: null, selectedLayoutId: null } });
                   seekFromPointer(e);
                 }}
               >
+                {layoutBands(view.layouts, view.tracks.length, trackIdx, zoom)}
                 {track.clips.map((c) => (
                   <ClipBlock
                     key={c.id}
@@ -416,6 +497,41 @@ export function Timeline() {
           <div className="pmv-playhead" ref={playheadRef} style={{ left: HEAD_W }} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** On a track lane, where split screens are: a field shows this track there – or it is not seen there at all. */
+function layoutBands(layouts: LayoutRange[], tracks: number, trackIdx: number, zoom: number): React.ReactNode {
+  // the bottom track is group 0
+  const group = tracks - 1 - trackIdx;
+  return cleanLayouts(layouts).map((r) => {
+    const field = group < LAYOUT_INFO[r.kind].groups;
+    return (
+      <div
+        key={r.id}
+        className={`pmv-lane-band ${field ? "is-field" : "is-hidden"}`}
+        style={{ left: r.start * zoom, width: Math.max(1, r.duration * zoom) }}
+        title={field ? t("Split screen: field {n} shows this track", { n: group + 1 }) : t("Split screen: this track is not seen here")}
+      />
+    );
+  });
+}
+
+/** A split screen range on its lane: drag moves it, its edges change its length. */
+function LayoutBlock({ range, zoom, selected, onPointerDown }: { range: LayoutRange; zoom: number; selected: boolean; onPointerDown: (e: React.PointerEvent, range: LayoutRange, kind: LayoutDragKind) => void }) {
+  const width = Math.max(2, range.duration * zoom);
+  const title = [
+    layoutLabel(range.kind),
+    `${formatTime(range.start)} → ${formatTime(range.start + range.duration)} (${range.duration.toFixed(3)} s)`,
+    t("Drag: move · edges: change its length · Shift: no snapping · Del: back to full screen"),
+  ].join("\n");
+  return (
+    <div className={`pmv-lay-block ${selected ? "is-selected" : ""}`} style={{ left: range.start * zoom, width }} title={title} onPointerDown={(e) => onPointerDown(e, range, "move")}>
+      {width > 22 && <LayoutIcon kind={range.kind} dir={range.dir} />}
+      {width > 80 && <span className="pmv-lay-name">{layoutLabel(range.kind)}</span>}
+      <div className="pmv-clip-handle is-left" onPointerDown={(e) => onPointerDown(e, range, "trim-start")} />
+      <div className="pmv-clip-handle is-right" onPointerDown={(e) => onPointerDown(e, range, "trim-end")} />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import type { StashRef } from "../stash/types";
 import { type MaterialChange, applyMaterial } from "../generator/reroll";
 import { readAdvanced } from "./prefs";
 import type { EffectSettings } from "../model/effects";
+import type { LayoutRange } from "../model/layouts";
 import type { AudioTrack, BeatGrid, Clip, CutTemplate, Exclusion, OutputSettings, PmvProject, Snippet, SourceMedia, TimelineMarker, Track, Transition } from "../model/project";
 import {
   type ClipPatch,
@@ -23,6 +24,7 @@ import {
   findClip,
   insertClip,
   moveClip,
+  putLayout,
   removeTrack,
   replaceClip,
   setAllTransitions,
@@ -72,6 +74,9 @@ export type EditAction =
   | { type: "grid/update"; patch: Partial<BeatGrid> }
   | { type: "output/update"; patch: Partial<OutputSettings> }
   | { type: "effects/update"; patch: Partial<EffectSettings> }
+  /** Add or change a split screen range (the same id = the same range). */
+  | { type: "layout/put"; layout: LayoutRange }
+  | { type: "layout/remove"; layoutId: string }
   | { type: "project/rename"; name: string }
   | { type: "marker/add"; marker: TimelineMarker }
   | { type: "marker/remove"; markerId: string }
@@ -185,6 +190,10 @@ export function applyEdit(p: PmvProject, a: EditAction): PmvProject {
       return { ...p, output: { ...p.output, ...a.patch } };
     case "effects/update":
       return { ...p, effects: { ...p.effects, ...a.patch } };
+    case "layout/put":
+      return putLayout(p, a.layout);
+    case "layout/remove":
+      return { ...p, layouts: p.layouts.filter((x) => x.id !== a.layoutId) };
     case "project/rename":
       return { ...p, name: a.name };
     case "marker/add":
@@ -212,6 +221,8 @@ function coalesceKey(a: EditAction): string | null {
     case "effects/update":
     case "project/rename":
       return a.type;
+    case "layout/put":
+      return `${a.type}:${a.layout.id}`;
     default:
       return null;
   }
@@ -222,6 +233,8 @@ export type SaveState = "saved" | "dirty" | "saving" | "error";
 
 export interface UiState {
   selectedClipId: string | null;
+  /** The split screen range selected on the timeline (the inspector shows it). */
+  selectedLayoutId: string | null;
   selectedSnippetId: string | null;
   activeSceneId: string | null;
   /** Source time the scene drill-down jumps to when it opens. */
@@ -278,6 +291,7 @@ const COALESCE_MS = 1000;
 
 export const DEFAULT_UI: UiState = {
   selectedClipId: null,
+  selectedLayoutId: null,
   selectedSnippetId: null,
   activeSceneId: null,
   activeSceneSeek: 0,
@@ -307,7 +321,10 @@ export function initialEditorState(project: PmvProject, ui: Partial<UiState> = {
 function fixSelection(ui: UiState, p: PmvProject): UiState {
   const clipOk = !ui.selectedClipId || !!findClip(p, ui.selectedClipId);
   const snipOk = !ui.selectedSnippetId || p.bin.some((s) => s.id === ui.selectedSnippetId);
-  return clipOk && snipOk ? ui : { ...ui, selectedClipId: clipOk ? ui.selectedClipId : null, selectedSnippetId: snipOk ? ui.selectedSnippetId : null };
+  const layoutOk = !ui.selectedLayoutId || p.layouts.some((x) => x.id === ui.selectedLayoutId);
+  return clipOk && snipOk && layoutOk
+    ? ui
+    : { ...ui, selectedClipId: clipOk ? ui.selectedClipId : null, selectedSnippetId: snipOk ? ui.selectedSnippetId : null, selectedLayoutId: layoutOk ? ui.selectedLayoutId : null };
 }
 
 export function editorReducer(state: EditorState, action: Action, now: number = Date.now()): EditorState {
@@ -323,9 +340,12 @@ export function editorReducer(state: EditorState, action: Action, now: number = 
       return { ...state, past: [...state.past, state.present], present, future, lastEdit: null, ui: fixSelection(state.ui, present) };
     }
     case "project/load":
-      return initialEditorState(action.project, { ...state.ui, selectedClipId: null, selectedSnippetId: null, activeSceneId: null, swapFrom: null, clipTask: null, sceneOut: null, saveState: "saved" });
+      return initialEditorState(action.project, { ...state.ui, selectedClipId: null, selectedLayoutId: null, selectedSnippetId: null, activeSceneId: null, swapFrom: null, clipTask: null, sceneOut: null, saveState: "saved" });
     case "ui": {
       const ui = { ...state.ui, ...action.patch };
+      // a clip or a split screen is selected, never both (Del takes away what is selected)
+      if (action.patch.selectedClipId && !("selectedLayoutId" in action.patch)) ui.selectedLayoutId = null;
+      if (action.patch.selectedLayoutId && !("selectedClipId" in action.patch)) ui.selectedClipId = null;
       // opening a scene (from anywhere) shows it in the main player
       if (action.patch.activeSceneId) {
         ui.sceneInPlayer = action.patch.sceneInPlayer ?? true;

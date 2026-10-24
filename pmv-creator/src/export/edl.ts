@@ -1,6 +1,7 @@
 /**
  * CMX3600 EDL (single video track = the flattened sequence, plus the music as audio event).
  * Speed changes become M2 lines, transitions become dissolves (other xfade types are noted in comments).
+ * A split screen keeps the clip of its first field (V1) and is noted in a comment.
  * Record timecode starts at 01:00:00:00 like DaVinci Resolve's default timeline.
  */
 import type { PmvProject } from "../model/project";
@@ -28,9 +29,11 @@ export function buildEdl(p: PmvProject): string {
   let n = 0;
   const num = () => String(++n).padStart(3, "0");
 
-  segs.forEach((seg, i) => {
-    const c = seg.clip;
-    if (!c) return;
+  segs.forEach((part, i) => {
+    const g0 = part.layout?.groups[0] ?? null;
+    const seg = part.layout ? (g0 ? { ...part, clip: g0.clip, clipStartFrame: g0.clipStartFrame } : null) : part;
+    const c = seg?.clip;
+    if (!seg || !c) return;
     const src = p.sources[c.sceneId];
     const t = trans[i];
     // With a transition the edit point moves to the start of the (centred) dissolve.
@@ -61,6 +64,7 @@ export function buildEdl(p: PmvProject): string {
       lines.push(`* SOURCE FILE: ${src.path}`);
     }
     lines.push(`* PMV SCENE: ${c.sceneId}${c.markerId ? ` MARKER: ${c.markerId}` : ""}`);
+    if (part.layout) lines.push(`* PMV SPLIT SCREEN: ${part.layout.kind} (${part.layout.dir}) – only its first field here`);
     lines.push("");
   });
 

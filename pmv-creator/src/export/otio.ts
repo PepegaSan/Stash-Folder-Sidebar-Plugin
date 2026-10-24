@@ -5,6 +5,7 @@
  * Conventions: rate = output fps, values in frames. A clip's source_range.duration is its length in
  * the track; speed is expressed as LinearTimeWarp (OTIO effects do not change the track duration).
  */
+import { LAYOUT_INFO, cleanLayouts } from "../model/layouts";
 import type { PmvProject, Track } from "../model/project";
 import { clipEnd } from "../model/project";
 import { toFrame } from "../timeline/time";
@@ -122,7 +123,21 @@ export function buildOtio(p: PmvProject): Json {
       source_range: null,
       children,
       effects: [],
-      markers: p.markers.map((m) => ({ OTIO_SCHEMA: "Marker.2", name: m.label, color: "RED", marked_range: tr(toFrame(m.time, rate), 0, rate), comment: "", metadata: {} })),
+      markers: [
+        ...p.markers.map((m) => ({ OTIO_SCHEMA: "Marker.2", name: m.label, color: "RED", marked_range: tr(toFrame(m.time, rate), 0, rate), comment: "", metadata: {} })),
+        // split screens have no OTIO equivalent: a marker over each range says where they were and which tracks fill it
+        ...cleanLayouts(p.layouts).map((r) => {
+          const s = toFrame(r.start, rate);
+          return {
+            OTIO_SCHEMA: "Marker.2",
+            name: `Split screen: ${r.kind} (${r.dir})`,
+            color: "PINK",
+            marked_range: tr(s, toFrame(r.start + r.duration, rate) - s, rate),
+            comment: `Fields from V1…V${LAYOUT_INFO[r.kind].groups} (bottom track first)`,
+            metadata: { pmv: { layout: r } },
+          };
+        }),
+      ],
       metadata: {},
     },
     metadata: { pmv: { projectId: p.id, bpm: p.beatGrid.bpm, beatOffset: p.beatGrid.offset } },

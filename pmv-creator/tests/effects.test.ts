@@ -212,7 +212,7 @@ describe("settings", () => {
   it("generating puts the run's effects into the project", () => {
     const p = fxProject({});
     const settings = { ...defaultSettings(p.tracks[1].id), style: { ...defaultSettings(p.tracks[1].id).style, fx: moodEffects("hypno") } };
-    const r = { trackId: p.tracks[1].id, from: 0, to: 2, replaceTrack: false, clips: [clip("2", 0, 2)], snippets: [], sources: [], seed: 1, settings };
+    const r = { trackId: p.tracks[1].id, from: 0, to: 2, replaceTrack: false, clips: [clip("2", 0, 2)], layouts: [], fields: [], snippets: [], sources: [], seed: 1, settings };
     expect(applyGeneration(p, r).effects).toEqual(moodEffects("hypno"));
   });
 });

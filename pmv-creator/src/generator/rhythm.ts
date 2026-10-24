@@ -4,6 +4,7 @@
  */
 import type { AudioTrack, BeatGrid } from "../model/project";
 import { EPS, beatIndexAt, beatLength, clamp, timeOfBeat } from "../timeline/time";
+import type { Shape } from "./material";
 
 export interface BeatInfo {
   t: number;
@@ -94,6 +95,14 @@ export interface Slot {
   progress: number;
   /** The template PMV flashes here. */
   flash?: boolean;
+  /** Split screens (layouts.ts): the field group this slot fills (0 = full screen or the first field) … */
+  group?: number;
+  /** … the shape of its field (width / height; only in a split screen) … */
+  aspect?: number;
+  /** … that it begins or follows a split screen: a hard cut, no transition … */
+  hard?: boolean;
+  /** … and the clip shape its layout asks for (none = any). */
+  shape?: Shape;
 }
 
 const beatIndexAtTime = (beats: BeatInfo[], t: number): number => {
@@ -107,9 +116,11 @@ const beatIndexAtTime = (beats: BeatInfo[], t: number): number => {
   return lo;
 };
 
-export function planCuts(beats: BeatInfo[], grid: BeatGrid, from: number, to: number, o: CutOptions): Slot[] {
+/** `forced`: times that must be cuts (where a split screen changes) – the count towards the next cut starts there. */
+export function planCuts(beats: BeatInfo[], grid: BeatGrid, from: number, to: number, o: CutOptions, forced: number[] = []): Slot[] {
   if (!beats.length || to <= from + EPS) return [];
-  const starts: number[] = [];
+  let starts: number[] = [];
+  const must = (t: number) => forced.some((f) => Math.abs(f - t) < EPS);
 
   if (o.mode === "pattern") {
     const pattern = o.pattern.filter((x) => x > 0);
@@ -121,6 +132,7 @@ export function planCuts(beats: BeatInfo[], grid: BeatGrid, from: number, to: nu
       if (timeOfBeat(b, grid) >= to - EPS) break;
       starts.push(timeOfBeat(b, grid));
     }
+    if (forced.length) starts = [...starts, ...forced.filter((f) => f > from + EPS && f < to - EPS && !starts.some((s) => Math.abs(s - f) < EPS))].sort((a, b) => a - b);
   } else {
     const bpb = grid.beatsPerBar;
     let last = 0;
@@ -136,7 +148,7 @@ export function planCuts(beats: BeatInfo[], grid: BeatGrid, from: number, to: nu
       if (B.drop && held >= Math.max(1, o.minBeats)) cut = true;
       if (o.maxBeats > 0 && held >= o.maxBeats) cut = true;
       if (o.minBeats > 0 && held < o.minBeats) cut = false;
-      if (cut) {
+      if (cut || must(B.t)) {
         starts.push(B.t);
         last = k;
       }

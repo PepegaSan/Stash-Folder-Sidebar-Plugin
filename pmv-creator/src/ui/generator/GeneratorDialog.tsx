@@ -2,11 +2,13 @@
  * "Generate PMV": pick clips by criteria and a cutting style like a PMV generator – the result lands on a
  * track as ordinary, editable clips (one undo step). Simple mode: mood, where the clips come from, tags,
  * performers, count. Advanced mode shows every option (following the Pepega PMV Generator where it applies
- * to an offline cut; split screens and live effects are left out).
+ * to an offline cut; its live-only extras like the reveal opening are left out).
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { PickOrder, TransitionPick, TransitionWhen } from "../../generator/assemble";
-import { type GeneratorSettings, MOODS, type Mood, type StyleOptions, applyMood, defaultSettings, generationRange, pinnedClips, savedEffects, upgradeStyle } from "../../generator/generate";
+import { type GeneratorSettings, MOODS, type Mood, type StyleOptions, applyMood, defaultSettings, fieldCapacity, generationRange, savedEffects, savedLayouts, upgradeStyle, withinFields } from "../../generator/generate";
+import { groupsNeeded, usesSplit } from "../../generator/layouts";
+import { LAYOUTS, groupTrackIndex } from "../../model/layouts";
 import type { ClipOptions, ClipSource, TagStage } from "../../generator/material";
 import type { CutOptions, Pace } from "../../generator/rhythm";
 import { t, tn } from "../../i18n";
@@ -20,6 +22,7 @@ import { rememberAdvanced } from "../../state/prefs";
 import { useEditor } from "../../state/store";
 import { LookFields, More, NumField, RefPicker, Seg, transitionLabel } from "../common";
 import { EffectFields, effectSummary } from "../EffectFields";
+import { GeneratorLayouts } from "../LayoutFields";
 import { CutTemplateBox } from "./CutTemplateBox";
 import { type RunOutcome, runGenerator } from "./run";
 import { SavedFilterPick } from "./SavedFilterPick";
@@ -40,7 +43,7 @@ export function loadSaved(fallbackTrack: string, trackIds: string[]): GeneratorS
       clips: { ...base.clips, ...s.clips },
       select: { ...base.select, ...s.select },
       cut: { ...base.cut, ...s.cut },
-      style: { ...base.style, ...upgradeStyle(s.style), fx: savedEffects(s) },
+      style: { ...base.style, ...upgradeStyle(s.style), fx: savedEffects(s), layouts: savedLayouts(s) },
       target: { ...base.target, ...s.target, trackId },
     };
   } catch {
@@ -65,7 +68,7 @@ export function withPreset(x: GeneratorSettings, ps: Partial<GeneratorSettings>)
     clips: { ...base.clips, ...ps.clips },
     select: { ...base.select, ...ps.select },
     cut: { ...base.cut, ...ps.cut },
-    style: { ...base.style, ...upgradeStyle(ps.style), fx: savedEffects(ps) },
+    style: { ...base.style, ...upgradeStyle(ps.style), fx: savedEffects(ps), layouts: savedLayouts(ps) },
   };
 }
 
@@ -208,7 +211,16 @@ export function GeneratorDialog() {
   // without music there is no song range: N bars from the playhead; simple mode always fills the whole song
   const target = !hasAudio ? { ...s.target, range: "bars" as const } : adv ? s.target : { ...s.target, range: "song" as const };
   const range = useMemo(() => generationRange(project, target, transport.time), [project, target.range, target.bars, transport.time]);
-  const pins = pinnedClips(project, target.trackId);
+  // split screens as they will be generated: only as many fields as there are usable tracks (a locked or hidden one stops them)
+  const capacity = fieldCapacity(project);
+  const layouts = withinFields(s.style.layouts, capacity);
+  const split = usesSplit(layouts);
+  const limited = LAYOUTS.some((k) => s.style.layouts[k] && !layouts[k]);
+  // the tracks the run fills: with split screens V1 and the ones above it for the fields
+  const filled = split ? project.tracks.slice(Math.max(0, project.tracks.length - groupsNeeded(layouts))) : project.tracks.filter((x) => x.id === target.trackId);
+  const pins = filled.flatMap((x) => x.clips.filter((c) => c.pinned));
+  // generated onto another track, the split screens of the range stay (they show V1 and the tracks above it)
+  const otherSplits = !split && target.trackId !== project.tracks[project.tracks.length - 1].id && project.layouts.some((x) => x.start < range.to && x.start + x.duration > range.from);
 
   const run = async (seed: number) => {
     const next = { ...s, seed };
@@ -229,11 +241,21 @@ export function GeneratorDialog() {
   };
 
   const moodHints: Record<Exclude<Mood, "custom">, string> = {
-    classic: t("Cuts follow the music's energy; zoom pulse, shake and stutter, RGB split and glitch on drops"),
-    maximal: t("A cut on every beat, flashes, speed ramps and every effect"),
-    hypno: t("Slow, dissolving cuts every two beats; echo, tunnel and colour rush"),
-    clean: t("Energy-based cuts, only the zoom pulse"),
+    classic: t("Cuts follow the music's energy; zoom pulse, shake and stutter, RGB split and glitch on drops; 3-way split screens in loud parts"),
+    maximal: t("A cut on every beat, flashes, speed ramps, every effect and every split screen"),
+    hypno: t("Slow, dissolving cuts every two beats; echo, tunnel and colour rush; kaleidoscope and mirrored 3-way"),
+    clean: t("Energy-based cuts, only the zoom pulse; 2-way and mirrored 3-way in loud parts"),
   };
+  const layoutPicker = (advanced: boolean) => (
+    <>
+      <GeneratorLayouts value={s.style} onChange={setStyle} advanced={advanced} portrait={project.output.height > project.output.width} />
+      {limited && (
+        <div className="pmv-li-meta">
+          ⚠ {t("{name} is locked or hidden – split screens with more fields are left out.", { name: project.tracks[groupTrackIndex(project.tracks.length, capacity)]?.name ?? "V1" })}
+        </div>
+      )}
+    </>
+  );
 
   const sourceSeg = (
     <Seg<ClipSource>
@@ -323,6 +345,12 @@ export function GeneratorDialog() {
             <div className="pmv-row pmv-wrap">
               <span className="pmv-gen-label">{t("Transitions")}</span>
               <TransitionChoice style={s.style} onChange={setStyle} />
+            </div>
+            <div className="pmv-row pmv-wrap pmv-gen-lay">
+              <span className="pmv-gen-label" title={t("Change to the beat – the louder, the more fields")}>
+                {t("Split screens")}
+              </span>
+              {layoutPicker(false)}
             </div>
             {/* the look belongs to the PMV, not to a generator run: it changes the project right away */}
             <div className="pmv-grid2 pmv-gen-look">
@@ -513,6 +541,10 @@ export function GeneratorDialog() {
                 <NumField value={s.style.speed} onCommit={(v) => setStyle({ speed: v })} min={0.25} max={4} step={0.05} suffix="×" />
                 <LookFields output={project.output} onChange={(patch) => dispatch({ type: "output/update", patch })} />
               </div>
+              <div className="pmv-gen-label" title={t("Change to the beat – the louder, the more fields")}>
+                {t("Split screens")}
+              </div>
+              {layoutPicker(true)}
               <div className="pmv-gen-label" title={t("They go into the PMV with the clips – change them later in the inspector (nothing selected)")}>
                 {t("Effects")}
               </div>
@@ -537,14 +569,21 @@ export function GeneratorDialog() {
                   {(s.target.range === "bars" || !hasAudio) && <NumField value={s.target.bars} onCommit={(v) => setTarget({ bars: Math.round(v) })} min={1} max={512} step={1} digits={0} suffix={t("bars")} />}
                 </span>
                 <label>{t("Track")}</label>
-                <select className="form-control form-control-sm" value={s.target.trackId} onChange={(e) => setTarget({ trackId: e.target.value })}>
-                  {project.tracks.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.name}
-                      {x.clips.length ? ` (${tn(x.clips.length, "{n} clips", "1 clip")})` : ""}
-                    </option>
-                  ))}
-                </select>
+                {split ? (
+                  <span className="pmv-li-meta">{t("Split screens: V1 and the tracks above it (one per field)")}</span>
+                ) : (
+                  <span>
+                    <select className="form-control form-control-sm" value={s.target.trackId} onChange={(e) => setTarget({ trackId: e.target.value })}>
+                      {project.tracks.map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name}
+                          {x.clips.length ? ` (${tn(x.clips.length, "{n} clips", "1 clip")})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {otherSplits && <span className="pmv-li-meta">{t("The split screens in this range stay – their fields show V1 and the tracks above it.")}</span>}
+                  </span>
+                )}
                 <label>{t("Seed")}</label>
                 <span className="pmv-row">
                   <NumField value={s.seed} onCommit={(v) => setS((x) => ({ ...x, seed: Math.round(v) }))} min={0} step={1} digits={0} />
@@ -580,7 +619,8 @@ export function GeneratorDialog() {
                 <>
                   {" "}
                   ({tn(outcome.stats.candidates, "{n} candidates", "1 candidate")}
-                  {outcome.stats.stages > 1 && `, ${t("{n} stages", { n: outcome.stats.stages })}`}) · {tn(outcome.stats.drops, "{n} drops", "1 drop")} · {t("Seed")} {outcome.result.seed}
+                  {outcome.stats.stages > 1 && `, ${t("{n} stages", { n: outcome.stats.stages })}`}) · {tn(outcome.stats.drops, "{n} drops", "1 drop")}
+                  {outcome.result.layouts.length > 0 && ` · ${tn(outcome.result.layouts.length, "{n} split screens", "1 split screen")}`} · {t("Seed")} {outcome.result.seed}
                   {s.select.paceMatch && ` · ${t("speed maps for {n} scenes", { n: outcome.mapped })}`}
                   {s.select.beatSync && ` · ${t("{n} clips put on the beat", { n: outcome.synced })}`}
                 </>

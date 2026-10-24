@@ -28,6 +28,13 @@ function lsSet(key: string, value: string): void {
 
 /** The helper renders the colour look and the beat/drop effects from this version on – an older one leaves them out. */
 export const HELPER_FOR_LOOKS = "0.9.5";
+/** … and split screens from this one – an older one stops at the first. */
+export const HELPER_FOR_SPLIT = "0.9.6";
+
+/** The helper version a render needs: split screens, or the colour look / effects (undefined = any helper). */
+export function helperFor(o: { split: boolean; looks: boolean }): string | undefined {
+  return o.split ? HELPER_FOR_SPLIT : o.looks ? HELPER_FOR_LOOKS : undefined;
+}
 
 /** a < b for dotted version numbers; an unknown version counts as old. */
 export function olderVersion(a: string | undefined, b: string): boolean {
@@ -119,7 +126,7 @@ export function PcRender({ onHelper, disabled, needs }: { onHelper: (id: string 
               ● {t("connected")}
             </span>
           </div>
-          {needs && olderVersion(current.version, needs) && <OutdatedHelper version={current.version} />}
+          {needs && olderVersion(current.version, needs) && <OutdatedHelper version={current.version} split={needs === HELPER_FOR_SPLIT} />}
           <HelperSettings key={current.id} helper={current} disabled={disabled} />
         </>
       ) : (
@@ -188,12 +195,16 @@ function HelperSettings({ helper, disabled }: { helper: RenderHelper; disabled: 
 }
 
 /** A helper from before the colour looks would render without it: offer the new one. */
-function OutdatedHelper({ version }: { version?: string }) {
+function OutdatedHelper({ version, split }: { version?: string; split: boolean }) {
   const [apiKey, setApiKey] = useState("");
   const { download, status } = useHelperDownload();
+  const v = { version: version ?? "?" };
   return (
     <div className="pmv-error">
-      ⚠ {t("The helper on this PC ({version}) renders without the colour look and the effects. Download it again, close the old window and start the new file:", { version: version ?? "?" })}
+      ⚠{" "}
+      {split
+        ? t("The helper on this PC ({version}) can't render split screens yet. Download it again, close the old window and start the new file:", v)
+        : t("The helper on this PC ({version}) renders without the colour look and the effects. Download it again, close the old window and start the new file:", v)}
       <div className="pmv-row">
         <button className="btn btn-sm btn-primary" onClick={() => void download(apiKey)}>
           ⬇ {t("Download render helper")}

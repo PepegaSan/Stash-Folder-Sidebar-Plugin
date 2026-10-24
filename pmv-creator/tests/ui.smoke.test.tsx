@@ -378,7 +378,11 @@ describe("PMV Creator UI (mocked Stash)", () => {
   });
 
   it("re-rolls, keeps and takes a scene out from the bar above the timeline", async () => {
-    const v1Lane = () => $$(".pmv-lane[data-track-id]")[1];
+    // V1 is the bottom lane (the generated PMV's split screens may have added tracks above it)
+    const v1Lane = () => {
+      const lanes = $$(".pmv-lane[data-track-id]");
+      return lanes[lanes.length - 1];
+    };
     const first = () => Array.from(v1Lane().querySelectorAll<HTMLElement>(".pmv-clip")).find((el) => el.style.left === "0px")!;
     const scene = () => first().title.split("\n")[0];
     const button = (text: string) => $$(".pmv-tl-toolbar button").find((b) => b.textContent?.startsWith(text)) ?? null;

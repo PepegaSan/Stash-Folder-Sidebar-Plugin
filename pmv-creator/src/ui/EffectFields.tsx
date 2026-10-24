@@ -28,6 +28,10 @@ export function effectLabel(id: EffectId): string {
       return t("Text");
     case "hue":
       return t("Colour rush");
+    case "flash":
+      return t("Flash");
+    case "lines":
+      return t("Glowing dividers");
   }
 }
 
@@ -55,11 +59,15 @@ function effectHint(id: EffectId): string {
       return t("Your words slam into the picture on drops and now and then on loud bars");
     case "hue":
       return t("The colours turn through the whole song – faster when it is loud");
+    case "flash":
+      return t("A bright flash where a split screen begins or ends (pink on a drop), a lighter one when a field cuts in a loud part");
+    case "lines":
+      return t("The lines between the fields of a split screen glow pink on every beat");
   }
 }
 
 function groupLabel(g: EffectGroup): string {
-  return g === "beat" ? t("On the beat") : g === "drops" ? t("On drops") : t("Through the song");
+  return g === "beat" ? t("On the beat") : g === "drops" ? t("On drops") : g === "song" ? t("Through the song") : t("Split screens");
 }
 
 /** "Zoom pulse, RGB split, …" or "none". */

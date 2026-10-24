@@ -16,6 +16,11 @@
 
     "output": { "$ref": "#/$defs/output" },
     "effects": { "$ref": "#/$defs/effects" },
+    "layouts": {
+      "description": "Split-Screens: Bereiche der Timeline, in denen mehrere Clips gleichzeitig zu sehen sind. Feld-Gruppe 0 zeigt die unterste Spur (V1), Gruppe 1 die darüber usw.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/layout" }
+    },
     "audio": {
       "description": "Musikspur. null = noch keine Musik gewählt.",
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/audio" }]
@@ -125,9 +130,24 @@
         "echo": { "type": "boolean", "description": "Geisterbilder in lauten Teilen." },
         "text": { "type": "boolean", "description": "Wörter (words) auf Drops und manchen lauten Takten." },
         "hue": { "type": "boolean", "description": "Farbrausch: die Farben drehen sich durch den Song." },
+        "flash": { "type": "boolean", "description": "Blitz, wo ein Split-Screen beginnt oder endet (rosa auf einem Drop)." },
+        "lines": { "type": "boolean", "description": "Die Trennlinien eines Split-Screens leuchten auf jedem Beat." },
         "pulseAmount": { "type": "number", "minimum": 0, "maximum": 1.5, "description": "Stärke des Zoom-Pulses (1 = wie im PMV Generator)." },
         "pulseOn": { "enum": ["beat", "2", "bar"], "description": "Zoom-Puls auf jedem Beat, auf Beat 1 und 3 oder auf jedem Takt (Drops immer)." },
         "words": { "type": "string", "maxLength": 2000, "description": "Wörter für den Text-Effekt, durch Kommas getrennt." }
+      }
+    },
+
+    "layout": {
+      "type": "object",
+      "required": ["id", "start", "duration", "kind", "dir"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "start": { "$ref": "#/$defs/seconds" },
+        "duration": { "type": "number", "exclusiveMinimum": 0 },
+        "kind": { "enum": ["duo", "trim", "tri", "quad", "kaleido"], "description": "2 nebeneinander, 3 gespiegelt (außen derselbe Clip), 3, 4 Felder, Kaleidoskop (ein Clip, vierfach gespiegelt)." },
+        "dir": { "enum": ["cols", "rows"], "description": "Felder nebeneinander oder übereinander (4 Felder und Kaleidoskop: Raster)." }
       }
     },
 

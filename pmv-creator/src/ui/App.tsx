@@ -165,6 +165,7 @@ function useShortcuts() {
           case "Delete":
           case "Backspace":
             if (sel) dispatch({ type: "clip/delete", clipId: sel, ripple: e.shiftKey });
+            else if (ui.selectedLayoutId) dispatch({ type: "layout/remove", layoutId: ui.selectedLayoutId });
             break;
           case "s":
             if (sel) dispatch({ type: "clip/split", clipId: sel, time: transport.time });
@@ -192,7 +193,7 @@ function useShortcuts() {
             break;
           case "Escape":
             // first leave "replace all" picking, then clear the selection
-            dispatch({ type: "ui", patch: ui.swapFrom ? { swapFrom: null } : { selectedClipId: null, selectedSnippetId: null } });
+            dispatch({ type: "ui", patch: ui.swapFrom ? { swapFrom: null } : { selectedClipId: null, selectedSnippetId: null, selectedLayoutId: null } });
             break;
           case "Home":
             transport.seek(0);

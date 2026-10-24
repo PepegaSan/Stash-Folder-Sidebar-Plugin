@@ -12,16 +12,18 @@ import { beatLength, formatBarBeat, nearestGridTime } from "../timeline/time";
 import { LookFields, More, NumField, transitionLabel } from "./common";
 import { EffectFields } from "./EffectFields";
 import { useAudioAnalysis } from "./hooks";
+import { LayoutInspector } from "./LayoutFields";
 import { useMusic } from "./music";
 import { SongLibraryButton } from "./SongLibrary";
 
 export function Inspector() {
   const { state } = useEditor();
   const loc = state.ui.selectedClipId ? findClip(state.present, state.ui.selectedClipId) : null;
+  const range = !loc && state.ui.selectedLayoutId ? state.present.layouts.find((x) => x.id === state.ui.selectedLayoutId) : undefined;
   // keyed by the mode: "More…" blocks open up when advanced is switched on
   return (
     <div className="pmv-inspector" key={String(state.ui.advanced)}>
-      {loc ? <ClipInspector loc={loc} /> : <ProjectInspector />}
+      {loc ? <ClipInspector loc={loc} /> : range ? <LayoutInspector range={range} /> : <ProjectInspector />}
     </div>
   );
 }

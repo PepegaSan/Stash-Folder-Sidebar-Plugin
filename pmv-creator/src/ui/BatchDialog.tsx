@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { buildRenderPlan } from "../export/renderPlan";
 import { type GeneratorSettings, MOODS, applyGeneration } from "../generator/generate";
+import { usesSplit } from "../generator/layouts";
 import { type EnergyFn, peaksEnergy } from "../generator/rhythm";
 import { t, tn } from "../i18n";
 import { anyEffect } from "../model/effects";
@@ -19,7 +20,7 @@ import { runGenerator } from "./generator/run";
 import { forgetAudioAnalysis, getAudioAnalysis } from "./hooks";
 import { labelFor, labelingOn } from "./labels";
 import { detectSongGrid } from "./music";
-import { HELPER_FOR_LOOKS, PcRender } from "./PcRender";
+import { PcRender, helperFor } from "./PcRender";
 import { isActive, notifyOn, primeSignal, watchRender } from "./renders";
 import { useRenders } from "./RenderTray";
 import { SongLibraryDialog } from "./SongLibrary";
@@ -294,7 +295,13 @@ export function BatchDialog() {
                 }}
               />
             </div>
-            {pc && <PcRender disabled={busy} needs={colorGrade(base.output) || anyEffect(settings.style.fx) ? HELPER_FOR_LOOKS : undefined} onHelper={(id, name) => setHelper(id && name ? { id, name } : null)} />}
+            {pc && (
+              <PcRender
+                disabled={busy}
+                needs={helperFor({ split: usesSplit(settings.style.layouts), looks: !!colorGrade(base.output) || anyEffect(settings.style.fx) })}
+                onHelper={(id, name) => setHelper(id && name ? { id, name } : null)}
+              />
+            )}
             <AfterRender label={label} onLabel={setLabel} notify={notify} onNotify={setNotify} />
             {!pc && !ffmpegAvailable && <div className="pmv-error">{t("FFmpeg was not found on the server – set its path in the plugin settings.")}</div>}
             {settings.clips.source === "saved" && !settings.clips.savedFilter && <div className="pmv-error">{t("Pick one of your saved filters first.")}</div>}

@@ -67,10 +67,10 @@ export function useEffects(p: PmvProject): EffectTimeline | null {
   useEffect(() => {
     if (words) void loadFxFont().then(setFont);
   }, [words]);
-  const { effects, beatGrid, audio, output, tracks } = p;
+  const { effects, beatGrid, audio, output, tracks, layouts } = p;
   return useMemo(() => {
     if (!on) return null;
     const energy = analysis && audio ? peaksEnergy(analysis.peaks, analysis.peaksPerSecond, audio) : undefined;
     return effectTimeline(p, energy, words ? measure : undefined);
-  }, [on, effects, beatGrid, audio, output, tracks, analysis, font]);
+  }, [on, effects, beatGrid, audio, output, tracks, layouts, analysis, font]);
 }

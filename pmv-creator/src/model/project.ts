@@ -2,6 +2,7 @@ import type { GeneratorSettings } from "../generator/generate";
 import { t } from "../i18n";
 import { DEFAULT_EFFECTS, type EffectSettings } from "./effects";
 import { uid } from "./ids";
+import { type LayoutRange, cleanLayouts } from "./layouts";
 import type { LookSettings } from "./look";
 
 /** Mirrors schema/pmv-project.schema.json. Bump together with migrateProject(). */
@@ -180,6 +181,8 @@ export interface PmvProject {
   bin: Snippet[];
   exclusions: Exclusion[];
   tracks: Track[];
+  /** Split screens: ranges of the timeline whose fields show the clips of several tracks at once. */
+  layouts: LayoutRange[];
   markers: TimelineMarker[];
   /** Last generator run; absent for projects that were never generated. */
   generator?: GeneratorMemo | null;
@@ -233,6 +236,7 @@ export function createProject(name = t("New PMV")): PmvProject {
     bin: [],
     exclusions: [],
     tracks: [createTrack("V2"), createTrack("V1")],
+    layouts: [],
     markers: [],
   };
 }
@@ -272,6 +276,7 @@ export function migrateProject(raw: unknown): PmvProject {
     bin: r.bin ?? [],
     exclusions: r.exclusions ?? [],
     markers: r.markers ?? [],
+    layouts: cleanLayouts((Array.isArray(r.layouts) ? r.layouts : []).filter((x) => x && typeof x === "object").map((x) => ({ ...x, id: typeof x.id === "string" && x.id ? x.id : uid("lay") }))),
     tracks: r.tracks.map((t) => ({
       ...createTrack(t.name ?? "V"),
       ...t,

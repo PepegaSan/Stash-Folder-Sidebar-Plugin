@@ -8,6 +8,7 @@ import type { PmvProject } from "../src/model/project";
 import { VideoSlot } from "../src/stash/streams";
 import type { StashScene } from "../src/stash/types";
 import { flattenTimeline, resolveTransitions } from "../src/timeline/flatten";
+import { ensureTracks } from "../src/timeline/ops";
 import { PREVIEW_SLOTS, PreviewEngine } from "../src/ui/preview/engine";
 import { clip, project } from "./helpers";
 
@@ -84,7 +85,7 @@ function scene(id: string): StashScene {
   };
 }
 
-const scenes = { "1": scene("1"), "2": scene("2"), "3": scene("3") };
+const scenes = Object.fromEntries(["1", "2", "3", "4", "5", "6", "7"].map((id) => [id, scene(id)]));
 const sceneOf = (v: FakeVideo) => /\/scene\/(\d+)\//.exec(v.m.src)?.[1] ?? null;
 
 function setup(p: PmvProject) {
@@ -110,12 +111,12 @@ describe("PreviewEngine", () => {
   it("loads the clips coming up ahead, two files at a time and the nearest first", () => {
     const { videos, engine } = setup(sixClips());
     engine.render(0, false);
-    expect(videos.map(sceneOf)).toEqual(["1", "2", null, null]);
+    expect(videos.map(sceneOf)).toEqual(["1", "2", null, null, null, null, null, null]);
     expect(videos[1].m.currentTime).toBe(10);
     open(videos[0]);
     open(videos[1]);
     engine.render(0, false);
-    expect(videos.map(sceneOf)).toEqual(["1", "2", "3", "1"]);
+    expect(videos.map(sceneOf)).toEqual(["1", "2", "3", "1", null, null, null, null]);
     expect(videos[3].m.currentTime).toBe(10);
     expect(videos.every((v) => v.m.paused)).toBe(true);
   });
@@ -179,10 +180,11 @@ describe("PreviewEngine", () => {
   it("keeps its players when the timeline changes – an edit costs a seek, not a reload", () => {
     const p = sixClips();
     const { videos, engine, timeline } = setup(p);
-    engine.render(0, false);
-    videos.forEach(open);
-    engine.render(0, false);
-    videos.forEach(open);
+    // everything coming up loaded (two files at a time)
+    for (let k = 0; k < 4; k++) {
+      engine.render(0, false);
+      videos.forEach(open);
+    }
     const before = videos.map((v) => v.m.src);
     p.tracks[1].clips[0] = { ...p.tracks[1].clips[0], sourceIn: 20 };
     timeline();
@@ -209,6 +211,45 @@ describe("PreviewEngine", () => {
     slot.seek(50);
     slot.seek(60, true);
     expect(v.m.seeks).toEqual([20, 40, 50, 60]);
+  });
+
+  it("a split screen plays the clip of every field, each in its own field", () => {
+    const p = ensureTracks(project([], [clip("1", 0, 2)]), 3);
+    p.tracks[1].clips = [clip("2", 0, 2)];
+    p.tracks[0].clips = [clip("3", 0, 2)];
+    p.layouts = [{ id: "lay", start: 0, duration: 2, kind: "tri", dir: "cols" }];
+    const { videos, engine } = setup(p);
+    engine.render(0.5, false);
+    videos.forEach(open);
+    engine.render(0.5, true);
+    expect(engine.view.layout).toEqual({ kind: "tri", dir: "cols" });
+    expect(engine.view.layers.map((l) => [l.field?.group, sceneOf(l.el as FakeVideo)])).toEqual([
+      [0, "1"],
+      [1, "2"],
+      [2, "3"],
+    ]);
+    expect(videos.filter((v) => !v.m.paused).map(sceneOf).sort()).toEqual(["1", "2", "3"]);
+  });
+
+  it("a field clip that comes in never takes the player of a field that goes on", () => {
+    // a 4-way over [0, 4): V1 cuts at 2 s, V2…V4 play through; full screen after it (fills the look-ahead)
+    const p = ensureTracks(project([], [clip("7", 0, 2), clip("3", 2, 2), clip("1", 4, 1), clip("2", 5, 1), clip("1", 6, 1), clip("2", 7, 1)]), 4);
+    p.tracks[2].clips = [clip("4", 0, 4)];
+    p.tracks[1].clips = [clip("5", 0, 4)];
+    p.tracks[0].clips = [clip("6", 0, 4)];
+    p.layouts = [{ id: "lay", start: 0, duration: 4, kind: "quad", dir: "cols" }];
+    const { videos, engine } = setup(p);
+    for (let k = 0; k < 6; k++) {
+      engine.render(3, false);
+      videos.forEach(open);
+    }
+    const fields = videos.slice(1, 4).map(sceneOf);
+    expect(fields).toEqual(["4", "5", "6"]);
+    expect(videos.every((v) => v.m.src)).toBe(true);
+    // back to 1 s: V1's other clip was not loaded ahead – it must not take V2's, V3's or V4's player
+    engine.render(1, true);
+    expect(videos.slice(1, 4).map(sceneOf)).toEqual(fields);
+    expect(engine.view.layers.map((l) => sceneOf(l.el as FakeVideo))).toEqual(["7", "4", "5", "6"]);
   });
 
   it("plays both sides of a transition", () => {

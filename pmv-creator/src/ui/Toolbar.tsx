@@ -15,7 +15,7 @@ import type { EditMode } from "../timeline/ops";
 import { Menu, Seg } from "./common";
 import { downloadText, safeName } from "./download";
 import { loadEffects } from "./effects";
-import { HELPER_FOR_LOOKS, PcRender } from "./PcRender";
+import { PcRender, helperFor } from "./PcRender";
 import { useHost } from "../host";
 import { type LabelStatus, labelFor, labelJob, labelingOn, queueLabel, setLabelingOn, watchLabel } from "./labels";
 import { desktopNotifications, isActive, listRenders, notifyOn, primeSignal, setNotifyOn, watchRender } from "./renders";
@@ -261,6 +261,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
         [t("Another clip for the selected one · keep it when generating again"), "N · P"],
         [t("Previous / next cut: select the clip, play from a second before it"), t("[ ] or ↑ ↓ · ⏮ ⏭ above the timeline")],
         [t("Delete · ripple delete"), t("Del · Shift+Del")],
+        [t("Remove the selected split screen (back to full screen there)"), t("Del")],
         [t("Timeline marker"), t("M (double-click in the ruler removes it)")],
         [t("Clear selection"), "Esc"],
         [t("Undo / redo"), t("Ctrl+Z / Ctrl+Y")],
@@ -541,7 +542,8 @@ function RenderDialogBody({ plan, warnings, onClose }: { plan: RenderPlan; warni
         <div className="pmv-li-meta">
           {plan.output.width}×{plan.output.height} @ {fps} fps · {plan.output.videoCodec} CRF {plan.output.crf} · {(plan.totalFrames / fps).toFixed(2)} s ({tn(plan.totalFrames, "{n} frames", "1 frame")})
           <br />
-          {t("{n} segments ({clips} clips, {xfades} transitions, {black} black)", { n: plan.pieces.length, clips: counts.clip ?? 0, xfades: counts.xfade ?? 0, black: counts.black ?? 0 })} · {t("music")}: {yes(!!plan.audio)} · {t("clip audio")}: {yes(plan.clipAudio)}
+          {t("{n} segments ({clips} clips, {xfades} transitions, {black} black)", { n: plan.pieces.length, clips: counts.clip ?? 0, xfades: counts.xfade ?? 0, black: counts.black ?? 0 })}
+          {counts.layout ? ` · ${tn(counts.layout, "{n} of them split screen", "1 of them split screen")}` : ""} · {t("music")}: {yes(!!plan.audio)} · {t("clip audio")}: {yes(plan.clipAudio)}
         </div>
         {warnings.length > 0 && (
           <ul className="pmv-warnings">
@@ -554,7 +556,13 @@ function RenderDialogBody({ plan, warnings, onClose }: { plan: RenderPlan; warni
           <span className="pmv-gen-label">{t("Render on")}</span>
           <RenderTargetSeg value={target} disabled={active || recording} onChange={setTarget} />
         </div>
-        {pc && backend === "online" && <PcRender disabled={active || recording} needs={plan.grade || plan.pieces.some((x) => x.fx) ? HELPER_FOR_LOOKS : undefined} onHelper={(id, name) => setHelper(id && name ? { id, name } : null)} />}
+        {pc && backend === "online" && (
+          <PcRender
+            disabled={active || recording}
+            needs={helperFor({ split: plan.pieces.some((x) => x.kind === "layout"), looks: !!plan.grade || plan.pieces.some((x) => x.fx) })}
+            onHelper={(id, name) => setHelper(id && name ? { id, name } : null)}
+          />
+        )}
         <AfterRender label={label} onLabel={setLabel} notify={notify} onNotify={setNotify} />
         {backend !== "online" && <div className="pmv-error">{t("Backend unreachable. Export the render plan and render with the CLI (see README).")}</div>}
         {!pc && backend === "online" && !ffmpegAvailable && <div className="pmv-error">{t("FFmpeg was not found on the server – set its path in the plugin settings.")}</div>}
