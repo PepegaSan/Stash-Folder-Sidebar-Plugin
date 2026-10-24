@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.1-informational)
+![Version](https://img.shields.io/badge/version-0.9.2-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -584,7 +584,7 @@ Works in classic Stash and in Stash UI.
 - **Beat-grid timeline** — BPM detection/tap, snap, ripple/overwrite modes, trim/slip/split, transitions, speed with beat-safe duration; music volume right on the music lane, 🔊 listening volume for the preview
 - **Scene view in the main player** — a scene opens big in place of the preview (tabs *PMV preview* / *Scene*): pick ranges, move a clip to another spot or put another scene into it
 - **Ground rule** — another part of the scene never changes a clip's place on the timeline
-- **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"; **presets** saved on the server; clips from one of your **saved Stash filters**
+- **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"; **presets** saved on the server; clips from one of your **saved Stash filters**; your own rendered PMVs are never picked as material
 - **Several PMVs at once** — pick songs, each becomes its own project with the same generator settings and is rendered one after another in Stash's queue (e.g. overnight on the PC)
 - **Cuts like another PMV** — pick a PMV from the library: its cuts and flashes (and its music, if you like) are measured and the generator cuts your clips at exactly those moments
 - **Touching up** — 🎲 another clip for one spot (N), 📌 keep the good ones when generating again (P), ⊘ take a scene out of the PMV (optionally for good, via a Stash tag), ⏮ ⏭ review the cuts one by one ([ ] or ↑ ↓)
@@ -617,6 +617,10 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.2
+
+- Generator: your own PMVs (tag `PMV Creator`, set by 🏷 on every render) are no longer picked as material – from tags/performers, *Most watched*, saved filters or the project's scenes, and not by 🎲 Another clip; asking for the tag `PMV Creator` in the generator's tags still uses them
 
 ### PMV Creator 0.9.1
 

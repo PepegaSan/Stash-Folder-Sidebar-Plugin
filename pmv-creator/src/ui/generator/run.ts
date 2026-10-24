@@ -7,11 +7,11 @@ import { peaksEnergy } from "../../generator/rhythm";
 import { t } from "../../i18n";
 import type { Clip, PmvProject, SourceMedia } from "../../model/project";
 import { grayFrames } from "../../stash/backend";
-import { SKIP_TAG, cachedTagId } from "../../stash/library";
+import { PMV_TAG, SKIP_TAG, cachedTagId } from "../../stash/library";
 import { fetchScenes, previewConfig, queryMarkers, queryScenes, tagIdByName } from "../../stash/queries";
 import { savedSceneFilter } from "../../stash/savedFilters";
 import { primeScenes } from "../../stash/sceneCache";
-import type { StashSceneCore } from "../../stash/types";
+import type { StashRef, StashSceneCore } from "../../stash/types";
 import { getAudioAnalysis } from "../hooks";
 
 export type Status = (msg: string) => void;
@@ -19,10 +19,22 @@ export type Status = (msg: string) => void;
 const sourcesOf = (scenes: StashSceneCore[]) => scenes.map(sceneToSource).filter((s): s is SourceMedia => !!s);
 const hasAny = (tagIds: Set<string>, tags: Array<{ id: string }>) => !tagIds.size || tags.some((t) => tagIds.has(t.id));
 
-async function collectOne(o: ClipOptions, p: PmvProject, seed: number, favId: string | null, skipId: string | null): Promise<{ items: MaterialItem[]; sources: SourceMedia[] }> {
+/**
+ * Tags whose scenes are no material: ⊘ "never use it again", and the PMVs rendered here (labeled "PMV Creator") –
+ * those only when the tags of the generator don't ask for them.
+ */
+async function skipTags(o: ClipOptions): Promise<StashRef[]> {
+  if (o.source === "bin") return [];
+  const asked = new Set([...o.tags, ...o.mainTags, ...(o.stagesOn ? o.stages.flatMap((st) => st.tags) : [])].map((x) => x.id));
+  const refs = await Promise.all([SKIP_TAG, PMV_TAG].map(async (name) => ({ id: await cachedTagId(name).catch(() => null), name })));
+  return refs.filter((r): r is StashRef => !!r.id && (r.name === SKIP_TAG || !asked.has(r.id)));
+}
+
+async function collectOne(o: ClipOptions, p: PmvProject, seed: number, favId: string | null, skip: StashRef[]): Promise<{ items: MaterialItem[]; sources: SourceMedia[] }> {
   const find = { per_page: Math.max(1, Math.min(500, o.limit)), sort: `random_${seed}`, direction: "ASC" };
-  // scenes tagged "never use it again" (⊘) are left out – asked in the filter where Stash can, checked here anyway
-  const ok = (s: StashSceneCore) => !skipId || !s.tags.some((x) => x.id === skipId);
+  // left out by the filter where Stash can, checked here anyway
+  const skipIds = new Set(skip.map((x) => x.id));
+  const ok = (s: StashSceneCore) => !s.tags.some((x) => skipIds.has(x.id));
   if (o.source === "bin") return { items: p.bin.map((snippet) => ({ snippet, performers: [], fixedStart: !!snippet.markerId })), sources: [] };
   if (o.source === "project") {
     const scenes = (await fetchScenes(Object.keys(p.sources))).filter(ok);
@@ -54,8 +66,7 @@ async function collectOne(o: ClipOptions, p: PmvProject, seed: number, favId: st
     const markers = r.markers.filter((m) => ok(m.scene) && hasAny(any, [...m.tags, m.primary_tag, ...m.scene.tags]));
     return { items: markers.map((m) => markerItem(m, m.scene, o.markerLength)), sources: sourcesOf(markers.map((m) => m.scene)) };
   }
-  const xtags = skipId ? [...o.xtags, { id: skipId, name: SKIP_TAG }] : o.xtags;
-  const r = await queryScenes(buildSceneFilter({ ...o, xtags }, favId), find);
+  const r = await queryScenes(buildSceneFilter({ ...o, xtags: [...o.xtags, ...skip] }, favId), find);
   const scenes = r.scenes.filter((s) => ok(s) && hasAny(any, s.tags));
   primeScenes(scenes);
   return { items: scenes.flatMap((s) => sceneItems(s, o)), sources: sourcesOf(scenes) };
@@ -68,9 +79,9 @@ export async function collectPools(o: ClipOptions, p: PmvProject, seed: number):
     favId = await tagIdByName("Favorite");
     if (!favId) throw new Error(t("“Favorites only”: Stash has no tag “Favorite”."));
   }
-  const skipId = o.source === "bin" ? null : await cachedTagId(SKIP_TAG).catch(() => null);
+  const skip = await skipTags(o);
   const stages = o.source === "filter" && o.stagesOn && o.stages.length >= 2 ? o.stages : null;
-  const runs = stages ? await Promise.all(stages.map((st) => collectOne({ ...o, tags: st.tags, xtags: st.xtags }, p, seed, favId, skipId))) : [await collectOne(o, p, seed, favId, skipId)];
+  const runs = stages ? await Promise.all(stages.map((st) => collectOne({ ...o, tags: st.tags, xtags: st.xtags }, p, seed, favId, skip))) : [await collectOne(o, p, seed, favId, skip)];
   const sources = new Map<string, SourceMedia>();
   for (const r of runs) for (const s of r.sources) sources.set(s.sceneId, s);
   return { pools: runs.map((r) => r.items), sources: [...sources.values()] };

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.2 (2026-10-24)
+
+- Generator: your own PMVs (scenes with the tag `PMV Creator`, which 🏷 gives every render) are no longer picked as material – from tags/performers, *Most watched*, a saved filter or the project's scenes. Asking for the tag `PMV Creator` in the generator's tags still uses them; *Selection* (your snippets) is not filtered. 🎲 Another clip follows the same rule.
+
 ## 0.9.1 (2026-10-24)
 
 - **Volume in the timeline**: the music lane (♪) has a slider for the music's volume in the PMV (0–200 %, the render's level – the same value as *Level* in the inspector, double-click = 100 %; the preview plays up to 100 %). **🔊** above the timeline sets how loud the preview plays in this browser (also the scene in the big player), remembered per browser; a click mutes it. It never changes the render or a Quick record – the recording keeps the PMV's own level while the speakers follow 🔊.
