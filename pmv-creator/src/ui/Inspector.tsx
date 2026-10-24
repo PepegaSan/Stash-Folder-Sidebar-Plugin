@@ -9,7 +9,8 @@ import { type FitMode, TRANSITION_TYPES, type TransitionType, VIDEO_CODECS, type
 import { useEditor } from "../state/store";
 import { type ClipLocation, type SpeedKeep, findClip } from "../timeline/ops";
 import { beatLength, formatBarBeat, nearestGridTime } from "../timeline/time";
-import { More, NumField, transitionLabel } from "./common";
+import { LookFields, More, NumField, transitionLabel } from "./common";
+import { EffectFields } from "./EffectFields";
 import { useAudioAnalysis } from "./hooks";
 import { useMusic } from "./music";
 import { SongLibraryButton } from "./SongLibrary";
@@ -221,7 +222,12 @@ function ProjectInspector() {
           <option value="cover">{t("Fill (crop)")}</option>
           <option value="contain">{t("Fit (bars)")}</option>
         </select>
+        <LookFields output={o} onChange={(patch) => dispatch({ type: "output/update", patch })} />
       </div>
+      <div className="pmv-section-head is-static" title={t("They count for the whole PMV – preview, quick record and render")}>
+        {t("Effects")}
+      </div>
+      <EffectFields fx={state.present.effects} music={!!state.present.audio} onChange={(patch) => dispatch({ type: "effects/update", patch })} />
       <More defaultOpen={adv}>
         <div className="pmv-grid2">
           <label>FPS</label>

@@ -89,13 +89,13 @@ const sceneOf = (v: FakeVideo) => /\/scene\/(\d+)\//.exec(v.m.src)?.[1] ?? null;
 
 function setup(p: PmvProject) {
   const videos = Array.from({ length: PREVIEW_SLOTS }, fakeVideo);
-  const engine = new PreviewEngine(videos, document.createElement("div"));
+  const engine = new PreviewEngine(videos);
   const timeline = () => {
     const segs = flattenTimeline(p);
     engine.setTimeline({ segs, trans: resolveTransitions(p, segs), fps: 30, scenes, fit: "cover" });
   };
   timeline();
-  const visible = () => videos.filter((v) => v.style.opacity === "1");
+  const visible = () => videos.filter((v) => v.dataset.op === "1");
   return { videos, engine, timeline, visible };
 }
 

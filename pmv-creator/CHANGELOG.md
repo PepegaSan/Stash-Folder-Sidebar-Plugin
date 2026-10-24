@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.5 (2026-10-24)
+
+- **Beat and drop effects** like in the PMV Generator, for the whole PMV: on the beat *Zoom pulse* (every beat, beats 1 and 3 or every bar, with a strength), *Shake*, *Stutter* (in loud parts the clip jumps back on every other half beat) and *Strobe*; on drops *RGB split*, *Glitch*, *Tunnel*, *Negative*, *Echo* and *Text* (your words slam in, drawn with the font Anton that comes with the plugin); through the song *Colour rush*. Switch them in the inspector under *Output* or in the generator, whose moods set them like the PMV Generator's (*PMV classic*: zoom pulse, shake, stutter, RGB split, glitch · *Maximal*: all but the strobe · *Hypno*: zoom pulse, tunnel, echo, colour rush · *Clean*: zoom pulse); *Generate* puts them into the PMV with the clips. When they fire comes from the beat grid and the music's loudness (drops) – no dice involved: the same song and cut always look the same, and preview, Quick record and render show the same.
+- **Colour looks** like in the PMV Generator: *Warm*, *Pink*, *Cold*, *Vivid*, *Black & white*, *Noir* (with dark corners) or *Own color*, with a strength, plus smooth extra *Brightness*. Set them in the inspector under *Output* (nothing selected) or in the generator dialog; they count for the whole PMV – the preview, Quick record and the FFmpeg render look the same (checked frame against frame).
+- The PMV preview draws on a canvas now (the players decode invisibly behind it): the same drawing as Quick record, and the ground for the effects (and the split screens to come). Quick record no longer starts with a black first clip.
+- **Render on my PC**: the colour look and the effects need the helper 0.9.5 – the render dialog says so when an older one is connected and offers the new file (close the old window, start the new one).
+
 ## 0.9.4 (2026-10-24)
 
 - Generator: **when to cut** right in the simple view, like the PMV Generator – *Automatic* (with its pace slow/normal/fast), *Every beat*, *Every 2 beats*, *Every 4 beats* (one cut per bar, on its “one”) or *Like another PMV*. A mood keeps its name while its own cutting stays.

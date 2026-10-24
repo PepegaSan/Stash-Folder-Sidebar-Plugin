@@ -1,15 +1,18 @@
 /**
  * "Quick record": plays the sequence once in real time on hidden <video> elements (the same PreviewEngine
- * as the on-screen preview), composites every frame onto a canvas and records canvas + mixed audio with
+ * and compositor as the on-screen preview), draws every frame onto a canvas and records canvas + mixed audio with
  * MediaRecorder. Fast and server-free, but not frame-exact – a stutter or a slow stream ends up in the
  * file. The frame-exact path is the FFmpeg render.
  */
+import { type EffectTimeline, withStutters } from "../../fx/timeline";
+import { colorGrade } from "../../model/look";
 import type { PmvProject } from "../../model/project";
 import { projectDuration } from "../../model/project";
 import type { StashScene } from "../../stash/types";
 import type { Transport } from "../../state/transport";
 import { flattenTimeline, resolveTransitions } from "../../timeline/flatten";
-import { PREVIEW_SLOTS, PreviewEngine, type SlotLook } from "./engine";
+import { Compositor } from "./compositor";
+import { PREVIEW_SLOTS, PreviewEngine } from "./engine";
 
 export interface RecordProgress {
   time: number;
@@ -23,22 +26,6 @@ export interface Recording {
 }
 
 const MIMES = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
-
-/** The visible part of a transition look as a canvas clip – the same geometry as the preview's CSS. */
-function clipToLook(g: CanvasRenderingContext2D, look: SlotLook, w: number, h: number): void {
-  const cx = w / 2;
-  const cy = h / 2;
-  const r = Math.hypot(w, h) / 2;
-  g.beginPath();
-  if (look.band) g.rect(look.band[0] * w, 0, (look.band[1] - look.band[0]) * w, h);
-  else if (look.circle !== undefined) g.arc(cx, cy, look.circle * r, 0, 2 * Math.PI);
-  else if (look.sweep !== undefined) {
-    g.moveTo(cx, cy);
-    g.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + look.sweep * 2 * Math.PI);
-    g.closePath();
-  } else return;
-  g.clip();
-}
 
 export function recordingSupported(): boolean {
   return typeof MediaRecorder !== "undefined" && typeof HTMLCanvasElement.prototype.captureStream === "function" && MIMES.some((m) => MediaRecorder.isTypeSupported(m));
@@ -75,14 +62,15 @@ export class RecordCancelled extends Error {
   }
 }
 
-export async function recordSequence(project: PmvProject, scenes: Record<string, StashScene>, transport: Transport, onProgress: (p: RecordProgress) => void, signal?: AbortSignal): Promise<Recording> {
+/** `fx`: the project's effect timeline (loadEffects) – the one the preview draws. */
+export async function recordSequence(project: PmvProject, scenes: Record<string, StashScene>, transport: Transport, onProgress: (p: RecordProgress) => void, signal?: AbortSignal, fx: EffectTimeline | null = null): Promise<Recording> {
   const { width, height, fps, fit } = project.output;
   const duration = projectDuration(project);
   const mime = MIMES.find((m) => MediaRecorder.isTypeSupported(m))!;
 
-  // hidden players – off screen but laid out, so they decode
+  // hidden players – tiny, in the corner and (nearly) transparent: off screen Chrome renders them on a slow timer
   const host = document.createElement("div");
-  host.style.cssText = `position:fixed;left:-20000px;top:0;width:${width}px;height:${height}px;overflow:hidden;pointer-events:none`;
+  host.style.cssText = "position:fixed;left:0;top:0;width:64px;height:36px;overflow:hidden;pointer-events:none;z-index:2147483647";
   const videos = Array.from({ length: PREVIEW_SLOTS }, () => {
     const v = document.createElement("video");
     v.playsInline = true;
@@ -91,16 +79,15 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
     host.appendChild(v);
     return v;
   });
-  const overlay = document.createElement("div");
-  host.appendChild(overlay);
   document.body.appendChild(host);
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  const g = canvas.getContext("2d")!;
-  const engine = new PreviewEngine(videos, overlay);
-  const segs = flattenTimeline(project);
+  const compositor = new Compositor(canvas);
+  const grade = colorGrade(project.output);
+  const engine = new PreviewEngine(videos);
+  const segs = withStutters(flattenTimeline(project), fx, fps);
   engine.setTimeline({ segs, trans: resolveTransitions(project, segs), fps, scenes, fit });
 
   // audio: music (also to the speakers, as always) + the hidden players' clip audio (recording only)
@@ -115,45 +102,7 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
 
-  const draw = () => {
-    g.fillStyle = "#000";
-    g.fillRect(0, 0, width, height);
-    // same stacking as the DOM preview: z-index, then the engine's look (opacity, visible part, shift, zoom, blur)
-    const order = videos.map((v, k) => ({ v, k })).sort((a, b) => Number(a.v.style.zIndex || 1) - Number(b.v.style.zIndex || 1));
-    for (const { v, k } of order) {
-      const look = engine.looks[k];
-      if (look.opacity <= 0 || v.readyState < 2 || !v.videoWidth) continue;
-      g.save();
-      g.globalAlpha = look.opacity;
-      clipToLook(g, look, width, height);
-      if (look.shift) g.translate(look.shift * width, 0);
-      if (look.scale && look.scale !== 1) {
-        g.translate(width / 2, height / 2);
-        g.scale(look.scale, look.scale);
-        g.translate(-width / 2, -height / 2);
-      }
-      // the engine marks each slot with the clip's framing
-      const clipFit: typeof fit = v.classList.contains("is-blur") ? "blur" : v.classList.contains("is-contain") ? "contain" : "cover";
-      const cover = Math.max(width / v.videoWidth, height / v.videoHeight);
-      const contain = Math.min(width / v.videoWidth, height / v.videoHeight);
-      if (clipFit === "blur") {
-        g.filter = `blur(${Math.round(Math.min(width, height) / 40)}px) brightness(0.85)`;
-        g.drawImage(v, (width - v.videoWidth * cover) / 2, (height - v.videoHeight * cover) / 2, v.videoWidth * cover, v.videoHeight * cover);
-      }
-      g.filter = look.blur ? `blur(${Math.round(look.blur * height)}px)` : "none";
-      const scale = clipFit === "cover" ? cover : contain;
-      const w = v.videoWidth * scale;
-      const h = v.videoHeight * scale;
-      g.drawImage(v, (width - w) / 2, (height - h) / 2, w, h);
-      g.restore();
-    }
-    g.globalAlpha = Number(overlay.style.opacity || 0);
-    if (g.globalAlpha > 0) {
-      g.fillStyle = overlay.style.background || "#000";
-      g.fillRect(0, 0, width, height);
-    }
-    g.globalAlpha = 1;
-  };
+  const draw = (t: number) => compositor.draw(engine.view, grade, fx ? { tl: fx, t } : null);
 
   const cleanup = () => {
     transport.pause();
@@ -201,8 +150,9 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
         }
       });
       const frame = () => {
-        engine.render(transport.time, transport.playing);
-        draw();
+        const t = transport.time;
+        engine.render(t, transport.playing);
+        draw(t);
         raf = requestAnimationFrame(frame);
       };
       rec.onerror = () => finish(new Error("MediaRecorder error"));

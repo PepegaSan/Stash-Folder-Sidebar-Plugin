@@ -26,6 +26,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import secrets
@@ -47,13 +48,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-VERSION = "0.9.4"
+VERSION = "0.9.5"
 PLUGIN_ID = "pmv-creator"
 PLAN_VERSION = 1
 # Bump when piece_command() changes, invalidates cached pieces.
 PIECE_VERSION = 3
+# Bump when the effects' filters change – only pieces with effects are rendered again.
+FX_VERSION = 3
 # Intermediate container: MOV keeps an exact per-frame timescale (MKV rounds to 1 ms -> VFR jitter).
 PIECE_EXT = ".mov"
+# A filtergraph longer than this goes into a file (-filter_complex_script) – effects make long expressions.
+GRAPH_INLINE = 16000
+CMD_GRAPH_INLINE = 6000  # the same for a Windows script (cmd.exe: 8191 characters per line)
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
 MEDIA_URL = f"/plugin/{PLUGIN_ID}/assets/media/"
 
@@ -282,7 +288,8 @@ def run_ffmpeg(cmd: List[str], on_progress: Optional[Callable[[float], None]] = 
         if p.returncode != 0:
             err.seek(0)
             tail = err.read().decode(errors="replace").strip()[-2000:]
-            raise RuntimeError(f"FFmpeg failed ({p.returncode}): {tail}\n$ {' '.join(shlex.quote(c) for c in cmd)}")
+            line = " ".join(shlex.quote(c) for c in cmd)
+            raise RuntimeError(f"FFmpeg failed ({p.returncode}): {tail}\n$ {line if len(line) <= 4000 else line[:4000] + ' …'}")
 
 
 # --------------------------------------------------------------------------------------- render plan -> ffmpeg
@@ -384,7 +391,361 @@ def video_codec_args(out: Out) -> List[str]:
     return args + ["-pix_fmt", "yuv420p", "-g", gop]
 
 
-def piece_command(ff: str, piece: Dict[str, Any], out: Out, clip_audio: bool, dest: str) -> List[str]:
+MIX_KEYS = ("rr", "rg", "rb", "gr", "gg", "gb", "br", "bg", "bb")
+
+
+def validate_grade(grade: Any) -> Optional[Dict[str, Any]]:
+    """The colour look of a plan (numbers worked out by the editor) – checked, as it ends up in a filtergraph."""
+    if not grade:
+        return None
+
+    def nums(v: Any, n: int, lo: float, hi: float) -> List[float]:
+        if not isinstance(v, list) or len(v) != n:
+            raise ValueError("colour look: malformed")
+        out = [float(x) for x in v]
+        if not all(lo <= x <= hi for x in out):
+            raise ValueError("colour look: value out of range")
+        return out
+
+    layers = grade.get("layers") or []
+    if not isinstance(layers, list) or len(layers) > 4:
+        raise ValueError("colour look: malformed")
+    return {
+        "matrix": nums(grade.get("matrix"), 9, -4.0, 4.0),
+        "offset": nums(grade.get("offset"), 3, -2.0, 2.0),
+        "layers": [nums(layer, 4, 0.0, 255.0) for layer in layers],
+        "vignette": nums([grade.get("vignette") or 0], 1, 0.0, 1.0)[0],
+    }
+
+
+def grade_graph(grade: Dict[str, Any], out: Out, src: str, dst: str) -> str:
+    """[src] → colour look → [dst]: one colour matrix (its offset rides on the alpha column), soft-light layers
+    (tint, brightness), dark corners – the same chain the editor draws with CSS filters on its canvas."""
+    mix = ":".join(f"{k}={v:.4f}" for k, v in zip(MIX_KEYS, grade["matrix"]))
+    mix += ":" + ":".join(f"{c}a={v:.4f}" for c, v in zip("rgb", grade["offset"]))
+    parts = [f"[{src}]format=gbrap,colorchannelmixer={mix}[{dst}0]"]
+    cur = f"{dst}0"
+    for i, (r, g, b, a) in enumerate(grade["layers"]):
+        parts.append(f"color=c=0x{int(r):02x}{int(g):02x}{int(b):02x}:s={out.w}x{out.h}:r={out.rate},format=gbrap[{dst}t{i}]")
+        parts.append(f"[{cur}][{dst}t{i}]blend=all_mode=softlight:all_opacity={min(1.0, a):.4f}:shortest=1[{dst}{i + 1}]")
+        cur = f"{dst}{i + 1}"
+    tail = ""
+    if grade["vignette"] > 0:
+        # cos⁴ fall-off of FFmpeg's vignette, matched to the editor's radial gradient (35 % … 75 % of the picture)
+        angle = math.acos(max(0.0, 1 - 0.68 * grade["vignette"]) ** 0.25)
+        tail = f",vignette=angle={angle:.4f}"
+    parts.append(f"[{cur}]format=yuv420p{tail},setsar=1[{dst}]")
+    return ";".join(parts)
+
+
+# --------------------------------------------------------------------------------------- beat and drop effects
+#
+# The editor works out what the effects do in every frame (src/fx/timeline.ts) and sends it per piece: per-frame
+# values where they change all the time (zoom, hue, echo, RGB split), frame windows where they are on or off, the
+# tunnel and the words as events. Here they become filters; the constants must match the editor's.
+
+FX_FONT_FILE = "Anton-Regular.ttf"  # assets/fonts/ – the editor draws its words with the same font
+REF_W = 1280  # the PMV Generator's sizes are pixels of a picture this wide
+GLITCH_STRIPES = (0.02, 0.05, 0.035, 0.08, 0.012, 0.06)
+GLITCH_SHIFT = 0.14
+ECHO_ZOOM = 1.04
+TUNNEL_SIZES = (0.74, 0.52, 0.34)
+TEXT_SECONDS = 0.42
+TEXT_FADE_AT = 0.3
+FX_PINK = "0xff3e8a"
+
+
+def hash_salt(i: int, k: int) -> float:
+    return i * 78.233 + k * 37.719
+
+
+def fx_hash(var: str, at: int, i: int, k: int) -> str:
+    """The editor's fxHash(frame, i, k) as an FFmpeg expression of the frame variable (frame = var + at)."""
+    return f"mod(sin(({var}+{at})*12.9898+{hash_salt(i, k)!r})*43758.5453,1)"
+
+
+def fnum(x: float, digits: int = 6) -> str:
+    """A number for an FFmpeg expression: short, never with an exponent."""
+    s = f"{x:.{digits}f}".rstrip("0").rstrip(".")
+    return "0" if s in ("", "-0") else s
+
+
+def linear_runs(values: List[float], tol: float) -> List[tuple]:
+    """Per-frame values as straight pieces (first frame, value there, slope) – each within `tol` of every value it covers."""
+    out = []
+    i, n = 0, len(values)
+    while i < n:
+        end, slope = i + 1, 0.0
+        for j in range(i + 1, n):
+            s = (values[j] - values[i]) / (j - i)
+            if any(abs(values[i] + s * (k - i) - values[k]) > tol for k in range(i + 1, j)):
+                break
+            end, slope = j + 1, s
+        out.append((i, values[i], slope))
+        i = end
+    return out
+
+
+def frame_expr(values: List[float], var: str, tol: float) -> str:
+    """Per-frame values as an expression of the frame number: straight pieces in a binary if-tree."""
+    runs = linear_runs(values, tol)
+
+    def leaf(r: tuple) -> str:
+        start, v, slope = r
+        return fnum(v) if abs(slope) < 1e-12 else f"{fnum(v)}+{fnum(slope, 9)}*({var}-{start})"
+
+    def tree(lo: int, hi: int) -> str:
+        if hi - lo == 1:
+            return leaf(runs[lo])
+        mid = (lo + hi) // 2
+        return f"if(lt({var},{runs[mid][0]}),{tree(lo, mid)},{tree(mid, hi)})"
+
+    return tree(0, len(runs))
+
+
+def windows_expr(windows: List[tuple]) -> str:
+    """Frame windows [from, to) as a timeline `enable` expression."""
+    return "+".join(f"between(n,{a},{b - 1})" for a, b in windows)
+
+
+def value_windows(values: List[float]) -> List[tuple]:
+    """Where per-frame values are not 0, as windows [from, to)."""
+    out: List[list] = []
+    for i, v in enumerate(values):
+        if v > 0:
+            if out and out[-1][1] == i:
+                out[-1][1] = i + 1
+            else:
+                out.append([i, i + 1])
+    return [tuple(w) for w in out]
+
+
+def clean_word(word: Any) -> str:
+    """A word for drawtext: letters, digits, spaces and ! ? . & # + - only (no quotes, colons or backslashes)."""
+    w = re.sub(r"[^\w !?.&#+\-]|_", "", str(word or "")).strip()[:40]
+    return w
+
+
+def validate_fx(fx: Any, frames: int) -> Optional[Dict[str, Any]]:
+    """The effects of a piece (numbers the editor worked out) – checked, as they end up in filtergraphs."""
+    if not fx:
+        return None
+    if not isinstance(fx, dict):
+        raise ValueError("effects: malformed")
+
+    def per_frame(key: str, lo: float, hi: float) -> Optional[List[float]]:
+        v = fx.get(key)
+        if v is None:
+            return None
+        if not isinstance(v, list) or len(v) != frames:
+            raise ValueError(f"effects: {key} malformed")
+        out = [float(x) for x in v]
+        if not all(lo <= x <= hi for x in out):
+            raise ValueError(f"effects: {key} out of range")
+        return out
+
+    def windows(key: str) -> List[tuple]:
+        v = fx.get(key) or []
+        if not isinstance(v, list):
+            raise ValueError(f"effects: {key} malformed")
+        out = []
+        for w in v:
+            a, b = int(w[0]), int(w[1])
+            if not 0 <= a < b <= frames:
+                raise ValueError(f"effects: {key} out of range")
+            out.append((a, b) + tuple(float(x) for x in w[2:3]))
+        return out
+
+    shake = windows("shake")
+    if any(not (len(w) == 3 and 0 < w[2] <= 0.2) for w in shake):
+        raise ValueError("effects: shake out of range")
+    tunnel = []
+    for x in fx.get("tunnel") or []:
+        start, n, dur = int(x[0]), int(x[1]), float(x[2])
+        if not (-100000 < start < frames and 0 < n <= 10000 and 0 < dur <= 60):
+            raise ValueError("effects: tunnel out of range")
+        tunnel.append((start, n, dur))
+    text = []
+    for x in fx.get("text") or []:
+        word, start, size = clean_word(x.get("word")), int(x.get("from", 0)), float(x.get("size", 0))
+        if not (-100000 < start < frames and 0 < size <= 1):
+            raise ValueError("effects: text out of range")
+        if word:
+            text.append({"word": word, "from": start, "size": size})
+    at = int(fx.get("at", 0))
+    if not 0 <= at < 10 ** 8:
+        raise ValueError("effects: at out of range")
+    return {
+        "at": at,
+        "zoom": per_frame("zoom", 1.0, 4.0),
+        "shake": shake,
+        "hue": per_frame("hue", -1e8, 1e8),
+        "echo": per_frame("echo", 0.0, 1.0),
+        "tunnel": tunnel,
+        "glitch": windows("glitch"),
+        "rgb": per_frame("rgb", 0.0, 0.25),
+        "invert": windows("invert"),
+        "strobe": windows("strobe"),
+        "text": text,
+    }
+
+
+def fx_pre_graph(fx: Dict[str, Any], out: Out, src: str, dst: str) -> Optional[str]:
+    """[src] → colour rush, zoom pulse and shaking → [dst] (before the colour look, like the editor's clip filters)."""
+    chain = []
+    if fx["hue"]:
+        chain.append(f"hue=h='{frame_expr(fx['hue'], 'n', 0.01)}':s=1.3")
+    if fx["zoom"] or fx["shake"]:
+        z = frame_expr(fx["zoom"], "in", 2e-5) if fx["zoom"] else "1"
+        x, y = "iw/2-iw/zoom/2", "ih/2-ih/zoom/2"
+        if fx["shake"]:
+            amp = "+".join(f"between(in,{a},{b - 1})*{fnum(s, 7)}" for a, b, s in fx["shake"])
+            # the picture moves by (hash - 0.5) × amplitude of the width – the crop window the other way
+            x += f"-({amp})*({fx_hash('in', fx['at'], 0, 1)}-0.5)*iw/zoom"
+            y += f"-({amp})*({fx_hash('in', fx['at'], 0, 2)}-0.5)*iw/zoom"
+        chain.append(f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={out.w}x{out.h}:fps={out.rate}")
+    return f"[{src}]{','.join(chain)}[{dst}]" if chain else None
+
+
+def ff_quote(value: str) -> str:
+    """A value in single quotes for a filtergraph (a quote inside is closed, escaped and reopened)."""
+    return "'" + value.replace("'", "'\\''") + "'"
+
+
+def ff_path(path: str) -> str:
+    """A file path as a filter option (drawtext's fontfile): forward slashes, the drive colon escaped."""
+    return ff_quote(path.replace("\\", "/").replace(":", "\\:"))
+
+
+def fx_post_graph(fx: Dict[str, Any], out: Out, src: str, dst: str, font: Optional[str]) -> Optional[str]:
+    """[src] → echo, tunnel, glitch, RGB split, negative, strobe, words → [dst] – after the colour look, in this order
+    like the editor's canvas, and like it in RGB."""
+    words = fx["text"] if font else []
+    if not (any(fx["echo"] or []) or fx["tunnel"] or fx["glitch"] or any(fx["rgb"] or []) or fx["invert"] or fx["strobe"] or words):
+        return None
+    W, H, fps = out.w, out.h, out.fps
+    # into planar RGB with exact rounding (the fast default loses ~1.5 of 255 levels, a piece would come out darker)
+    parts = [f"[{src}]scale=flags=accurate_rnd,format=gbrp[{dst}0]"]
+    count = 0
+    cur = f"{dst}0"
+
+    def label() -> str:
+        nonlocal count
+        count += 1
+        return f"{dst}{count}"
+
+    def at_frame(k: int) -> str:
+        """sendcmd time of local frame k: half a frame early, so the value is set when the frame arrives."""
+        return fnum((k - 0.5) / fps)
+
+    echo = fx["echo"] or []
+    if any(v > 0 for v in echo):
+        # the frames before as ghosts, enlarged; per frame α the weights (1-α), α(1-α), α² (they add up to 1)
+        weights = lambda v: "|".join(fnum(w, 4) for w in (1 - v, v * (1 - v), v * v))  # noqa: E731
+        e = label()
+        parts.append(f"[{cur}]split=3[{e}a][{e}b][{e}c]")
+        for i, s in ((1, "b"), (2, "c")):
+            z = ECHO_ZOOM ** i
+            parts.append(f"[{e}{s}]tpad=start={i}:start_mode=clone,scale={round(W * z)}:{round(H * z)},crop={W}:{H}[{e}g{i}]")
+        main = f"{e}a"
+        cmds = [f"{at_frame(k)} mix@{e} weights {weights(echo[k])}" for k in range(1, len(echo)) if echo[k] != echo[k - 1] and echo[k] > 0]
+        if cmds:
+            parts.append(f"[{main}]sendcmd=c={ff_quote(';'.join(cmds))}[{e}s]")
+            main = f"{e}s"
+        first = next(v for v in echo if v > 0)
+        cur = label()
+        parts.append(f"[{main}][{e}g1][{e}g2]mix@{e}=inputs=3:weights='{weights(first)}':duration=first:enable='{windows_expr(value_windows(echo))}'[{cur}]")
+
+    for start, n, dur in fx["tunnel"]:
+        # three copies of the picture inside it, each with a pink frame, fading from 1 to 0.1 over the tunnel
+        win = windows_expr([(max(0, start), start + n)])
+        a0 = 1 - 0.9 * max(0, -start) / (fps * dur)  # began in an earlier piece: as far faded as it is there
+        fade = (f"colorchannelmixer=aa={fnum(a0, 5)}," if start < 0 else "") + f"fade=t=out:st={fnum(max(0, start) / fps)}:d={fnum(a0 * dur / 0.9)}:alpha=1"
+        b = max(1, round(3 * W / REF_W))
+        t = label()
+        parts.append(f"[{cur}]split=4[{t}m]" + "".join(f"[{t}c{i}]" for i in range(len(TUNNEL_SIZES))))
+        cur = f"{t}m"
+        for i, f in enumerate(TUNNEL_SIZES):
+            w, h = round(W * f), round(H * f)
+            parts.append(f"[{t}c{i}]scale={w}:{h},pad={w + 2 * b}:{h + 2 * b}:{b}:{b}:color={FX_PINK},format=gbrap,{fade}[{t}k{i}]")
+            nxt = label()
+            parts.append(f"[{cur}][{t}k{i}]overlay=(W-w)/2:(H-h)/2:format=gbrp:enable='{win}'[{nxt}]")
+            cur = nxt
+
+    if fx["glitch"]:
+        # stripes of the picture slip sideways, another pattern every frame; then a pink shimmer
+        win = windows_expr(fx["glitch"])
+        g = label()
+        parts.append(f"[{cur}]split={len(GLITCH_STRIPES) + 1}[{g}m]" + "".join(f"[{g}s{i}]" for i in range(len(GLITCH_STRIPES))))
+        cur = f"{g}m"
+        for i, share in enumerate(GLITCH_STRIPES):
+            sh = max(2, round(share * H))
+            # the frame from its time: overlay counts its "n" from 1, crop from 0 – both must take the same stripe
+            frame = f"round(t*{out.rate})"
+            y = f"floor({H - sh}*{fx_hash(frame, fx['at'], i + 1, 1)})"
+            x = f"({fx_hash(frame, fx['at'], i + 1, 2)}-0.5)*{fnum(GLITCH_SHIFT * W)}"
+            parts.append(f"[{g}s{i}]crop={W}:{sh}:0:'{y}'[{g}c{i}]")
+            nxt = label()
+            parts.append(f"[{cur}][{g}c{i}]overlay=x='{x}':y='{y}':format=gbrp:enable='{win}'[{nxt}]")
+            cur = nxt
+        parts.append(f"color=c={FX_PINK}:s={W}x{H}:r={out.rate},format=gbrp[{g}p]")
+        nxt = label()
+        parts.append(f"[{cur}][{g}p]blend=all_mode=screen:all_opacity=0.16:shortest=1:enable='{win}'[{nxt}]")
+        cur = nxt
+
+    chain: List[str] = []
+    px = [round(v * W) for v in fx["rgb"] or []]
+    if any(v > 0 for v in px):
+        # red one way, cyan the other: rgbashift in whole pixels, set per frame by sendcmd
+        name = f"rgbashift@{dst}r"
+        shift = lambda v: f"{name} rh {-v}, {name} gh {v}, {name} bh {v}"  # noqa: E731
+        cmds = [f"{at_frame(k)} {shift(px[k])}" for k in range(1, len(px)) if px[k] != px[k - 1] and px[k] > 0]
+        if cmds:
+            chain.append(f"sendcmd=c={ff_quote(';'.join(cmds))}")
+        first = next(v for v in px if v > 0)
+        chain.append(f"{name}=rh={-first}:gh={first}:bh={first}:enable='{windows_expr(value_windows(px))}'")
+    if fx["invert"]:
+        chain.append(f"negate=enable='{windows_expr(fx['invert'])}'")
+    if fx["strobe"]:
+        flash = "val*0.08+234.6"  # white at 92 %
+        chain.append(f"lutrgb=r='{flash}':g='{flash}':b='{flash}':enable='{windows_expr(fx['strobe'])}'")
+    if chain:
+        nxt = label()
+        parts.append(f"[{cur}]{','.join(chain)}[{nxt}]")
+        cur = nxt
+
+    for ev in words:
+        # the word on a transparent layer of its own: punched in, slanted, tilted, fading out at the end
+        size = max(8, round(ev["size"] * H))
+        b = max(1, round(0.05 * size))
+        sk = 0.18 * H / 2  # slanted like a sound effect: the top edge moves right, the bottom edge left
+        # the layer's clock counts frames (time base 1/rate): it starts this many frames into the piece or the word
+        skip, shift = max(0, -ev["from"]), max(0, ev["from"])
+        w = label()
+        parts.append(
+            f"color=c=black@0:s={W}x{H}:r={out.rate}:d={fnum(TEXT_SECONDS)},format=rgba,"
+            # a pink copy of the letters a little down right, then the letters with their dark edge over it (drawtext's
+            # own shadow would include the edge – thicker than the editor's)
+            f"drawtext=fontfile={ff_path(font or '')}:text={ff_quote(ev['word'])}:expansion=none:fontsize={size}:fontcolor={FX_PINK}:x=(w-text_w)/2+{b}:y=(h-text_h)/2+{b},"
+            f"drawtext=fontfile={ff_path(font or '')}:text={ff_quote(ev['word'])}:expansion=none:fontsize={size}:fontcolor=0xfbeff4:"
+            f"borderw={b}:bordercolor=0x230f1f:x=(w-text_w)/2:y=(h-text_h)/2,"
+            f"zoompan=z='1+0.35*exp(-18*in/{fnum(fps)})':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={W}x{H}:fps={out.rate},"
+            f"perspective=x0={fnum(sk, 2)}:y0=0:x1={fnum(W + sk, 2)}:y1=0:x2={fnum(-sk, 2)}:y2={H}:x3={fnum(W - sk, 2)}:y3={H}:sense=destination:eval=init,"
+            f"rotate=-0.1:c=none,fade=t=out:st={fnum(TEXT_FADE_AT)}:d={fnum(TEXT_SECONDS - TEXT_FADE_AT)}:alpha=1,"
+            f"{f'trim=start_frame={skip},' if skip else ''}setpts=PTS-STARTPTS+{shift}[{w}t]"
+        )
+        nxt = label()
+        parts.append(f"[{cur}][{w}t]overlay=eof_action=pass:format=gbrp[{nxt}]")
+        cur = nxt
+
+    parts.append(f"[{cur}]format=yuv420p,setsar=1[{dst}]")
+    return ";".join(parts)
+
+
+def piece_command(ff: str, piece: Dict[str, Any], out: Out, clip_audio: bool, dest: str, grade: Optional[Dict[str, Any]] = None,
+                  font: Optional[str] = None, graph_file: Optional[str] = None) -> List[str]:
+    """One piece -> one FFmpeg call. `font`: the words' font file; `graph_file`: where a long filtergraph goes (Windows
+    allows 32 767 characters per command line) – without it the graph stays inline."""
     frames = int(piece["frames"])
     if frames <= 0:
         raise ValueError("segment without frames")
@@ -440,8 +801,27 @@ def piece_command(ff: str, piece: Dict[str, Any], out: Out, clip_audio: bool, de
             graph.append(f"[aa2][ab2]amix=inputs=2:duration=longest:normalize=0,atrim=0:{f6(dur)}[a]")
     else:
         raise ValueError(f"unknown segment type: {kind!r}")
+    vout = "v"
+    fx = validate_fx(piece.get("fx"), frames)
+    pre = fx_pre_graph(fx, out, vout, "vz") if fx else None
+    if pre:
+        graph.append(pre)
+        vout = "vz"
+    if grade and kind != "black":  # black stays black
+        graph.append(grade_graph(grade, out, vout, "vg"))
+        vout = "vg"
+    post = fx_post_graph(fx, out, vout, "vf", font) if fx else None
+    if post:
+        graph.append(post)
+        vout = "vf"
 
-    cmd = [ff, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", *inputs, "-filter_complex", ";".join(graph), "-map", "[v]"]
+    text = ";".join(graph)
+    if graph_file and len(text) > GRAPH_INLINE:
+        Path(graph_file).write_text(text, encoding="utf-8")
+        filters = ["-filter_complex_script", graph_file]
+    else:
+        filters = ["-filter_complex", text]
+    cmd = [ff, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", *inputs, *filters, "-map", f"[{vout}]"]
     if clip_audio:
         cmd += ["-map", "[a]", "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"]
     cmd += video_codec_args(out) + ["-r", out.rate, "-frames:v", str(frames), "-video_track_timescale", str(out.timescale), "-f", "mov", dest]
@@ -508,6 +888,7 @@ def validate_plan(plan: Dict[str, Any]) -> Out:
         raise ValueError(f"the segments add up to {total} frames, the plan says {plan['totalFrames']}")
     missing = set()
     for p in pieces:
+        validate_fx(p.get("fx"), int(p["frames"]))
         for s in (p.get("src"), p.get("a"), p.get("b")):
             if s and not is_url(s["path"]) and not os.path.isfile(s["path"]):
                 missing.add(s["path"])
@@ -522,7 +903,12 @@ def validate_plan(plan: Dict[str, Any]) -> Out:
 def piece_key(piece: Dict[str, Any], plan: Dict[str, Any]) -> str:
     o = plan["output"]
     relevant = {k: o.get(k) for k in ("width", "height", "fps", "fit", "videoCodec", "crf", "preset")}
-    blob = json.dumps({"v": PIECE_VERSION, "piece": piece, "out": relevant, "clipAudio": bool(plan.get("clipAudio"))}, sort_keys=True)
+    key: Dict[str, Any] = {"v": PIECE_VERSION, "piece": piece, "out": relevant, "clipAudio": bool(plan.get("clipAudio"))}
+    if plan.get("grade") and piece.get("kind") != "black":
+        key["grade"] = plan["grade"]  # absent without a look: caches from before stay valid
+    if piece.get("fx"):
+        key["fx"] = FX_VERSION  # (the effects themselves are part of the piece)
+    blob = json.dumps(key, sort_keys=True)
     return hashlib.sha1(blob.encode()).hexdigest()
 
 
@@ -531,11 +917,22 @@ def concat_entry(path: str, frames: int, out: Out) -> str:
     return "file '" + path.replace("'", "'\\''") + "'\nduration " + f6(out.seconds(frames))
 
 
-def render_plan(plan: Dict[str, Any], ff: str, dest: Path, cache_dir: Path, work_dir: Path, jobs: int = 2) -> Dict[str, Any]:
+def plan_has_words(plan: Dict[str, Any]) -> bool:
+    return any((p.get("fx") or {}).get("text") for p in plan.get("pieces") or [])
+
+
+def render_plan(plan: Dict[str, Any], ff: str, dest: Path, cache_dir: Path, work_dir: Path, jobs: int = 2, font: Optional[str] = None) -> Dict[str, Any]:
+    """`font`: the words' font file (default: the plugin's assets/fonts/)."""
     started = time.time()
     out = validate_plan(plan)
     clip_audio = bool(plan.get("clipAudio"))
+    grade = validate_grade(plan.get("grade"))
     pieces = plan["pieces"]
+    font = font or str(PLUGIN_DIR / "assets" / "fonts" / FX_FONT_FILE)
+    if not os.path.isfile(font):
+        if plan_has_words(plan):
+            log_warn(f"The font for the words ({FX_FONT_FILE}) is missing – rendering without them")
+        font = None
     cache_dir.mkdir(parents=True, exist_ok=True)
     work_dir.mkdir(parents=True, exist_ok=True)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -554,7 +951,7 @@ def render_plan(plan: Dict[str, Any], ff: str, dest: Path, cache_dir: Path, work
     def render_one(path: Path, piece: Dict[str, Any]) -> None:
         nonlocal done
         tmp = path.with_name(path.stem + ".part" + PIECE_EXT)
-        run_ffmpeg(piece_command(ff, piece, out, clip_audio, str(tmp)))
+        run_ffmpeg(piece_command(ff, piece, out, clip_audio, str(tmp), grade, font, str(work_dir / f"{path.stem}.graph")))
         os.replace(tmp, path)
         with lock:
             done += 1
@@ -587,17 +984,30 @@ def ffmpeg_script(plan: Dict[str, Any], shell: str = "sh", ff: str = "ffmpeg") -
     clip_audio = bool(plan.get("clipAudio"))
     pieces = plan["pieces"]
     names = [f"pieces/{i:04d}{PIECE_EXT}" for i in range(len(pieces))]
-    cmds = [piece_command(ff, p, out, clip_audio, n) for p, n in zip(pieces, names)]
+    grade = validate_grade(plan.get("grade"))
+    words = plan_has_words(plan)
+    font = f"fonts/{FX_FONT_FILE}" if words else None
+    cmds = [piece_command(ff, p, out, clip_audio, n, grade, font) for p, n in zip(pieces, names)]
+    note = f"the words need fonts/{FX_FONT_FILE} next to this script (the plugin has it in assets/fonts/)"
     final = final_command(ff, plan, out, "pieces.ffconcat", f"{safe_filename(plan.get('projectName', 'pmv'), 'pmv')}.mp4", progress=False)
     # entries are relative to the list file, which lives next to pieces/
     listing = ["ffconcat version 1.0", *[line for p, n in zip(pieces, names) for line in concat_entry(n, int(p["frames"]), out).split("\n")]]
     if shell == "cmd":
         q = lambda a: '"' + a.replace('"', '""').replace("%", "%%") + '"' if re.search(r'[\s;&|<>^()"%,=\[\]]', a) else a.replace("%", "%%")  # noqa: E731
-        lines = ["@echo off", "setlocal", "cd /d \"%~dp0\"", "if not exist pieces mkdir pieces", "(", *[f"echo {line}" for line in listing], ") > pieces.ffconcat"]
-        lines += [" ".join(q(a) for a in c) + " || exit /b 1" for c in cmds]
+        lines = ["@echo off", *([f"rem {note}"] if words else []), "setlocal", "cd /d \"%~dp0\"", "if not exist pieces mkdir pieces", "(", *[f"echo {line}" for line in listing], ") > pieces.ffconcat"]
+        for i, c in enumerate(cmds):
+            k = c.index("-filter_complex")
+            if len(c[k + 1]) > CMD_GRAPH_INLINE:
+                # cmd.exe reads at most 8191 characters per line: a long filtergraph goes into a file, written as base64
+                # lines (nothing in them that cmd would interpret) and decoded by certutil, which every Windows has
+                b64 = base64.b64encode(c[k + 1].encode("utf-8")).decode()
+                stem = f"pieces\\{i:04d}"
+                lines += ["(", *[f"echo({b64[j:j + 76]}" for j in range(0, len(b64), 76)], f") > {stem}.b64", f"certutil -f -decode {stem}.b64 {stem}.graph >nul || exit /b 1"]
+                c = [*c[:k], "-filter_complex_script", f"{stem}.graph", *c[k + 2:]]
+            lines.append(" ".join(q(a) for a in c) + " || exit /b 1")
         lines.append(" ".join(q(a) for a in final))
         return "\r\n".join(lines) + "\r\n"
-    lines = ["#!/usr/bin/env bash", "# generated by PMV Creator", "set -euo pipefail", 'cd "$(dirname "$0")"', "mkdir -p pieces", "cat > pieces.ffconcat <<'EOF'", *listing, "EOF"]
+    lines = ["#!/usr/bin/env bash", "# generated by PMV Creator", *([f"# {note}"] if words else []), "set -euo pipefail", 'cd "$(dirname "$0")"', "mkdir -p pieces", "cat > pieces.ffconcat <<'EOF'", *listing, "EOF"]
     lines += [" ".join(shlex.quote(a) for a in c) for c in cmds]
     lines.append(" ".join(shlex.quote(a) for a in final))
     return "\n".join(lines) + "\n"
@@ -1410,6 +1820,26 @@ def prepare_pc_plan(plan: Dict[str, Any], cfg: Dict[str, Any], base: str, api_ke
     return plan
 
 
+def helper_font(client: Any, plan: Dict[str, Any], cache: Path) -> Optional[str]:
+    """The words' font for a render on the PC: fetched once from the plugin in Stash (the helper is a single file)."""
+    url = str(plan.get("fontUrl") or "")
+    if not plan_has_words(plan) or not url.startswith("/"):
+        return None
+    path = cache / "fonts" / FX_FONT_FILE
+    if path.is_file() and path.stat().st_size > 0:
+        return str(path)
+    try:
+        req = urllib.request.Request(client.base + url, headers={"ApiKey": client.api_key} if getattr(client, "api_key", "") else {})
+        with urllib.request.urlopen(req, timeout=60, context=getattr(client, "ctx", None)) as r:
+            data = r.read()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(path, data)
+        return str(path)
+    except Exception as e:
+        log_warn(f"The font for the words could not be loaded from Stash ({e}) – rendering without them")
+        return None
+
+
 def run_helper_job(job: Dict[str, Any], client: Any, ff: str, dirs: Dict[str, Path], jobs: int = 4, stream_only: bool = False, out_default: Optional[Path] = None) -> Dict[str, Any]:
     """One render on the PC with progress reports to Stash; returns the result (or raises)."""
     global LOG_HOOK
@@ -1455,8 +1885,9 @@ def run_helper_job(job: Dict[str, Any], client: Any, ff: str, dirs: Dict[str, Pa
     reporter.start()
     try:
         dirs["work"].mkdir(parents=True, exist_ok=True)
+        font = helper_font(client, plan, dirs["cache"])
         with tempfile.TemporaryDirectory(prefix="pmv-", dir=str(dirs["work"])) as work:
-            result = render_plan(plan, ff, dest, dirs["cache"], Path(work), jobs)
+            result = render_plan(plan, ff, dest, dirs["cache"], Path(work), jobs, font)
     except BaseException as e:
         state["done"] = True
         LOG_HOOK = None

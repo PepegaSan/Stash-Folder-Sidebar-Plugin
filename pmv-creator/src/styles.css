@@ -371,6 +371,24 @@
   flex: 1;
   min-width: 0;
 }
+/* the simple view's rows have labels as wide as their text */
+.pmv-gen .pmv-grid2.pmv-gen-look {
+  grid-template-columns: max-content minmax(0, 1fr);
+  justify-items: start;
+}
+.pmv-look {
+  width: auto;
+  min-width: 140px;
+  max-width: 100%;
+}
+.pmv-color {
+  width: 48px;
+  height: 26px;
+  padding: 1px 2px;
+  border: 1px solid var(--pmv-border, #2f3d48);
+  border-radius: 4px;
+  background: transparent;
+}
 .pmv-gen .pmv-num input {
   width: 72px;
 }
@@ -628,6 +646,10 @@
   color: var(--pmv-muted);
   font-size: 12px;
 }
+/* Stash gives every slider 10 px above and below – in a form row that only stretches the row */
+.pmv-grid2 input[type="range"] {
+  margin: 0;
+}
 .pmv-num {
   display: inline-flex;
   align-items: center;
@@ -876,23 +898,22 @@
   background: #000;
   cursor: pointer;
 }
+/* the players decode in the page, (nearly) invisible above the canvas that shows them (compositor.ts) */
 .pmv-stage video {
   position: absolute;
   inset: 0;
+  z-index: 2;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  opacity: 0;
-}
-.pmv-stage video.is-contain {
-  object-fit: contain;
-}
-.pmv-stage-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
   opacity: 0;
   pointer-events: none;
+}
+.pmv-stage-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
 }
 .pmv-stage-empty {
   position: absolute;
@@ -1199,16 +1220,38 @@
   padding-top: 0;
 }
 
-.pmv-stage-blur {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  filter: blur(14px) brightness(0.85);
-  transform: scale(1.08);
-  pointer-events: none;
+
+/* ---------------------------------------------------------------- beat and drop effects (inspector, generator) */
+.pmv-fx {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pmv-fx-group {
+  display: grid;
+  grid-template-columns: 105px minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+}
+.pmv-gen .pmv-fx-group {
+  grid-template-columns: 110px minmax(0, 1fr);
+}
+.pmv-fx-head {
+  color: var(--pmv-muted);
+  font-size: 12px;
+}
+.pmv-fx-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  align-items: center;
+  min-width: 0;
+}
+.pmv-fx-items input[type="range"] {
+  margin: 0;
+}
+.pmv-fx-words {
+  min-width: 0;
 }
 
 /* ---------------------------------------------------------------- simple mode: start panel, "More…" blocks */

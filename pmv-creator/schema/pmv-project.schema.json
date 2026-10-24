@@ -15,6 +15,7 @@
     "updatedAt": { "type": "string", "format": "date-time" },
 
     "output": { "$ref": "#/$defs/output" },
+    "effects": { "$ref": "#/$defs/effects" },
     "audio": {
       "description": "Musikspur. null = noch keine Musik gewählt.",
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/audio" }]
@@ -100,7 +101,33 @@
         "videoCodec": { "enum": ["libx264", "libx265", "h264_nvenc", "hevc_nvenc"] },
         "crf": { "type": "integer", "minimum": 0, "maximum": 51 },
         "preset": { "type": "string", "pattern": "^[a-z0-9]+$" },
-        "audioBitrate": { "type": "string", "pattern": "^[0-9]+k$" }
+        "audioBitrate": { "type": "string", "pattern": "^[0-9]+k$" },
+        "look": { "enum": ["none", "warm", "pink", "cold", "vivid", "bw", "noir", "custom"], "description": "Farb-Look des ganzen PMV (wie im PMV Generator)." },
+        "lookAmount": { "type": "number", "minimum": 0, "maximum": 1, "description": "Stärke des Looks." },
+        "lookColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "Tönung des Looks „eigene Farbe“." },
+        "brightness": { "type": "number", "minimum": 0, "maximum": 1, "description": "Zusätzliche Helligkeit (weich, ohne die Lichter auszubrennen)." }
+      }
+    },
+
+    "effects": {
+      "description": "Beat- und Drop-Effekte des ganzen PMV (wie im PMV Generator). Wann sie feuern, ergibt sich aus Beat-Raster und Lautheit der Musik.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "zoom": { "type": "boolean", "description": "Zoom-Puls im Beat." },
+        "shake": { "type": "boolean", "description": "Wackeln auf lauten Beats." },
+        "stutter": { "type": "boolean", "description": "Stottern: in lauten Teilen springt der Clip auf jedem zweiten halben Beat zurück." },
+        "strobe": { "type": "boolean", "description": "Weiße Blitze auf halben Beats in lauten Teilen." },
+        "rgb": { "type": "boolean", "description": "RGB-Split auf Drops, lauten Takten und Schnitten." },
+        "glitch": { "type": "boolean", "description": "Verrutschende Bildstreifen auf Drops und sehr lauten Takten." },
+        "tunnel": { "type": "boolean", "description": "Tunnel auf Drops." },
+        "invert": { "type": "boolean", "description": "Kurzes Negativ auf Drops." },
+        "echo": { "type": "boolean", "description": "Geisterbilder in lauten Teilen." },
+        "text": { "type": "boolean", "description": "Wörter (words) auf Drops und manchen lauten Takten." },
+        "hue": { "type": "boolean", "description": "Farbrausch: die Farben drehen sich durch den Song." },
+        "pulseAmount": { "type": "number", "minimum": 0, "maximum": 1.5, "description": "Stärke des Zoom-Pulses (1 = wie im PMV Generator)." },
+        "pulseOn": { "enum": ["beat", "2", "bar"], "description": "Zoom-Puls auf jedem Beat, auf Beat 1 und 3 oder auf jedem Takt (Drops immer)." },
+        "words": { "type": "string", "maxLength": 2000, "description": "Wörter für den Text-Effekt, durch Kommas getrennt." }
       }
     },
 

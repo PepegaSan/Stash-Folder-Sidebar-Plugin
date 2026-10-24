@@ -10,6 +10,7 @@ import base64
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -77,6 +78,27 @@ def check_output(path, total_frames, expect_audio=True, rate=f"{FPS}/1"):
     assert len(pts) == total_frames, f"{len(pts)} decoded frames != {total_frames}"
     steps = {round((b - a) * tb_num / tb_den * fps, 3) for a, b in zip(pts, pts[1:])}
     assert steps == {1.0}, f"decoded frame order/step broken: steps {sorted(steps)[:5]}"
+
+
+def color_stats(path):
+    """Average saturation and chroma (U/V) of a video, from FFmpeg's signalstats."""
+    r = subprocess.run([FFMPEG, "-hide_banner", "-i", str(path), "-vf", "signalstats,metadata=print", "-f", "null", "-"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    vals = {}
+    for line in r.stderr.splitlines():
+        m = re.search(r"lavfi\.signalstats\.(SATAVG|UAVG|VAVG)=([\d.]+)", line)
+        if m:
+            vals.setdefault(m.group(1), []).append(float(m.group(2)))
+    return {k: sum(v) / len(v) for k, v in vals.items()}
+
+
+def frame_rgb(path, n, fps=FPS):
+    """Average R, G, B of frame n of a video – sought by its time: "select=eq(n,…)" counts anew wherever FFmpeg rebuilds
+    its filter graph (at pieces with other colour tags)."""
+    r = subprocess.run([FFMPEG, "-v", "error", "-ss", f"{(n - 0.25) / fps:.6f}", "-i", str(path), "-vf", "scale=32:18", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True)
+    d = r.stdout
+    assert len(d) == 32 * 18 * 3, f"frame {n} not decoded"
+    return [sum(d[i::3]) / (32 * 18) for i in range(3)]
 
 
 def run_preview_server(video, tmp):
@@ -236,6 +258,29 @@ def main():
         sh([sys.executable, str(BACKEND), "render", str(ntsc_path), "-o", str(tmp / "ntsc.mp4"), "--ffmpeg", FFMPEG, "--cache", str(cache)])
         check_output(tmp / "ntsc.mp4", total, rate="30000/1001")
         print("ok  29.97 fps render (CFR, clip audio only)")
+
+        # 2c) colour look, in the numbers the editor sends: black & white takes the colour out (black pieces keep
+        # their cache), a warm tint warms grey up
+        grey = tmp / "grey.mp4"
+        gen(grey, "color=c=0x808080:size=320x180:rate=30", 3, audio=False)
+
+        def graded(name, source, grade):
+            ps = [{"kind": "clip", "frames": 30, "src": src(source, 1.0, has_audio=False)}, {"kind": "black", "frames": 10}]
+            gp = dict(plan, totalFrames=40, clipAudio=False, audio=None, pieces=ps, **({"grade": grade} if grade else {}))
+            gp_path = tmp / f"plan-{name}.json"
+            gp_path.write_text(json.dumps(gp), encoding="utf-8")
+            res = json.loads(sh([sys.executable, str(BACKEND), "render", str(gp_path), "-o", str(tmp / f"{name}.mp4"), "--ffmpeg", FFMPEG, "--cache", str(cache)]).stdout)
+            check_output(tmp / f"{name}.mp4", 40, expect_audio=False)
+            return color_stats(tmp / f"{name}.mp4"), res
+
+        plain, _ = graded("plain", a, None)
+        bw = {"matrix": [0.2445, 0.8225, 0.083] * 3, "offset": [-0.075] * 3, "layers": [], "vignette": 0.6}
+        mono, res = graded("bw", a, bw)
+        assert plain["SATAVG"] > 10 and mono["SATAVG"] < 2, (plain, mono)
+        assert res["cached"] == 1, res  # the black piece: no look, same key as without one
+        warm, _ = graded("warm", grey, {"matrix": [1, 0, 0, 0, 1, 0, 0, 0, 1], "offset": [0, 0, 0], "layers": [[255, 140, 60, 0.5]], "vignette": 0})
+        assert warm["VAVG"] > 132 and warm["UAVG"] < 124, warm
+        print(f"ok  colour look: saturation {plain['SATAVG']:.0f} -> {mono['SATAVG']:.1f} (b&w), grey -> V {warm['VAVG']:.0f} / U {warm['UAVG']:.0f} (warm)")
 
         # 3) generated script renders the same thing
         shell = "cmd" if os.name == "nt" else "sh"
@@ -446,6 +491,45 @@ def main():
             sh([sys.executable, str(BACKEND), "render", str(ts_path), "-o", str(tmp / "ts.mp4"), "--ffmpeg", FFMPEG, "--cache", str(cache)])
             check_output(tmp / "ts.mp4", ts_plan["totalFrames"])
             print(f"ok  TS-generated plan: {len(kinds)} pieces ({', '.join(kinds)}), {ts_plan['totalFrames']} frames")
+
+            # 7) every beat and drop effect, worked out by the frontend, rendered for real (and again from the cache)
+            bundle = sh([npx, "esbuild", str(ROOT / "tests" / "samplePlanFx.ts"), "--bundle", "--platform=node", "--log-level=warning"], cwd=ROOT).stdout
+            text = json.dumps(json.loads(sh(["node", "-"], input=bundle).stdout)["plan"])
+            for key, path in {"{A}": a, "{B}": b, "{M}": music}.items():
+                text = text.replace(json.dumps(key)[1:-1], json.dumps(str(path))[1:-1])
+            fx_plan = json.loads(text)
+            used = {k for p in fx_plan["pieces"] for k in (p.get("fx") or {})}
+            assert {"zoom", "shake", "hue", "echo", "tunnel", "glitch", "rgb", "invert", "strobe", "text"} <= used, used
+            fx_path = tmp / "plan-fx.json"
+            fx_path.write_text(json.dumps(fx_plan), encoding="utf-8")
+            t0 = time.time()
+            res = json.loads(sh([sys.executable, str(BACKEND), "render", str(fx_path), "-o", str(tmp / "fx.mp4"), "--ffmpeg", FFMPEG, "--jobs", "3", "--cache", str(cache)]).stdout)
+            check_output(tmp / "fx.mp4", fx_plan["totalFrames"], expect_audio=True)
+            again = json.loads(sh([sys.executable, str(BACKEND), "render", str(fx_path), "-o", str(tmp / "fx2.mp4"), "--ffmpeg", FFMPEG, "--cache", str(cache)]).stdout)
+            assert again["cached"] == len(fx_plan["pieces"]), again
+            # a strobe frame is white; outside the windows the picture is not
+            starts, at = [], 0
+            for p in fx_plan["pieces"]:
+                starts.append(at)
+                at += p["frames"]
+            strobe = [s + w[0] for s, p in zip(starts, fx_plan["pieces"]) for w in (p.get("fx") or {}).get("strobe", [])]
+            bright = frame_rgb(tmp / "fx.mp4", strobe[0])
+            calm = frame_rgb(tmp / "fx.mp4", 30)
+            assert min(bright) > 215 and min(calm) < 200, (strobe[0], bright, calm)
+            print(f"ok  effects: {len(fx_plan['pieces'])} pieces with {', '.join(sorted(used))} – {res['seconds']} s, strobe frame {strobe[0]} white")
+
+            # 7b) the same as a script (the words' font next to it)
+            sdir = tmp / "script-fx"
+            (sdir / "fonts").mkdir(parents=True)
+            shutil.copy(ROOT / "plugin" / "assets" / "fonts" / "Anton-Regular.ttf", sdir / "fonts")
+            script = sdir / ("render.cmd" if shell == "cmd" else "render.sh")
+            body = sh([sys.executable, str(BACKEND), "script", str(fx_path), "--shell", shell]).stdout
+            longest = max(len(line) for line in body.splitlines())
+            assert longest < 8191, f"a line of the {shell} script is {longest} characters long"
+            script.write_text(body, encoding="utf-8", newline="")
+            sh(["cmd", "/c", str(script)] if shell == "cmd" else ["bash", str(script)], env=env, cwd=sdir)
+            check_output(next(sdir.glob("*.mp4")), fx_plan["totalFrames"])
+            print(f"ok  {shell} script with effects (longest line {longest} characters)")
     print("all backend checks passed")
     return 0
 

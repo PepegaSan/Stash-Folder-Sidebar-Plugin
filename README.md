@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.4-informational)
+![Version](https://img.shields.io/badge/version-0.9.5-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -585,6 +585,7 @@ Works in classic Stash and in Stash UI.
 - **Scene view in the main player** — a scene opens big in place of the preview (tabs *PMV preview* / *Scene*): pick ranges, move a clip to another spot or put another scene into it
 - **Ground rule** — another part of the scene never changes a clip's place on the timeline
 - **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy or on every beat / every 2 / every 4 beats, transitions of your choice (or a mix) on every cut, bar or phrase, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"; **presets** saved on the server; clips from one of your **saved Stash filters**; your own rendered PMVs are never picked as material
+- **Colour looks and beat/drop effects** — looks (warm, pink, cold, vivid, b&w, noir, own colour) and effects like the PMV Generator's: zoom pulse, shake, stutter, strobe, RGB split, glitch, tunnel, negative, echo, words, colour rush – timed by the beat and the drops, the same in preview, Quick record and render; moods switch them
 - **Several PMVs at once** — pick songs, each becomes its own project with the same generator settings and is rendered one after another in Stash's queue (e.g. overnight on the PC)
 - **Cuts like another PMV** — pick a PMV from the library: its cuts and flashes (and its music, if you like) are measured and the generator cuts your clips at exactly those moments
 - **Touching up** — 🎲 another clip for one spot (N), 📌 keep the good ones when generating again (P), ⊘ take a scene out of the PMV (optionally for good, via a Stash tag), ⏮ ⏭ review the cuts one by one ([ ] or ↑ ↓)
@@ -617,6 +618,13 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.5
+
+- **Beat and drop effects** like the PMV Generator's: zoom pulse (every beat, beats 1 and 3 or every bar, with a strength), shake, stutter, strobe; on drops RGB split, glitch, tunnel, negative, echo and your own words; colour rush through the song. In the inspector under *Output* or in the generator (moods switch them). Timed by the beat grid and the music's loudness – the same song and cut always look the same; preview, Quick record and render show the same
+- **Colour looks** (warm, pink, cold, vivid, black & white, noir, own colour, with strength) and smooth extra brightness for the whole PMV
+- The preview draws on a canvas (the same as Quick record); a paused preview no longer keeps an old picture after a jump
+- Render on a PC: looks and effects need the helper 0.9.5 – the render dialog offers the new file
 
 ### PMV Creator 0.9.4
 

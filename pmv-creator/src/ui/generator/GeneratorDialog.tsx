@@ -6,10 +6,11 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { PickOrder, TransitionPick, TransitionWhen } from "../../generator/assemble";
-import { type GeneratorSettings, MOODS, type Mood, type StyleOptions, applyMood, defaultSettings, generationRange, pinnedClips, upgradeStyle } from "../../generator/generate";
+import { type GeneratorSettings, MOODS, type Mood, type StyleOptions, applyMood, defaultSettings, generationRange, pinnedClips, savedEffects, upgradeStyle } from "../../generator/generate";
 import type { ClipOptions, ClipSource, TagStage } from "../../generator/material";
 import type { CutOptions, Pace } from "../../generator/rhythm";
 import { t, tn } from "../../i18n";
+import { type EffectSettings, anyEffect } from "../../model/effects";
 import { formatTime } from "../../timeline/time";
 import { type PresetEntry, deletePreset, listPresets, savePreset } from "../../stash/backend";
 import { findPerformers, findTags } from "../../stash/queries";
@@ -17,7 +18,8 @@ import { listSavedSceneFilters } from "../../stash/savedFilters";
 import type { StashRef } from "../../stash/types";
 import { rememberAdvanced } from "../../state/prefs";
 import { useEditor } from "../../state/store";
-import { NumField, RefPicker, Seg, transitionLabel } from "../common";
+import { LookFields, More, NumField, RefPicker, Seg, transitionLabel } from "../common";
+import { EffectFields, effectSummary } from "../EffectFields";
 import { CutTemplateBox } from "./CutTemplateBox";
 import { type RunOutcome, runGenerator } from "./run";
 import { SavedFilterPick } from "./SavedFilterPick";
@@ -38,7 +40,7 @@ export function loadSaved(fallbackTrack: string, trackIds: string[]): GeneratorS
       clips: { ...base.clips, ...s.clips },
       select: { ...base.select, ...s.select },
       cut: { ...base.cut, ...s.cut },
-      style: { ...base.style, ...upgradeStyle(s.style) },
+      style: { ...base.style, ...upgradeStyle(s.style), fx: savedEffects(s) },
       target: { ...base.target, ...s.target, trackId },
     };
   } catch {
@@ -63,7 +65,7 @@ export function withPreset(x: GeneratorSettings, ps: Partial<GeneratorSettings>)
     clips: { ...base.clips, ...ps.clips },
     select: { ...base.select, ...ps.select },
     cut: { ...base.cut, ...ps.cut },
-    style: { ...base.style, ...upgradeStyle(ps.style) },
+    style: { ...base.style, ...upgradeStyle(ps.style), fx: savedEffects(ps) },
   };
 }
 
@@ -135,7 +137,9 @@ export function GeneratorDialog() {
   // read once: the preset is used up when the dialog opens, its hint stays while it is open
   const [clipPreset] = useState(state.ui.clipPreset);
   const [s, setS] = useState<GeneratorSettings>(() => {
-    const loaded = loadSaved(defaultTrack, project.tracks.map((x) => x.id));
+    const saved = loadSaved(defaultTrack, project.tracks.map((x) => x.id));
+    // a PMV that has effects (or was generated before) shows its own – generating keeps them unless changed here
+    const loaded = project.generator || anyEffect(project.effects) ? { ...saved, style: { ...saved.style, fx: project.effects } } : saved;
     // "PMV with this performer/tag" from Stash: just that filter, nothing left over from earlier runs
     if (clipPreset) return { ...loaded, clips: { ...defaultSettings(defaultTrack).clips, limit: loaded.clips.limit, performers: clipPreset.performers, tags: clipPreset.tags } };
     return preset?.source ? { ...loaded, clips: { ...loaded.clips, source: preset.source } } : loaded;
@@ -159,6 +163,8 @@ export function GeneratorDialog() {
   const setClips = (patch: Partial<ClipOptions>) => setS((x) => ({ ...x, clips: { ...x.clips, ...patch } }));
   const setCut = (patch: Partial<CutOptions>) => setS((x) => ({ ...x, mood: "custom", cut: { ...x.cut, ...patch } }));
   const setStyle = (patch: Partial<GeneratorSettings["style"]>) => setS((x) => ({ ...x, mood: "custom", style: { ...x.style, ...patch } }));
+  const setFx = (patch: Partial<EffectSettings>) => setS((x) => ({ ...x, mood: "custom", style: { ...x.style, fx: { ...x.style.fx, ...patch } } }));
+  const effects = <EffectFields fx={s.style.fx} music={!!project.audio} onChange={setFx} />;
   const setSelect = (patch: Partial<GeneratorSettings["select"]>) => setS((x) => ({ ...x, select: { ...x.select, ...patch } }));
   const setTarget = (patch: Partial<GeneratorSettings["target"]>) => setS((x) => ({ ...x, target: { ...x.target, ...patch } }));
   const setStage = (i: number, patch: Partial<TagStage>) => setClips({ stages: s.clips.stages.map((st, k) => (k === i ? { ...st, ...patch } : st)) });
@@ -223,10 +229,10 @@ export function GeneratorDialog() {
   };
 
   const moodHints: Record<Exclude<Mood, "custom">, string> = {
-    classic: t("Cuts follow the music's energy, flash on drops"),
-    maximal: t("A cut on every beat, flashes, speed ramps"),
-    hypno: t("Slow, dissolving cuts every two beats"),
-    clean: t("Energy-based cuts without effects"),
+    classic: t("Cuts follow the music's energy; zoom pulse, shake and stutter, RGB split and glitch on drops"),
+    maximal: t("A cut on every beat, flashes, speed ramps and every effect"),
+    hypno: t("Slow, dissolving cuts every two beats; echo, tunnel and colour rush"),
+    clean: t("Energy-based cuts, only the zoom pulse"),
   };
 
   const sourceSeg = (
@@ -318,6 +324,11 @@ export function GeneratorDialog() {
               <span className="pmv-gen-label">{t("Transitions")}</span>
               <TransitionChoice style={s.style} onChange={setStyle} />
             </div>
+            {/* the look belongs to the PMV, not to a generator run: it changes the project right away */}
+            <div className="pmv-grid2 pmv-gen-look">
+              <LookFields output={project.output} onChange={(patch) => dispatch({ type: "output/update", patch })} />
+            </div>
+            <More label={t("Effects: {list}", { list: effectSummary(s.style.fx) })}>{effects}</More>
           </>
         )}
 
@@ -500,7 +511,12 @@ export function GeneratorDialog() {
                 <TransitionChoice style={s.style} onChange={setStyle} />
                 <label>{t("Speed")}</label>
                 <NumField value={s.style.speed} onCommit={(v) => setStyle({ speed: v })} min={0.25} max={4} step={0.05} suffix="×" />
+                <LookFields output={project.output} onChange={(patch) => dispatch({ type: "output/update", patch })} />
               </div>
+              <div className="pmv-gen-label" title={t("They go into the PMV with the clips – change them later in the inspector (nothing selected)")}>
+                {t("Effects")}
+              </div>
+              {effects}
               {fromPmv && <CutTemplateBox disabled={!!busy} />}
               <div className="pmv-row pmv-wrap">
                 <Check label={t("Cuts on the bar grid")} checked={s.cut.onGrid} onChange={(v) => setCut({ onGrid: v })} />

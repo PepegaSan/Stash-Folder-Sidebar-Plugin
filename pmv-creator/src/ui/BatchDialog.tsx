@@ -6,16 +6,20 @@
 import React, { useEffect, useRef, useState } from "react";
 import { buildRenderPlan } from "../export/renderPlan";
 import { type GeneratorSettings, MOODS, applyGeneration } from "../generator/generate";
+import { type EnergyFn, peaksEnergy } from "../generator/rhythm";
 import { t, tn } from "../i18n";
+import { anyEffect } from "../model/effects";
+import { colorGrade } from "../model/look";
 import { type PmvProject, createAudioTrack, createProject } from "../model/project";
 import { type LibrarySong, type MediaResult, type PresetEntry, listPresets, saveProject, startRender, uploadAudio } from "../stash/backend";
 import { openProject, useEditor } from "../state/store";
+import { effectsWith } from "./effects";
 import { cutsToMusic, loadSaved, withPreset } from "./generator/GeneratorDialog";
 import { runGenerator } from "./generator/run";
 import { forgetAudioAnalysis, getAudioAnalysis } from "./hooks";
 import { labelFor, labelingOn } from "./labels";
 import { detectSongGrid } from "./music";
-import { PcRender } from "./PcRender";
+import { HELPER_FOR_LOOKS, PcRender } from "./PcRender";
 import { isActive, notifyOn, primeSignal, watchRender } from "./renders";
 import { useRenders } from "./RenderTray";
 import { SongLibraryDialog } from "./SongLibrary";
@@ -103,6 +107,8 @@ export function BatchDialog() {
     set(song.key, { phase: "analyse" });
     let p = createProject(t("PMV – {name}", { name: stripExt(media.name) }));
     let out;
+    // the song's loudness, kept for the effects: the decoded song is let go below
+    let energy: EnergyFn | undefined;
     try {
       const a = await getAudioAnalysis(media.url);
       const grid = detectSongGrid(a, 0);
@@ -119,6 +125,7 @@ export function BatchDialog() {
       // another seed per song, so the PMVs don't all start with the same scenes
       const run = { ...settings, seed: settings.seed + i, target: { ...settings.target, range: "song" as const, trackId, replaceTrack: true } };
       out = await runGenerator(p, run, 0, (text) => set(song.key, { phase: "generate", text }));
+      energy = p.audio ? peaksEnergy(a.peaks, a.peaksPerSecond, p.audio) : undefined;
     } finally {
       // one decoded song at a time, not the whole batch in memory – unless it is the editor's own song
       if (getState().present.audio?.url !== media.url) forgetAudioAnalysis(media.url);
@@ -127,7 +134,7 @@ export function BatchDialog() {
     p = { ...applyGeneration(p, out.result), updatedAt: new Date().toISOString() };
     set(song.key, { phase: "render" });
     await saveProject(p);
-    const job = await startRender(buildRenderPlan(p).plan, pc ? helper?.id : undefined);
+    const job = await startRender(buildRenderPlan(p, await effectsWith(p, energy)).plan, pc ? helper?.id : undefined);
     watchRender({ ...job, name: p.name, projectId: p.id, pc: pc ? (helper?.name ?? null) : null, label: label ? labelFor(p) : null, batch });
     set(song.key, { phase: "queued", renderId: job.renderId, projectId: p.id });
   };
@@ -287,7 +294,7 @@ export function BatchDialog() {
                 }}
               />
             </div>
-            {pc && <PcRender disabled={busy} onHelper={(id, name) => setHelper(id && name ? { id, name } : null)} />}
+            {pc && <PcRender disabled={busy} needs={colorGrade(base.output) || anyEffect(settings.style.fx) ? HELPER_FOR_LOOKS : undefined} onHelper={(id, name) => setHelper(id && name ? { id, name } : null)} />}
             <AfterRender label={label} onLabel={setLabel} notify={notify} onNotify={setNotify} />
             {!pc && !ffmpegAvailable && <div className="pmv-error">{t("FFmpeg was not found on the server – set its path in the plugin settings.")}</div>}
             {settings.clips.source === "saved" && !settings.clips.savedFilter && <div className="pmv-error">{t("Pick one of your saved filters first.")}</div>}

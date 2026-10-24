@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { buildEdl } from "../export/edl";
 import { buildOtio } from "../export/otio";
-import { buildRenderPlan } from "../export/renderPlan";
+import { type RenderPlan, buildRenderPlan } from "../export/renderPlan";
 import { t, tn } from "../i18n";
+import { anyEffect } from "../model/effects";
 import { uid } from "../model/ids";
 import { type PmvProject, createProject, migrateProject } from "../model/project";
 import { type ProjectSummary, type RecordingResult, deleteProject, ffmpegScript, listProjects, saveRecording, startRender, stopJob, uploadFile } from "../stash/backend";
@@ -13,7 +14,8 @@ import { formatTime } from "../timeline/time";
 import type { EditMode } from "../timeline/ops";
 import { Menu, Seg } from "./common";
 import { downloadText, safeName } from "./download";
-import { PcRender } from "./PcRender";
+import { loadEffects } from "./effects";
+import { HELPER_FOR_LOOKS, PcRender } from "./PcRender";
 import { useHost } from "../host";
 import { type LabelStatus, labelFor, labelJob, labelingOn, queueLabel, setLabelingOn, watchLabel } from "./labels";
 import { desktopNotifications, isActive, listRenders, notifyOn, primeSignal, setNotifyOn, watchRender } from "./renders";
@@ -49,7 +51,7 @@ export function Toolbar() {
   const load = (project: PmvProject) => dispatch({ type: "project/load", project });
   const exportScript = async (shell: "sh" | "cmd") => {
     try {
-      downloadText(`${base}.${shell === "sh" ? "sh" : "cmd"}`, await ffmpegScript(buildRenderPlan(p).plan, shell));
+      downloadText(`${base}.${shell === "sh" ? "sh" : "cmd"}`, await ffmpegScript(buildRenderPlan(p, await loadEffects(p)).plan, shell));
     } catch (e) {
       window.alert(t("Script export failed: {error}", { error: String(e) }));
     }
@@ -191,7 +193,13 @@ export function Toolbar() {
             <button className="pmv-menu-item" onClick={() => (downloadText(`${base}.otio`, JSON.stringify(buildOtio(p), null, 2), "application/json"), close())}>
               OpenTimelineIO (.otio)
             </button>
-            <button className="pmv-menu-item" onClick={() => (downloadText(`${base}.render-plan.json`, JSON.stringify(buildRenderPlan(p).plan, null, 2), "application/json"), close())}>
+            <button
+              className="pmv-menu-item"
+              onClick={() => {
+                close();
+                void loadEffects(p).then((fx) => downloadText(`${base}.render-plan.json`, JSON.stringify(buildRenderPlan(p, fx).plan, null, 2), "application/json"));
+              }}
+            >
               {t("Render plan (.json)")}
             </button>
             <button className="pmv-menu-item" disabled={backend !== "online"} onClick={() => (void exportScript("sh"), close())}>
@@ -457,8 +465,36 @@ export function AfterRender({ label, onLabel, notify, onNotify }: { label: boole
 }
 
 function RenderDialog({ onClose }: { onClose: () => void }) {
+  const { state } = useEditor();
+  // with effects the music's loudness is needed first (drops) – usually it is decoded already
+  const [built, setBuilt] = useState(() => (anyEffect(state.present.effects) ? null : buildRenderPlan(state.present)));
+  useEffect(() => {
+    let alive = true;
+    if (!built) void loadEffects(state.present).then((fx) => alive && setBuilt(buildRenderPlan(state.present, fx)));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (!built) {
+    return (
+      <div className="pmv-modal" onClick={onClose}>
+        <div className="pmv-modal-body" onClick={(e) => e.stopPropagation()}>
+          <div className="pmv-section-head is-static">
+            {t("Render")} <span className="pmv-spacer" />
+            <button className="btn btn-sm btn-link" onClick={onClose}>
+              ✕
+            </button>
+          </div>
+          <div className="pmv-li-meta">⏳ {t("Working out the effects…")}</div>
+        </div>
+      </div>
+    );
+  }
+  return <RenderDialogBody plan={built.plan} warnings={built.warnings} onClose={onClose} />;
+}
+
+function RenderDialogBody({ plan, warnings, onClose }: { plan: RenderPlan; warnings: string[]; onClose: () => void }) {
   const { state, backend, ffmpegAvailable } = useEditor();
-  const [{ plan, warnings }] = useState(() => buildRenderPlan(state.present));
   const [label, setLabel] = useState(labelingOn);
   const [notify, setNotify] = useState(notifyOn);
   // where it renders: in Stash (server) or on a PC with the render helper (opt-in, remembered per browser)
@@ -518,7 +554,7 @@ function RenderDialog({ onClose }: { onClose: () => void }) {
           <span className="pmv-gen-label">{t("Render on")}</span>
           <RenderTargetSeg value={target} disabled={active || recording} onChange={setTarget} />
         </div>
-        {pc && backend === "online" && <PcRender disabled={active || recording} onHelper={(id, name) => setHelper(id && name ? { id, name } : null)} />}
+        {pc && backend === "online" && <PcRender disabled={active || recording} needs={plan.grade || plan.pieces.some((x) => x.fx) ? HELPER_FOR_LOOKS : undefined} onHelper={(id, name) => setHelper(id && name ? { id, name } : null)} />}
         <AfterRender label={label} onLabel={setLabel} notify={notify} onNotify={setNotify} />
         {backend !== "online" && <div className="pmv-error">{t("Backend unreachable. Export the render plan and render with the CLI (see README).")}</div>}
         {!pc && backend === "online" && !ffmpegAvailable && <div className="pmv-error">{t("FFmpeg was not found on the server – set its path in the plugin settings.")}</div>}
@@ -587,7 +623,7 @@ function QuickRecord({ disabled, onBusy }: { disabled: boolean; onBusy: (busy: b
     abortRef.current = ctl;
     setPhase({ kind: "recording", p: { time: 0, duration: 0 } });
     try {
-      const rec = await recordSequence(project, scenes, transport, (p) => setPhase({ kind: "recording", p }), ctl.signal);
+      const rec = await recordSequence(project, scenes, transport, (p) => setPhase({ kind: "recording", p }), ctl.signal, await loadEffects(project));
       const name = `${safeName(project.name)}.webm`;
       if (backend === "online") {
         setPhase({ kind: "uploading", pct: 0 });

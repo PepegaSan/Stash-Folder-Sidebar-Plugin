@@ -10,6 +10,7 @@ import type { ClipSource } from "../generator/material";
 import type { StashRef } from "../stash/types";
 import { type MaterialChange, applyMaterial } from "../generator/reroll";
 import { readAdvanced } from "./prefs";
+import type { EffectSettings } from "../model/effects";
 import type { AudioTrack, BeatGrid, Clip, CutTemplate, Exclusion, OutputSettings, PmvProject, Snippet, SourceMedia, TimelineMarker, Track, Transition } from "../model/project";
 import {
   type ClipPatch,
@@ -70,6 +71,7 @@ export type EditAction =
   | { type: "audio/update"; patch: Partial<AudioTrack> }
   | { type: "grid/update"; patch: Partial<BeatGrid> }
   | { type: "output/update"; patch: Partial<OutputSettings> }
+  | { type: "effects/update"; patch: Partial<EffectSettings> }
   | { type: "project/rename"; name: string }
   | { type: "marker/add"; marker: TimelineMarker }
   | { type: "marker/remove"; markerId: string }
@@ -181,6 +183,8 @@ export function applyEdit(p: PmvProject, a: EditAction): PmvProject {
       return { ...p, beatGrid: { ...p.beatGrid, ...a.patch } };
     case "output/update":
       return { ...p, output: { ...p.output, ...a.patch } };
+    case "effects/update":
+      return { ...p, effects: { ...p.effects, ...a.patch } };
     case "project/rename":
       return { ...p, name: a.name };
     case "marker/add":
@@ -205,6 +209,7 @@ function coalesceKey(a: EditAction): string | null {
     case "audio/update":
     case "grid/update":
     case "output/update":
+    case "effects/update":
     case "project/rename":
       return a.type;
     default:

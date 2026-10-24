@@ -6,8 +6,8 @@
  * seek aims where the clock will be once it is through (measured per player), and a seek on its way is never
  * interrupted by the next one – on slow seeks that left the picture frozen. A clip whose player has no picture
  * yet keeps the last picture on screen instead of going black.
- * Transitions are approximated per slot (opacity, visible part, shift, zoom, blur) and colour overlays; the quick
- * recorder replays the same looks on its canvas.
+ * The engine only says what is on screen (`view`: players with their transition looks and framing, a colour wash);
+ * the compositor draws it on a canvas – for the preview and the quick record alike.
  */
 import type { FitMode, TransitionType } from "../../model/project";
 import { type ResolvedTransition, type Segment, segmentIndexAt, sourceTimeAt } from "../../timeline/flatten";
@@ -40,10 +40,8 @@ const DRIFT_SEEK = 0.25;
 const DRIFT_RATE = 0.04;
 /** The clock moved further than this between two frames: the user jumped – seeks on their way get the new target. */
 const JUMP = 0.5;
-/** Low-res copy of the picture behind a "blur" clip; the CSS blur does the rest. */
-const BLUR_W = 160;
 
-/** How one slot is drawn. Fractions refer to the picture, so CSS and the recorder's canvas agree. */
+/** How one slot is drawn. Fractions refer to the picture. */
 export interface SlotLook {
   opacity: number;
   /** Visible horizontal band [from, to] as fractions of the width (wipes). */
@@ -89,17 +87,18 @@ export function transitionLooks(type: TransitionType, p: number): { incoming: Sl
   }
 }
 
-/** CSS for a look; empty strings reset what a previous transition set. */
-function lookCss(look: SlotLook, height: number): { clipPath: string; mask: string; transform: string; filter: string } {
-  const clipPath = look.band
-    ? `inset(0 ${(1 - look.band[1]) * 100}% 0 ${look.band[0] * 100}%)`
-    : look.circle !== undefined
-      ? `circle(${look.circle * 70.72}% at 50% 50%)` // % of a circle() radius = diagonal / √2
-      : "";
-  const mask = look.sweep !== undefined ? `conic-gradient(#000 ${look.sweep * 360}deg, transparent 0)` : "";
-  const transform = [look.shift ? `translateX(${look.shift * 100}%)` : "", look.scale && look.scale !== 1 ? `scale(${look.scale})` : ""].filter(Boolean).join(" ");
-  const filter = look.blur ? `blur(${(look.blur * height).toFixed(1)}px)` : "";
-  return { clipPath, mask, transform, filter };
+/** One player on screen: its look in the transition, the framing of the clip it shows, stacking order. */
+export interface PreviewLayer {
+  el: HTMLVideoElement;
+  look: SlotLook;
+  fit: FitMode;
+  z: number;
+}
+
+/** What the preview shows right now; `wash` is the colour of a fade through black or white. */
+export interface PreviewView {
+  layers: PreviewLayer[];
+  wash: { color: string; alpha: number };
 }
 
 /** A segment's identity across timeline edits (indices shift, clips keep their id). */
@@ -118,55 +117,29 @@ export class PreviewEngine {
 
   constructor(
     els: HTMLVideoElement[],
-    private overlay: HTMLElement,
-    private blur: HTMLCanvasElement | null = null,
-    /** Listening volume of the on-screen preview; a recording keeps the clips' own level. */
-    private listen: () => number = () => 1,
+    private opts: {
+      /** Listening volume of the on-screen preview; a recording keeps the clips' own level. */
+      listen?: () => number;
+      /** A player got a picture (a stream opened, a seek arrived) – nothing else redraws a paused preview. */
+      onPicture?: () => void;
+    } = {},
   ) {
     this.slots = els.map((el) => new VideoSlot(el));
     this.bound = els.map(() => null);
     this.boundFrame = els.map(() => 0);
-    this.looks = els.map(() => ({ opacity: 0 }));
-    this.painted = els.map(() => "");
-    // paused: nothing re-renders when the picture arrives later – redraw the backdrop then
+    this.fits = els.map(() => "cover");
+    this.view = { layers: [], wash: { color: "transparent", alpha: 0 } };
     for (const el of els) for (const ev of ["loadeddata", "seeked"]) el.addEventListener(ev, this.onPicture);
   }
 
-  private blurTarget: HTMLVideoElement | null = null;
-  private onPicture = (e: Event) => {
-    if (e.currentTarget === this.blurTarget) this.drawBlur(this.blurTarget);
-  };
+  /** What is on screen after the last render (the compositor draws it). */
+  view: PreviewView;
+  /** Framing of the clip each player shows. */
+  private fits: FitMode[];
+  private onPicture = () => this.opts.onPicture?.();
 
-  /** Framing of a segment's clip, as classes on the slot (the recorder reads them too). */
-  private applyFit(el: HTMLVideoElement, seg: Segment): FitMode {
-    const fit = seg.clip?.fit ?? this.tl!.fit;
-    el.classList.toggle("is-contain", fit !== "cover");
-    el.classList.toggle("is-blur", fit === "blur");
-    return fit;
-  }
-
-  /** Blurred backdrop: a small cover-cropped copy of the active frame (CSS blurs and scales it). */
-  private drawBlur(el: HTMLVideoElement | null): void {
-    const c = this.blur;
-    if (!c) return;
-    if (!el || el.readyState < 2 || !el.videoWidth) {
-      c.style.opacity = "0";
-      return;
-    }
-    const ar = c.clientWidth && c.clientHeight ? c.clientWidth / c.clientHeight : 16 / 9;
-    const w = BLUR_W;
-    const h = Math.max(2, Math.round(BLUR_W / ar));
-    if (c.width !== w || c.height !== h) {
-      c.width = w;
-      c.height = h;
-    }
-    const g = c.getContext("2d");
-    if (!g) return;
-    const s = Math.max(w / el.videoWidth, h / el.videoHeight);
-    const dw = el.videoWidth * s;
-    const dh = el.videoHeight * s;
-    g.drawImage(el, (w - dw) / 2, (h - dh) / 2, dw, dh);
-    c.style.opacity = "1";
+  private applyFit(slotIdx: number, seg: Segment): void {
+    this.fits[slotIdx] = seg.clip?.fit ?? this.tl!.fit;
   }
 
   /** Slots keep their scenes and bindings: an edit costs at most a seek, not a reload (that went black). */
@@ -284,37 +257,20 @@ export class PreviewEngine {
     }
     if (active >= 0 && this.slots[active].hasPicture) this.shown = active;
     else if (onScreen < 0) this.shown = -1;
-    this.looks = looks;
+    const layers: PreviewLayer[] = [];
     this.slots.forEach((s, k) => {
-      this.paint(k, looks[k]);
-      s.el.style.zIndex = tr && want[k] === j ? "2" : "1";
+      const z = tr && want[k] === j ? 2 : 1;
+      if (looks[k].opacity > 0) layers.push({ el: s.el, look: looks[k], fit: this.fits[k], z });
+      // for tests and diagnostics: which player is drawn how strongly
+      const op = String(looks[k].opacity);
+      if (s.el.dataset.op !== op) s.el.dataset.op = op;
+      // Chrome renders a video that is not drawn on the page on a slow timer of its own (a quarter second, the
+      // canvas then stalls): what the canvas shows, and a clip starting up, stays barely visible above it
+      const css = looks[k].opacity > 0 || rolling.has(k) ? "0.001" : "0";
+      if (s.el.style.opacity !== css) s.el.style.opacity = css;
       if (k !== active && k !== other && !rolling.has(k) && !s.el.paused) s.el.pause();
     });
-    this.overlay.style.background = overlayColor;
-    this.overlay.style.opacity = String(overlayAlpha);
-    // backdrop for "blur" framing: the topmost visible slot
-    const top = [...this.slots].filter((s) => Number(s.el.style.opacity) > 0 && s.el.classList.contains("is-blur")).sort((a, b) => Number(b.el.style.zIndex) - Number(a.el.style.zIndex))[0];
-    this.blurTarget = top?.el ?? null;
-    this.drawBlur(this.blurTarget);
-  }
-
-  /** Looks of the slots after the last render (the recorder draws them on its canvas). */
-  looks: SlotLook[];
-  /** CSS last written per slot – render runs every frame, so only changes are applied. */
-  private painted: string[];
-
-  private paint(k: number, look: SlotLook): void {
-    const el = this.slots[k].el;
-    el.style.opacity = String(look.opacity);
-    const css = lookCss(look, el.clientHeight);
-    const key = `${css.clipPath}|${css.mask}|${css.transform}|${css.filter}`;
-    if (key === this.painted[k]) return;
-    this.painted[k] = key;
-    el.style.clipPath = css.clipPath;
-    el.style.transform = css.transform;
-    el.style.filter = css.filter;
-    el.style.setProperty("mask-image", css.mask);
-    el.style.setProperty("-webkit-mask-image", css.mask);
+    this.view = { layers: layers.sort((a, b) => a.z - b.z), wash: { color: overlayColor, alpha: overlayAlpha } };
   }
 
   /**
@@ -349,8 +305,8 @@ export class PreviewEngine {
     const fps = this.tl!.fps;
     const speed = clamp(seg.clip.speed, 0.0625, 16);
     const src = sourceTimeAt(seg, frame, fps);
-    this.applyFit(slot.el, seg);
-    const level = clamp(seg.clip.volume, 0, 1) * this.listen();
+    this.applyFit(slotIdx, seg);
+    const level = clamp(seg.clip.volume, 0, 1) * (this.opts.listen?.() ?? 1);
     slot.el.muted = level <= 0;
     slot.el.volume = level;
     const opened = slot.sceneId === scene.id && !slot.stale;
@@ -402,7 +358,7 @@ export class PreviewEngine {
     if (!scene) return;
     const slot = this.slots[slotIdx];
     const src = Math.max(0, sourceTimeAt(seg, frame, this.tl!.fps));
-    this.applyFit(slot.el, seg);
+    this.applyFit(slotIdx, seg);
     if (slot.sceneId !== scene.id || slot.stale) slot.assign(scene, src);
     else if (Math.abs(slot.time - src) > 0.05) slot.seek(src);
     if (!slot.el.paused) slot.el.pause();

@@ -26,13 +26,39 @@ function lsSet(key: string, value: string): void {
   }
 }
 
+/** The helper renders the colour look and the beat/drop effects from this version on – an older one leaves them out. */
+export const HELPER_FOR_LOOKS = "0.9.5";
+
+/** a < b for dotted version numbers; an unknown version counts as old. */
+export function olderVersion(a: string | undefined, b: string): boolean {
+  if (!a) return true;
+  const x = a.split(".").map((n) => parseInt(n, 10) || 0);
+  const y = b.split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+  return false;
+}
+
+/** The helper file with the Stash address (and an API key for a Stash with a login) filled in. */
+function useHelperDownload() {
+  const [status, setStatus] = useState<string | null>(null);
+  const download = async (apiKey: string) => {
+    try {
+      downloadText("pmv-render-helper.py", await helperScript(apiKey), "text/x-python");
+      setStatus(t("Downloaded – start it with a double-click."));
+    } catch (e) {
+      setStatus(t("Error: {error}", { error: String(e) }));
+    }
+  };
+  return { download, status };
+}
+
 const ago = (s: number) => {
   const d = Math.max(0, Date.now() / 1000 - s);
   return d < 120 ? t("{n} s ago", { n: Math.round(d) }) : d < 7200 ? t("{n} min ago", { n: Math.round(d / 60) }) : t("{n} h ago", { n: Math.round(d / 3600) });
 };
 
-/** onHelper gets the id of the selected, connected helper (null = none). */
-export function PcRender({ onHelper, disabled }: { onHelper: (id: string | null, name: string | null) => void; disabled: boolean }) {
+/** onHelper gets the id of the selected, connected helper (null = none); `needs`: the helper version this render needs. */
+export function PcRender({ onHelper, disabled, needs }: { onHelper: (id: string | null, name: string | null) => void; disabled: boolean; needs?: string }) {
   const [helpers, setHelpers] = useState<RenderHelper[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(() => lsGet(LS_HELPER));
@@ -93,6 +119,7 @@ export function PcRender({ onHelper, disabled }: { onHelper: (id: string | null,
               ● {t("connected")}
             </span>
           </div>
+          {needs && olderVersion(current.version, needs) && <OutdatedHelper version={current.version} />}
           <HelperSettings key={current.id} helper={current} disabled={disabled} />
         </>
       ) : (
@@ -160,17 +187,28 @@ function HelperSettings({ helper, disabled }: { helper: RenderHelper; disabled: 
   );
 }
 
+/** A helper from before the colour looks would render without it: offer the new one. */
+function OutdatedHelper({ version }: { version?: string }) {
+  const [apiKey, setApiKey] = useState("");
+  const { download, status } = useHelperDownload();
+  return (
+    <div className="pmv-error">
+      ⚠ {t("The helper on this PC ({version}) renders without the colour look and the effects. Download it again, close the old window and start the new file:", { version: version ?? "?" })}
+      <div className="pmv-row">
+        <button className="btn btn-sm btn-primary" onClick={() => void download(apiKey)}>
+          ⬇ {t("Download render helper")}
+        </button>
+        <input className="form-control form-control-sm" value={apiKey} placeholder={t("API key (only for a Stash with a login)")} onChange={(e) => setApiKey(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+      </div>
+      {status && <div className="pmv-li-meta">{status}</div>}
+    </div>
+  );
+}
+
 function HelperSetup({ known }: { known: RenderHelper[] }) {
   const [apiKey, setApiKey] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
-  const download = async () => {
-    try {
-      downloadText("pmv-render-helper.py", await helperScript(apiKey), "text/x-python");
-      setStatus(t("Downloaded – start it with a double-click."));
-    } catch (e) {
-      setStatus(t("Error: {error}", { error: String(e) }));
-    }
-  };
+  const { download: fetchHelper, status } = useHelperDownload();
+  const download = () => fetchHelper(apiKey);
   return (
     <div className="pmv-pc-setup">
       <div className="pmv-li-meta">{t("No PC is connected. The render helper is a small program for your PC: it takes the render from Stash, renders with your PC's FFmpeg and saves the video on the PC.")}</div>

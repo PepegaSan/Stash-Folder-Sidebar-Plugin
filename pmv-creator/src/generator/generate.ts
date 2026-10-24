@@ -4,6 +4,7 @@
  * but every clip stays editable afterwards. Same settings + same seed + same library = same cut.
  */
 import { overlapsExclusion } from "../culling/culling";
+import { DEFAULT_EFFECTS, type EffectId, type EffectSettings, withEffects } from "../model/effects";
 import type { Clip, PmvProject, Snippet, SourceMedia } from "../model/project";
 import { audioEnd, clipEnd } from "../model/project";
 import { carve } from "../timeline/ops";
@@ -36,6 +37,8 @@ export interface StyleOptions {
   /** … and which one. */
   transitionType: TransitionPick;
   flashDrops: boolean;
+  /** Beat and drop effects – they go into the project with the clips (and stay editable there). */
+  fx: EffectSettings;
 }
 
 const LEGACY_TRANSITIONS: Record<TransitionPolicy, Pick<StyleOptions, "transitionOn" | "transitionType">> = {
@@ -71,13 +74,24 @@ export interface GeneratorSettings {
   target: TargetOptions;
 }
 
-/** `label` is an i18n key – translate it with t() where it is shown. */
-export const MOODS: Record<Exclude<Mood, "custom">, { label: string; cut: Partial<CutOptions>; style: Partial<StyleOptions> }> = {
-  classic: { label: "PMV classic", cut: { mode: "auto", pace: "normal", onGrid: true }, style: { transitionOn: "none", flashDrops: true, speedRamps: false } },
-  maximal: { label: "Maximal", cut: { mode: "fixed", every: 1, onGrid: true }, style: { transitionOn: "bar", transitionType: "fadewhite", flashDrops: true, speedRamps: true } },
-  hypno: { label: "Hypno", cut: { mode: "fixed", every: 2, onGrid: true }, style: { transitionOn: "cut", transitionType: "fade", flashDrops: false, speedRamps: true } },
-  clean: { label: "Clean", cut: { mode: "auto", pace: "normal", onGrid: true }, style: { transitionOn: "none", flashDrops: false, speedRamps: false } },
+/** `label` is an i18n key – translate it with t() where it is shown. `fx`: the effects it switches on, like the PMV Generator's moods. */
+export const MOODS: Record<Exclude<Mood, "custom">, { label: string; cut: Partial<CutOptions>; style: Partial<StyleOptions>; fx: EffectId[] }> = {
+  classic: { label: "PMV classic", cut: { mode: "auto", pace: "normal", onGrid: true }, style: { transitionOn: "none", flashDrops: true, speedRamps: false }, fx: ["zoom", "shake", "stutter", "rgb", "glitch"] },
+  maximal: {
+    label: "Maximal",
+    cut: { mode: "fixed", every: 1, onGrid: true },
+    style: { transitionOn: "bar", transitionType: "fadewhite", flashDrops: true, speedRamps: true },
+    fx: ["zoom", "shake", "stutter", "rgb", "glitch", "tunnel", "invert", "echo", "text", "hue"],
+  },
+  hypno: { label: "Hypno", cut: { mode: "fixed", every: 2, onGrid: true }, style: { transitionOn: "cut", transitionType: "fade", flashDrops: false, speedRamps: true }, fx: ["zoom", "tunnel", "echo", "hue"] },
+  clean: { label: "Clean", cut: { mode: "auto", pace: "normal", onGrid: true }, style: { transitionOn: "none", flashDrops: false, speedRamps: false }, fx: ["zoom"] },
 };
+
+/** The effects of a mood; strength, beats and words stay as they are. */
+export const moodEffects = (mood: Mood, base: EffectSettings = DEFAULT_EFFECTS): EffectSettings => (mood === "custom" ? { ...DEFAULT_EFFECTS, ...base } : withEffects({ ...DEFAULT_EFFECTS, ...base }, MOODS[mood].fx));
+
+/** The effects of saved settings or a preset; ones saved before the effects existed get their mood's. */
+export const savedEffects = (s: Partial<GeneratorSettings>): EffectSettings => (s.style?.fx ? { ...DEFAULT_EFFECTS, ...s.style.fx } : moodEffects(s.mood ?? "classic"));
 
 export function defaultSettings(trackId: string): GeneratorSettings {
   return {
@@ -112,7 +126,7 @@ export function defaultSettings(trackId: string): GeneratorSettings {
     },
     select: { order: "shuffle", offset: "random", variety: true, followTimeline: false, paceMatch: false, beatSync: false },
     cut: { mode: "auto", pace: "normal", every: 2, pattern: [4, 2, 2], onGrid: true, minBeats: 0, maxBeats: 0 },
-    style: { speed: 1, speedRamps: false, transitionOn: "none", transitionType: "fade", flashDrops: true },
+    style: { speed: 1, speedRamps: false, transitionOn: "none", transitionType: "fade", flashDrops: true, fx: moodEffects("classic") },
     target: { range: "song", bars: 16, trackId, replaceTrack: false, addToBin: true },
   };
 }
@@ -121,7 +135,7 @@ export function applyMood(s: GeneratorSettings, mood: Mood): GeneratorSettings {
   if (mood === "custom") return { ...s, mood };
   const m = MOODS[mood];
   // cuts taken over from another PMV stay – the mood then only sets the style
-  return { ...s, mood, cut: s.cut.mode === "template" ? s.cut : { ...s.cut, ...m.cut }, style: { ...s.style, ...m.style } };
+  return { ...s, mood, cut: s.cut.mode === "template" ? s.cut : { ...s.cut, ...m.cut }, style: { ...s.style, ...m.style, fx: moodEffects(mood, s.style.fx) } };
 }
 
 /** Generated range: the song, from the (bar-snapped) playhead to its end, or N bars from the playhead. */
@@ -284,5 +298,6 @@ export function applyGeneration(p: PmvProject, r: GenerationResult): PmvProject 
   const kept = r.replaceTrack ? [] : carve(others, r.from, Math.max(r.to, end), minDur);
   const tracks = p.tracks.slice();
   tracks[idx] = { ...tracks[idx], clips: [...kept, ...pins, ...clips].sort((a, b) => a.start - b.start) };
-  return { ...p, sources, bin, tracks, generator: { settings: r.settings, from: r.from, to: r.to } };
+  const effects = r.settings.style.fx ? { ...DEFAULT_EFFECTS, ...r.settings.style.fx } : p.effects;
+  return { ...p, sources, bin, tracks, effects, generator: { settings: r.settings, from: r.from, to: r.to } };
 }

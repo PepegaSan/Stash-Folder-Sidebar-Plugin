@@ -1,6 +1,7 @@
 /** Small shared UI pieces. Styling relies on Stash's Bootstrap plus styles.css. */
 import React, { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import { LOOKS, type Look, type LookSettings } from "../model/look";
 import type { TransitionType } from "../model/project";
 import { stashUrl } from "../stash/graphql";
 import { type SpriteSheet, cueAt } from "../stash/sprites";
@@ -203,6 +204,64 @@ export const sceneHue = (sceneId: string): number => {
   for (const ch of sceneId) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return (h * 47) % 360;
 };
+
+/** Display name of a colour look. */
+export function lookLabel(look: Look): string {
+  switch (look) {
+    case "none":
+      return t("Original");
+    case "warm":
+      return t("Warm");
+    case "pink":
+      return t("Pink");
+    case "cold":
+      return t("Cold");
+    case "vivid":
+      return t("Vivid");
+    case "bw":
+      return t("Black & white");
+    case "noir":
+      return t("Noir");
+    case "custom":
+      return t("Own color");
+  }
+}
+
+/** The project's colour look, its strength, own colour and extra brightness – the same in the inspector and the generator. */
+export function LookFields({ output, onChange }: { output: LookSettings; onChange: (patch: Partial<LookSettings>) => void }) {
+  return (
+    <>
+      <label>{t("Look")}</label>
+      <select className="form-control form-control-sm pmv-look" value={output.look} title={t("Colour mood of the whole PMV – preview, quick record and render")} onChange={(e) => onChange({ look: e.target.value as Look })}>
+        {LOOKS.map((l) => (
+          <option key={l} value={l}>
+            {lookLabel(l)}
+          </option>
+        ))}
+      </select>
+      {output.look !== "none" && (
+        <>
+          <label>{t("Strength")}</label>
+          <span className="pmv-row">
+            <input type="range" min={0} max={1} step={0.05} value={output.lookAmount} onChange={(e) => onChange({ lookAmount: +e.target.value })} />
+            <span className="pmv-mono">{Math.round(output.lookAmount * 100)}%</span>
+          </span>
+        </>
+      )}
+      {output.look === "custom" && (
+        <>
+          <label>{t("Color")}</label>
+          <input type="color" className="pmv-color" value={output.lookColor} onChange={(e) => onChange({ lookColor: e.target.value })} />
+        </>
+      )}
+      <label>{t("Brightness")}</label>
+      <span className="pmv-row" title={t("Brighter without burning out the highlights")}>
+        <input type="range" min={0} max={1} step={0.05} value={output.brightness} onChange={(e) => onChange({ brightness: +e.target.value })} />
+        <span className="pmv-mono">{Math.round(output.brightness * 100)}%</span>
+      </span>
+    </>
+  );
+}
 
 /** Display name of a transition (the ids are FFmpeg's xfade names). */
 export function transitionLabel(type: TransitionType): string {

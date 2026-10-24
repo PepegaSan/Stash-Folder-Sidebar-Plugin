@@ -1,6 +1,8 @@
 import type { GeneratorSettings } from "../generator/generate";
 import { t } from "../i18n";
+import { DEFAULT_EFFECTS, type EffectSettings } from "./effects";
 import { uid } from "./ids";
+import type { LookSettings } from "./look";
 
 /** Mirrors schema/pmv-project.schema.json. Bump together with migrateProject(). */
 export const SCHEMA_VERSION = 1;
@@ -37,7 +39,8 @@ export type FitMode = "cover" | "contain" | "blur";
 export const VIDEO_CODECS = ["libx264", "libx265", "h264_nvenc", "hevc_nvenc"] as const;
 export type VideoCodec = (typeof VIDEO_CODECS)[number];
 
-export interface OutputSettings {
+/** The colour look counts for the whole PMV, like the framing. */
+export interface OutputSettings extends LookSettings {
   width: number;
   height: number;
   fps: number;
@@ -169,6 +172,8 @@ export interface PmvProject {
   createdAt: string;
   updatedAt: string;
   output: OutputSettings;
+  /** Beat and drop effects of the whole PMV (zoom pulse, RGB split …). */
+  effects: EffectSettings;
   audio: AudioTrack | null;
   beatGrid: BeatGrid;
   sources: Record<string, SourceMedia>;
@@ -202,6 +207,10 @@ export const DEFAULT_OUTPUT: OutputSettings = {
   crf: 18,
   preset: "medium",
   audioBitrate: "320k",
+  look: "none",
+  lookAmount: 1,
+  lookColor: "#ff4d94",
+  brightness: 0,
 };
 
 export function createTrack(name: string): Track {
@@ -217,6 +226,7 @@ export function createProject(name = t("New PMV")): PmvProject {
     createdAt: now,
     updatedAt: now,
     output: { ...DEFAULT_OUTPUT },
+    effects: { ...DEFAULT_EFFECTS },
     audio: null,
     beatGrid: { bpm: 120, offset: 0, beatsPerBar: 4 },
     sources: {},
@@ -255,6 +265,7 @@ export function migrateProject(raw: unknown): PmvProject {
     schemaVersion: SCHEMA_VERSION,
     id: typeof r.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(r.id) ? r.id : base.id,
     output: { ...DEFAULT_OUTPUT, ...r.output },
+    effects: { ...DEFAULT_EFFECTS, ...r.effects },
     audio: r.audio ? { ...createAudioTrack("", null, null, 0), ...r.audio } : null,
     beatGrid: { ...base.beatGrid, ...r.beatGrid },
     sources: r.sources ?? {},
