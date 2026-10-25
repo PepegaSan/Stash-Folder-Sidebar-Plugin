@@ -479,6 +479,11 @@ def main():
             info = probe(live)
             vs = next(s for s in info["streams"] if s["codec_type"] == "video")
             assert [s for s in info["streams"] if s["codec_type"] == "audio"], "audio as AAC"
+            # end= (0.9.8): the stream stops where the editor's clip ends instead of running to the end of the file
+            st, _, part = get(f"/v1/stream?k=s3cret&start=1.5&end=3.5&path={a_path}")
+            (tmp / "stream-part.mp4").write_bytes(part)
+            part_dur = float(probe(tmp / "stream-part.mp4")["format"]["duration"])
+            assert st == 200 and abs(part_dur - 2.0) < 0.3, f"end= should stop the stream after 2 s, got {part_dur}"
             # the stream starts exactly at 1.5 s of the source (the player shifts it there) and runs to the end
             assert abs(float(info["format"]["duration"]) - (src_dur - 1.5)) < 0.3, (info["format"], src_dur)
             sh([FFMPEG, "-v", "error", "-y", "-ss", "1.5", "-i", str(lib / "a.mp4"), "-frames:v", "1", str(tmp / "want.png")])

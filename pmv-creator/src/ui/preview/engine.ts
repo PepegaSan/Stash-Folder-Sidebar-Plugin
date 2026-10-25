@@ -34,6 +34,14 @@ export interface PreviewTimeline {
 export const PREVIEW_SLOTS = 8;
 /** Clips are loaded at most this far ahead (timeline seconds). */
 const LOOKAHEAD = 12;
+/**
+ * Connections to Stash the preview may hold: the players on screen plus the clips loaded ahead. The browser allows six
+ * to a host, and Stash's share with the music, saving and the scene list – with all eight players loading ahead (0.9.6),
+ * the clips coming up waited for a connection and the last picture stood still for a clip or two.
+ */
+const STASH_CONNECTIONS = 4;
+/** Clips loaded ahead at least, even in a split screen whose fields take the connections. */
+const AHEAD_MIN = 2;
 /** At most this many clips ahead from Stash's live transcode or the PC helper – each one is an FFmpeg process. */
 const AHEAD_LIVE = { param: 1, mse: 2 } as const;
 /** Files opened at the same time: they share the network, so the nearest clip comes first. */
@@ -131,6 +139,8 @@ export class PreviewEngine {
   private units: Unit[] = [];
   /** Slot whose picture was on screen last – shown on while the current clip has none yet. */
   private shown = -1;
+  /** The slot on screen before that – the clip just over, kept open for a jump back (⏮, the review keys): a seek, not a reload. */
+  private recent = -1;
   private lastT = 0;
 
   constructor(
@@ -249,8 +259,12 @@ export class PreviewEngine {
     const hold = blank && j < 0 && this.shown >= 0 && !taken.has(this.shown) && this.slots[this.shown].hasPicture ? this.shown : -1;
     if (hold >= 0) taken.add(hold);
     const rolling = new Set<number>();
+    /** Players loading or waiting with the clips coming up – they keep their stream. */
+    const ahead = new Set<number>();
     if (i >= 0) {
-      const live = { param: 0, mse: 0 };
+      // connections to Stash left for the clips ahead (the players on screen hold theirs); FFmpeg streams per kind
+      const budget = { stash: Math.max(AHEAD_MIN, STASH_CONNECTIONS - driven.size), ...AHEAD_LIVE };
+      const live = { stash: 0, param: 0, mse: 0 };
       let opening = [...driven].filter((k) => !this.slots[k].hasPicture).length;
       let looked = 0;
       const now = new Set(want.filter((u): u is Segment => !!u));
@@ -261,17 +275,19 @@ export class PreviewEngine {
         const scene = this.scene(next);
         if (now.has(next) || !scene || next.endFrame <= frame) continue;
         looked++;
-        const kind = pickStream(scene)?.seek;
-        const ffmpeg = kind === "param" || kind === "mse" ? kind : null;
-        if (ffmpeg && live[ffmpeg] >= AHEAD_LIVE[ffmpeg]) continue;
+        const kind = pickStream(scene)?.seek ?? "native";
+        const host = kind === "mse" ? "mse" : "stash";
+        if (live[host] >= budget[host] || (kind === "param" && live.param >= budget.param)) continue;
         const k = this.pick(next, frame, taken, -1);
         if (k < 0) break;
         const slot = this.slots[k];
         const loading = slot.sceneId !== scene.id || slot.stale || !slot.hasPicture;
         if (loading && opening >= OPENING) continue;
         if (loading) opening++;
-        if (ffmpeg) live[ffmpeg]++;
+        live[host]++;
+        if (kind === "param") live.param++;
         bind(k, next);
+        ahead.add(k);
         // waiting on its first frame and about to show: get it moving (starting up takes a few frames)
         const at = Math.max(0, sourceTimeAt(next, from, fps));
         const cued = !loading && !slot.busy && slot.time > at - 0.05 && slot.time < at + 0.5;
@@ -300,7 +316,7 @@ export class PreviewEngine {
         layers.push({ el: this.slots[k].el, look: looks[k], fit: this.fits[k], z: 1, field });
       }
       const first = split.groups[0] ? fieldSlots.get(split.groups[0]) : undefined;
-      this.shown = first !== undefined && this.slots[first].hasPicture ? first : -1;
+      this.show(first !== undefined && this.slots[first].hasPicture ? first : -1);
     } else {
       const onScreen = hold >= 0 ? hold : active;
       if (onScreen >= 0) looks[onScreen] = { opacity: 1 };
@@ -316,12 +332,22 @@ export class PreviewEngine {
           if (outgoingSlot >= 0) looks[outgoingSlot] = outgoing;
         }
       }
-      if (active >= 0 && this.slots[active].hasPicture) this.shown = active;
-      else if (onScreen < 0) this.shown = -1;
+      if (active >= 0 && this.slots[active].hasPicture) this.show(active);
+      else if (onScreen < 0) this.show(-1);
       this.slots.forEach((s, k) => {
         if (looks[k].opacity > 0) layers.push({ el: s.el, look: looks[k], fit: this.fits[k], z: tr && want[k] === tl.segs[j] ? 2 : 1 });
       });
     }
+    // Players not on their way to the screen whose clip is over give up their connection: the browser allows six to a
+    // host, and eight players holding theirs (0.9.6) left the clips coming up waiting for one – the last picture then
+    // stood still for a clip or two. The last picture itself stays, and so does the clip just over (a jump back is a
+    // seek, not a reload) unless a split screen's fields need the connections.
+    const start = seg?.startFrame ?? frame;
+    this.slots.forEach((s, k) => {
+      const needed = driven.has(k) || rolling.has(k) || ahead.has(k) || k === hold || (k === this.recent && driven.size <= 2);
+      const over = this.bound[k] === null || this.boundFrame[k] < start;
+      if (!needed && over) s.suspend();
+    });
     this.slots.forEach((s, k) => {
       // for tests and diagnostics: which player is drawn how strongly
       const op = String(looks[k].opacity);
@@ -333,6 +359,13 @@ export class PreviewEngine {
       if (!driven.has(k) && !rolling.has(k) && !s.el.paused) s.el.pause();
     });
     this.view = { layers: layers.sort((a, b) => a.z - b.z), wash: { color: overlayColor, alpha: overlayAlpha }, layout: split ? { kind: split.kind, dir: split.dir } : null };
+  }
+
+  /** The slot on screen now; the one before stays known as the clip just over. */
+  private show(k: number): void {
+    if (k === this.shown) return;
+    if (this.shown >= 0) this.recent = this.shown;
+    this.shown = k;
   }
 
   /** Index of the first clip that comes in at or after `frame`. */
@@ -379,6 +412,7 @@ export class PreviewEngine {
     const fps = this.tl!.fps;
     const speed = clamp(seg.clip.speed, 0.0625, 16);
     const src = sourceTimeAt(seg, frame, fps);
+    const until = this.until(seg);
     this.applyFit(slotIdx, seg);
     const level = clamp(seg.clip.volume, 0, 1) * (this.opts.listen?.() ?? 1);
     slot.el.muted = level <= 0;
@@ -386,8 +420,8 @@ export class PreviewEngine {
     const opened = slot.sceneId === scene.id && !slot.stale;
     if (!playing) {
       if (!slot.el.paused) slot.el.pause();
-      if (!opened) slot.assign(scene, src);
-      else if (Math.abs(slot.time - src) > 0.5 / fps) slot.seek(src);
+      if (!opened) slot.assign(scene, src, until);
+      else if (Math.abs(slot.time - src) > 0.5 / fps) slot.seek(src, false, until);
       return;
     }
     // where the clock will be once the picture is there
@@ -395,7 +429,7 @@ export class PreviewEngine {
     const length = opened ? slot.duration : scene.files[0]?.duration ?? 0;
     const end = length > 0 ? length - 0.5 / fps : Infinity;
     if (!opened) {
-      slot.assign(scene, Math.min(src + lead, end));
+      slot.assign(scene, Math.min(src + lead, end), until);
     } else if (src >= end) {
       // the clip runs past the end of its file: its last picture stays, as in the render
       if (!slot.el.paused) slot.el.pause();
@@ -405,9 +439,9 @@ export class PreviewEngine {
       const lag = slot.time - src; // > 0: ahead of the clock
       if (slot.busy) {
         // a seek or a new stream is on its way – let it arrive unless it can't be of use any more
-        if (jumped || lag < -(2 + 2 * lead) || lag > 2 + lead) slot.seek(Math.min(src + lead, end), true);
+        if (jumped || lag < -(2 + 2 * lead) || lag > 2 + lead) slot.seek(Math.min(src + lead, end), true, until);
       } else if (lag < -DRIFT_SEEK || lag > DRIFT_SEEK + lead) {
-        slot.seek(Math.min(src + lead, end));
+        slot.seek(Math.min(src + lead, end), false, until);
       }
     }
     // small drift: a few per cent faster or slower until picture and clock agree
@@ -433,8 +467,16 @@ export class PreviewEngine {
     const slot = this.slots[slotIdx];
     const src = Math.max(0, sourceTimeAt(seg, frame, this.tl!.fps));
     this.applyFit(slotIdx, seg);
-    if (slot.sceneId !== scene.id || slot.stale) slot.assign(scene, src);
-    else if (Math.abs(slot.time - src) > 0.05) slot.seek(src);
+    if (slot.sceneId !== scene.id || slot.stale) slot.assign(scene, src, this.until(seg));
+    else if (Math.abs(slot.time - src) > 0.05) slot.seek(src, false, this.until(seg));
     if (!slot.el.paused) slot.el.pause();
+  }
+
+  /**
+   * How far into the file the clip needs its stream (source seconds): its end plus room for a transition after the
+   * cut, the rate nudge and a seek's lead. A helper 0.9.8+ stops encoding there instead of running on to the file's end.
+   */
+  private until(seg: Segment): number {
+    return sourceTimeAt(seg, seg.endFrame, this.tl!.fps) + 2 * Math.max(1, clamp(seg.clip!.speed, 0.0625, 16));
   }
 }

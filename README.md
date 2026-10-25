@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.7-informational)
+![Version](https://img.shields.io/badge/version-0.9.8-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -620,6 +620,11 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.8
+
+- **Fix: the preview stood still for a clip or two** – a scene played, the next one or two showed only its last picture. Since 0.9.6 every one of the eight players kept its connection after its clip (a helper stream until the player was reused, a Stash file for some 17 s), and the browser allows six per host, so the clips coming up waited for one. Now a player gives up its connection as soon as its clip is over (only the last picture and the clip just over stay open, so ⏮ and the review keys still seek instead of reloading), the preview keeps at most four connections to Stash, and a helper that answers “busy” is asked again instead of that scene coming from Stash for the rest of the session
+- Render helper 0.9.8: a preview stream stops where its clip ends instead of encoding on to the end of the file (less CPU on the PC); older helpers keep working – download the new one under *Render → My PC* when you like
 
 ### PMV Creator 0.9.7
 

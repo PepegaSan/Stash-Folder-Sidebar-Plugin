@@ -90,9 +90,11 @@ export function pickStream(scene: StashSceneCore): StreamInfo | null {
   return direct ? { url: stashUrl(direct), seek: "native" } : null;
 }
 
-export function withStart(url: string, t: number): string {
+/** The stream URL from t on; `until` (source seconds) lets a helper 0.9.8+ stop its FFmpeg there instead of at the file's end. */
+export function withStart(url: string, t: number, until?: number): string {
   const u = new URL(url);
   u.searchParams.set("start", t.toFixed(3));
+  if (until !== undefined && until > t) u.searchParams.set("end", until.toFixed(3));
   return u.toString();
 }
 
@@ -100,12 +102,17 @@ export function withStart(url: string, t: number): string {
 const AHEAD = 20;
 /** Drop what lies further behind the playhead than this. */
 const BEHIND = 40;
+/** The helper answers 503 while all its FFmpeg processes are taken: ask again this often before giving up on it. */
+const BUSY_RETRIES = 6;
+const BUSY_WAIT = 400;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Plays a helper stream through Media Source Extensions. Stash's Content-Security-Policy allows media only from
  * Stash or blob:, but fetch() may reach the helper (connect-src in pmv-creator.yml). Every stream begins exactly
  * at its ?start= with timestamp 0, so the SourceBuffer is shifted there and the element runs in source time.
+ * A stream is one connection to the helper and one FFmpeg process there; the browser allows six connections to
+ * a host, so a stream that is not needed is suspended (the connection closed, the buffer and the picture kept).
  */
 class HelperFeed {
   /** The running stream starts here (source seconds). */
@@ -116,6 +123,10 @@ class HelperFeed {
   private ctl: AbortController | null = null;
   private timer = 0;
   private lastOpen = 0;
+  /** The stream was stopped while its player was idle: what is buffered stays playable, nothing more comes. */
+  private suspended = false;
+  /** The stream came to its end (the helper stopped at `until` or at the file's end). */
+  private done = false;
 
   constructor(
     private el: HTMLVideoElement,
@@ -131,11 +142,18 @@ class HelperFeed {
     return this.loading;
   }
 
+  /** A connection to the helper is open or about to be. */
+  get streaming(): boolean {
+    return this.timer !== 0 || (!!this.ctl && !this.ctl.signal.aborted);
+  }
+
   /** Is t buffered or arriving? Then a seek only moves the playhead. */
   reaches(t: number): boolean {
     if (this.loading) return t >= this.from - 0.05 && t <= this.from + 3;
     const b = this.el.buffered;
-    for (let i = 0; i < b.length; i++) if (t >= b.start(i) - 0.05 && t <= b.end(i) + 1) return true;
+    // a running stream brings the next second soon; a suspended or finished one has only what is there
+    const slack = this.suspended || this.done ? -0.05 : 1;
+    for (let i = 0; i < b.length; i++) if (t >= b.start(i) - 0.05 && t <= b.end(i) + slack) return true;
     return false;
   }
 
@@ -146,7 +164,7 @@ class HelperFeed {
     return true;
   }
 
-  open(info: StreamInfo, t: number): void {
+  open(info: StreamInfo, t: number, until?: number): void {
     this.close();
     this.from = t;
     this.target = t;
@@ -155,17 +173,28 @@ class HelperFeed {
     const now = performance.now();
     const wait = now - this.lastOpen < 250 ? 150 : 0;
     this.lastOpen = now;
-    this.timer = window.setTimeout(() => this.start(info, t), wait);
+    this.timer = window.setTimeout(() => this.start(info, t, until), wait);
+  }
+
+  /** Closes the connection (the helper stops FFmpeg); the picture and what is buffered stay on the element. */
+  suspend(): void {
+    if (!this.streaming) return;
+    this.close();
+    this.suspended = true;
   }
 
   close(): void {
     window.clearTimeout(this.timer);
+    this.timer = 0;
     this.ctl?.abort(); // the helper stops FFmpeg when the connection closes
     this.ctl = null;
     this.loading = false;
+    this.suspended = false;
+    this.done = false;
   }
 
-  private start(info: StreamInfo, t: number): void {
+  private start(info: StreamInfo, t: number, until?: number): void {
+    this.timer = 0;
     const ms = new MediaSource();
     const ctl = new AbortController();
     this.ctl = ctl;
@@ -174,7 +203,7 @@ class HelperFeed {
       "sourceopen",
       () => {
         URL.revokeObjectURL(src);
-        this.pump(ms, ctl.signal, info, t).catch(() => {
+        this.pump(ms, ctl.signal, info, t, until).catch(() => {
           if (!ctl.signal.aborted) this.fail();
         });
       },
@@ -183,11 +212,22 @@ class HelperFeed {
     this.el.src = src;
   }
 
-  private async pump(ms: MediaSource, signal: AbortSignal, info: StreamInfo, t: number): Promise<void> {
+  /** Asks for the stream; a helper with all its FFmpeg processes taken (503) is asked again a few times. */
+  private async request(info: StreamInfo, t: number, until: number | undefined, signal: AbortSignal): Promise<Response> {
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(withStart(info.url, t, until), { signal, cache: "no-store" });
+      if (res.status !== 503 || attempt >= BUSY_RETRIES) return res;
+      await sleep(BUSY_WAIT);
+      if (signal.aborted) return res;
+    }
+  }
+
+  private async pump(ms: MediaSource, signal: AbortSignal, info: StreamInfo, t: number, until?: number): Promise<void> {
     if (info.duration && info.duration > t) ms.duration = info.duration;
     const sb = ms.addSourceBuffer(info.mime!);
     sb.timestampOffset = t;
-    const res = await fetch(withStart(info.url, t), { signal, cache: "no-store" });
+    const res = await this.request(info, t, until, signal);
+    if (signal.aborted) return;
     if (!res.ok || !res.body) throw new Error(`helper HTTP ${res.status}`);
     const reader = res.body.getReader();
     for (;;) {
@@ -206,6 +246,10 @@ class HelperFeed {
     if (!signal.aborted && ms.readyState === "open") {
       await settle(sb, () => undefined);
       ms.endOfStream();
+    }
+    if (!signal.aborted) {
+      this.done = true;
+      this.ctl = null;
     }
   }
 }
@@ -290,6 +334,27 @@ export class VideoSlot {
     return this.el.seeking || !this.picture;
   }
 
+  /** A helper stream is coming in (a connection to the helper, an FFmpeg process there). */
+  get streaming(): boolean {
+    return this.info?.seek === "mse" && !!this.feed?.streaming;
+  }
+
+  /**
+   * The player is not needed any more (its clip is over): its connection is given up so the clips coming up get one –
+   * the browser allows six per host. A helper stream is cut off, its picture and buffer stay (a seek beyond them opens
+   * a new stream). A file from Stash is let go altogether: the browser keeps a paused player's connection for some
+   * 17 s and closes it only for a new source (preload "none" is ignored once the file has played), so the picture
+   * goes with it – the engine keeps the players whose picture it may still need.
+   */
+  suspend(): void {
+    if (!this.info) return;
+    if (this.info.seek === "mse") {
+      if (this.feed?.streaming) this.feed.suspend();
+    } else {
+      this.release();
+    }
+  }
+
   /** Expected seconds until a picture of scene `sceneId` at source time t shows in this slot. */
   eta(sceneId: string, t: number): number {
     const info = this.info;
@@ -311,15 +376,19 @@ export class VideoSlot {
     return !!this.info && this.gen !== generation;
   }
 
-  assign(scene: StashSceneCore, t: number): void {
+  /**
+   * Shows scene `scene` at source time t. `until` (source seconds) is how far the clip needs the stream – a helper
+   * 0.9.8+ then stops its FFmpeg there instead of encoding on to the end of the file.
+   */
+  assign(scene: StashSceneCore, t: number, until?: number): void {
     if (this.sceneId === scene.id && this.info && !this.stale) {
-      this.seek(t);
+      this.seek(t, false, until);
       return;
     }
     this.scene = scene;
     this.sceneId = scene.id;
     this.info = pickStream(scene);
-    if (this.info) this.load(t);
+    if (this.info) this.load(t, until);
   }
 
   /**
@@ -327,11 +396,11 @@ export class VideoSlot {
    * seek never shows its frame, and slow seeks interrupted on every frame left the picture frozen.
    * The helper's stream handles this itself.
    */
-  seek(t: number, force = false): void {
+  seek(t: number, force = false, until?: number): void {
     const info = this.info;
     if (!info) return;
     if (info.seek === "mse") {
-      if (!this.feed?.seek(t)) this.load(t);
+      if (!this.feed?.seek(t)) this.load(t, until);
       return;
     }
     if (this.el.seeking && !force) {
@@ -382,7 +451,7 @@ export class VideoSlot {
     op();
   }
 
-  private load(t: number): void {
+  private load(t: number, until?: number): void {
     const info = this.info!;
     this.gen = generation;
     this.queued = null;
@@ -392,7 +461,7 @@ export class VideoSlot {
     if (info.seek === "mse") {
       this.base = 0;
       this.feed ??= new HelperFeed(this.el, this.onError);
-      this.feed.open(info, t);
+      this.feed.open(info, t, until);
       return;
     }
     this.feed?.close();

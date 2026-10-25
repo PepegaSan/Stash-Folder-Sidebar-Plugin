@@ -53,6 +53,16 @@ function fakeVideo(): FakeVideo {
     return Promise.resolve();
   };
   el.pause = () => void (m.paused = true);
+  // letting the file go: removeAttribute("src") + load()
+  const removeAttribute = el.removeAttribute.bind(el);
+  el.removeAttribute = (name: string) => {
+    if (name === "src") {
+      m.src = "";
+      m.readyState = 0;
+    }
+    removeAttribute(name);
+  };
+  el.load = () => undefined;
   el.m = m;
   return el;
 }
@@ -213,6 +223,37 @@ describe("PreviewEngine", () => {
     expect(v.m.seeks).toEqual([20, 40, 50, 60]);
   });
 
+  it("loads at most three clips from Stash ahead of the one on screen – every player holds a connection", () => {
+    const p = project([], ["1", "2", "3", "4", "5", "6", "7"].map((id, k) => clip(id, k, 1)));
+    const { videos, engine } = setup(p);
+    for (let k = 0; k < 6; k++) {
+      engine.render(0, false);
+      videos.forEach(open);
+    }
+    expect(videos.map(sceneOf)).toEqual(["1", "2", "3", "4", null, null, null, null]);
+  });
+
+  it("players whose clip is over give up their connection; the last clip, the one on screen and the ones coming up keep theirs", () => {
+    const p = project([], ["1", "2", "3", "4", "5", "6"].map((id, k) => clip(id, k, 1)));
+    const { videos, engine } = setup(p);
+    for (const t of [0, 0.5, 1.5, 2.5, 2.5]) {
+      engine.render(t, t > 0);
+      videos.forEach(open);
+    }
+    engine.render(2.5, true);
+    // clip 1 is over and gone: its file is let go (that closes its connection); clip 2 stays open for a jump back,
+    // 3 plays, 4–6 come up
+    expect(videos.map(sceneOf)).toEqual([null, "2", "3", "4", "5", "6", null, null]);
+    // back into clip 2: a seek in its open file, no reload
+    const src = videos[1].m.src;
+    engine.render(1.5, true);
+    expect(videos[1].m.src).toBe(src);
+    expect(videos[1].m.seeks.length).toBeGreaterThan(0);
+    // clip 1 comes back only when asked for
+    engine.render(0.5, true);
+    expect(sceneOf(videos[0])).toBe("1");
+  });
+
   it("a split screen plays the clip of every field, each in its own field", () => {
     const p = ensureTracks(project([], [clip("1", 0, 2)]), 3);
     p.tracks[1].clips = [clip("2", 0, 2)];
@@ -232,7 +273,8 @@ describe("PreviewEngine", () => {
   });
 
   it("a field clip that comes in never takes the player of a field that goes on", () => {
-    // a 4-way over [0, 4): V1 cuts at 2 s, V2…V4 play through; full screen after it (fills the look-ahead)
+    // a 4-way over [0, 4): V1 cuts at 2 s, V2…V4 play through; full screen after it (two clips load ahead – the fields
+    // hold the other connections)
     const p = ensureTracks(project([], [clip("7", 0, 2), clip("3", 2, 2), clip("1", 4, 1), clip("2", 5, 1), clip("1", 6, 1), clip("2", 7, 1)]), 4);
     p.tracks[2].clips = [clip("4", 0, 4)];
     p.tracks[1].clips = [clip("5", 0, 4)];
@@ -245,7 +287,7 @@ describe("PreviewEngine", () => {
     }
     const fields = videos.slice(1, 4).map(sceneOf);
     expect(fields).toEqual(["4", "5", "6"]);
-    expect(videos.every((v) => v.m.src)).toBe(true);
+    expect(videos.filter((v) => v.m.src)).toHaveLength(6);
     // back to 1 s: V1's other clip was not loaded ahead – it must not take V2's, V3's or V4's player
     engine.render(1, true);
     expect(videos.slice(1, 4).map(sceneOf)).toEqual(fields);

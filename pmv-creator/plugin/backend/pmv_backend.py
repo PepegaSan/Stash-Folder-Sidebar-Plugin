@@ -58,7 +58,7 @@ try:
 except ImportError:  # pragma: no cover
     audioop = None  # type: ignore[assignment]
 
-VERSION = "0.9.7"
+VERSION = "0.9.8"
 PLUGIN_ID = "pmv-creator"
 PLAN_VERSION = 1
 # Bump when piece_command() changes, invalidates cached pieces.
@@ -1999,7 +1999,7 @@ def find_ffmpeg() -> Optional[str]:
 
 MEDIA_EXT = {".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".wmv", ".flv", ".mpg", ".mpeg", ".ts", ".m2ts", ".3gp"}
 SERVE_PORTS = (9978, 9979, 9980, 9981)  # must match the csp in pmv-creator.yml
-LIVE_STREAMS = 6  # FFmpeg processes at the same time (two preview players, the scene player, seeks in flight)
+LIVE_STREAMS = 8  # FFmpeg processes at the same time: the preview's players on their way to the screen (the editor cuts the others off), the scene player, seeks in flight
 _GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 
 
@@ -2015,11 +2015,15 @@ def lan_address(stash: str) -> str:
         return "127.0.0.1"
 
 
-def stream_command(ff: str, f: Path, start: float, audio: bool) -> List[str]:
-    """Fragmented MP4 of the file from `start` on: H.264 with the long side at most 1280 px, a keyframe every
-    30 frames and half-second fragments (quick to start), AAC stereo unless audio is off."""
+def stream_command(ff: str, f: Path, start: float, audio: bool, end: Optional[float] = None) -> List[str]:
+    """Fragmented MP4 of the file from `start` on (to `end`, when the editor says how far its clip needs it – it used
+    to run on to the end of the file): H.264 with the long side at most 1280 px, a keyframe every 30 frames and
+    half-second fragments (quick to start), AAC stereo unless audio is off."""
     scale = "scale='if(gte(iw,ih),min(1280,iw),-2)':'if(gte(iw,ih),-2,min(1280,ih))'"
-    cmd = [ff, "-hide_banner", "-loglevel", "error", "-ss", f"{max(0.0, start):.3f}", "-i", str(f), "-map", "0:v:0"]
+    start = max(0.0, start)
+    cmd = [ff, "-hide_banner", "-loglevel", "error", "-ss", f"{start:.3f}", "-i", str(f), "-map", "0:v:0"]
+    if end is not None and end > start:
+        cmd += ["-t", f"{end - start:.3f}"]
     cmd += ["-map", "0:a:0?", "-c:a", "aac", "-b:a", "128k", "-ac", "2"] if audio else ["-an"]
     cmd += ["-vf", scale, "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-crf", "23", "-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", "4.1", "-g", "30"]
     return cmd + ["-sn", "-dn", "-f", "mp4", "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-frag_duration", "500000", "pipe:1"]
@@ -2105,11 +2109,15 @@ class MediaServer:
                 if not f:
                     return self._reply(404, b"not on this PC")
                 try:
-                    self._stream(f, float(q.get("start") or 0), q.get("a") != "0")
+                    end = float(q["end"]) if q.get("end") else None
+                except ValueError:
+                    end = None
+                try:
+                    self._stream(f, float(q.get("start") or 0), q.get("a") != "0", end)
                 except _GONE:
                     pass  # the browser seeked elsewhere or closed the player – FFmpeg was stopped in _stream
 
-            def _stream(self, f: Path, start: float, audio: bool) -> None:
+            def _stream(self, f: Path, start: float, audio: bool, end: Optional[float] = None) -> None:
                 if not server.ff:
                     return self._reply(503, b"no FFmpeg")
                 if not server.live.acquire(timeout=5):
@@ -2117,7 +2125,7 @@ class MediaServer:
                 proc = None
                 try:
                     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0  # type: ignore[attr-defined]
-                    proc = subprocess.Popen(stream_command(server.ff, f, start, audio), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=flags)
+                    proc = subprocess.Popen(stream_command(server.ff, f, start, audio, end), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=flags)
                     self.send_response(200)
                     self._cors()
                     self.send_header("Content-Type", "video/mp4")
