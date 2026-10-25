@@ -27,10 +27,11 @@ import { type ClipSourceInput, findClip } from "../../timeline/ops";
 import { clamp, formatTime } from "../../timeline/time";
 import { allowAgain } from "../clipActions";
 import { NumField, SpriteThumb } from "../common";
-import { insertAction } from "../editing";
+import { insertAction, wholeSceneAction } from "../editing";
 import { useListen, useSprites } from "../hooks";
 import { LocalMediaBadge } from "../localMedia";
 import { SourceHostContext, sourceKeys } from "../monitor";
+import { ScrubWave, WaveButton } from "./SceneWave";
 
 const nearest = (list: number[], x: number) => list.reduce((best, v) => (Math.abs(v - x) < Math.abs(best - x) ? v : best), list[0] ?? x);
 
@@ -206,6 +207,13 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
     const action = insertAction({ ...project, sources: { ...project.sources, ...(source ? { [sceneId]: source } : {}) } }, ui, s, transport.time);
     if (action) dispatch(action);
   };
+  /** The whole scene at the playhead, the playhead at its end afterwards (the next scene follows it). */
+  const wholeToTimeline = () => {
+    const action = source && wholeSceneAction(project, ui, source, transport.time);
+    if (!action) return;
+    dispatch(action);
+    if (action.type === "clip/insert") transport.seek(action.clip.start + action.clip.duration);
+  };
   // ---- the clip selected on the timeline: other material, same slot (A → B on the timeline stays)
   const selected = ui.selectedClipId ? findClip(project, ui.selectedClipId)?.clip ?? null : null;
   const linked = selected && selected.sceneId === sceneId ? selected : null;
@@ -268,6 +276,7 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
         onPointerLeave={() => setHover(null)}
         title={t("Click/drag: scrub · Shift+drag: pick a range")}
       >
+        <ScrubWave sceneId={sceneId} duration={duration} />
         {exclusions.map((x) => (
           <div key={x.id} className="pmv-scrub-excl" style={{ left: pct(x.in), width: pct(x.out - x.in) }} />
         ))}
@@ -339,6 +348,7 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
           O
         </button>
         {!sel && <span className="pmv-li-meta">{t("I / O or Shift+drag on the bar picks a range")}</span>}
+        <WaveButton sceneId={sceneId} source={source} online={backend === "online"} />
         <LocalMediaBadge />
         {ui.advanced && (
           <>
@@ -486,6 +496,12 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
           ▶ {t("Show in the player")}
         </button>
       )}
+      <div className="pmv-row pmv-wrap">
+        <button className="btn btn-sm btn-secondary" disabled={!source} onClick={wholeToTimeline} title={t("The whole scene onto the timeline at the playhead – press it on the next scene and that one follows")}>
+          → {t("Whole scene onto the timeline")}
+        </button>
+        <span className="pmv-li-meta">{t("or pick a part: I/O or Shift+drag under the player")}</span>
+      </div>
 
       <div className="pmv-section-head is-static">
         {t("Markers")} ({markers.length})

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clipEnd } from "../src/model/project";
-import { deleteClip, insertClip, moveClip, replaceClip, setAllTransitions, setClipSource, setClipSpeed, slipClip, splitClip, swapScene, trimClip } from "../src/timeline/ops";
+import { deleteClip, insertClip, moveClip, replaceClip, setAllTransitions, setAllVolumes, setClipSource, setClipSpeed, slipClip, splitClip, swapScene, trimClip } from "../src/timeline/ops";
 import { transitionLooks } from "../src/ui/preview/engine";
 import { assertTrackInvariants, clip, project } from "./helpers";
 
@@ -214,6 +214,19 @@ describe("slip / speed / replace / split / delete", () => {
     const p = project([a, b]);
     const clips = trackOf(deleteClip(p, a.id, true));
     expect(clips[0].start).toBe(0);
+  });
+});
+
+describe("clip audio", () => {
+  it("one level for all clips: locked tracks keep theirs, nothing to do leaves the project alone", () => {
+    const p = project([clip("1", 0, 2, { volume: 0.3 }), clip("2", 2, 2)], [clip("3", 0, 2), clip("1", 2, 2, { volume: 1 })]);
+    p.tracks[1].locked = true;
+    const next = setAllVolumes(p, 0.8);
+    assertTrackInvariants(next);
+    expect(trackOf(next, 0).map((c) => c.volume)).toEqual([0.8, 0.8]);
+    expect(trackOf(next, 1)).toBe(trackOf(p, 1));
+    expect(setAllVolumes(next, 0.8)).toBe(next);
+    expect(trackOf(setAllVolumes(next, 5), 0).map((c) => c.volume)).toEqual([2, 2]); // clamped to 200 %
   });
 });
 

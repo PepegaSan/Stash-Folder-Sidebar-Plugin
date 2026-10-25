@@ -280,7 +280,7 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
       duration: slot.duration,
       sourceIn: start,
       speed,
-      volume: 0,
+      volume: p.clipVolume,
       transitionIn: k === 0 || slot.hard ? null : transitionFor(o, slot, beat, mix),
       fit: null,
       label: s.label,

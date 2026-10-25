@@ -18,6 +18,25 @@ export function rememberAdvanced(on: boolean): void {
   }
 }
 
+const KEY_WAVEFORMS = "pmv-creator:waveforms";
+
+/** 〰 above the timeline: the clips' sound drawn over the clips (each scene's peaks are asked from the server once). */
+export function readWaveforms(): boolean {
+  try {
+    return localStorage.getItem(KEY_WAVEFORMS) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function rememberWaveforms(on: boolean): void {
+  try {
+    localStorage.setItem(KEY_WAVEFORMS, on ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+}
+
 const KEY_LISTEN = "pmv-creator:listen";
 
 /** How loud the preview plays in this browser (🔊 above the timeline) – never part of the render or a recording. */

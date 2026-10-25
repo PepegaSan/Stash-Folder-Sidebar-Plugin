@@ -116,6 +116,7 @@ export function BatchDialog() {
       p = {
         ...p,
         output: { ...base.output },
+        clipVolume: base.clipVolume,
         audio: createAudioTrack(media.name, media.path, media.url, Math.max(a.duration, media.duration ?? 0)),
         beatGrid: grid ? { ...p.beatGrid, bpm: grid.bpm, offset: grid.offset } : p.beatGrid,
         // clips from this project's scenes or "My clips": those come along

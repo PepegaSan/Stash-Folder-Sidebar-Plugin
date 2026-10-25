@@ -20,7 +20,7 @@ import { listSavedSceneFilters } from "../../stash/savedFilters";
 import type { StashRef } from "../../stash/types";
 import { rememberAdvanced } from "../../state/prefs";
 import { useEditor } from "../../state/store";
-import { LookFields, More, NumField, RefPicker, Seg, transitionLabel } from "../common";
+import { LookFields, More, NumField, RefPicker, Seg, VolumeSlider, transitionLabel } from "../common";
 import { EffectFields, effectSummary } from "../EffectFields";
 import { GeneratorLayouts } from "../LayoutFields";
 import { CutTemplateBox } from "./CutTemplateBox";
@@ -355,6 +355,8 @@ export function GeneratorDialog() {
             {/* the look belongs to the PMV, not to a generator run: it changes the project right away */}
             <div className="pmv-grid2 pmv-gen-look">
               <LookFields output={project.output} onChange={(patch) => dispatch({ type: "output/update", patch })} />
+              <label>{t("Clip audio")}</label>
+              <VolumeSlider value={project.clipVolume} onChange={(v) => dispatch({ type: "project/clipVolume", volume: v })} title={t("The clips' own sound under the music – like the look it belongs to the PMV and changes the project right away")} />
             </div>
             <More label={t("Effects: {list}", { list: effectSummary(s.style.fx) })}>{effects}</More>
           </>
@@ -540,6 +542,8 @@ export function GeneratorDialog() {
                 <label>{t("Speed")}</label>
                 <NumField value={s.style.speed} onCommit={(v) => setStyle({ speed: v })} min={0.25} max={4} step={0.05} suffix="×" />
                 <LookFields output={project.output} onChange={(patch) => dispatch({ type: "output/update", patch })} />
+                <label>{t("Clip audio")}</label>
+                <VolumeSlider value={project.clipVolume} onChange={(v) => dispatch({ type: "project/clipVolume", volume: v })} title={t("The clips' own sound under the music – like the look it belongs to the PMV and changes the project right away")} />
               </div>
               <div className="pmv-gen-label" title={t("Change to the beat – the louder, the more fields")}>
                 {t("Split screens")}

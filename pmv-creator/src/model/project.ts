@@ -177,6 +177,8 @@ export interface PmvProject {
   effects: EffectSettings;
   audio: AudioTrack | null;
   beatGrid: BeatGrid;
+  /** Clip audio new clips start with (0 = music only, 1 = the clip's own level); every clip keeps its own value. */
+  clipVolume: number;
   sources: Record<string, SourceMedia>;
   bin: Snippet[];
   exclusions: Exclusion[];
@@ -232,6 +234,7 @@ export function createProject(name = t("New PMV")): PmvProject {
     effects: { ...DEFAULT_EFFECTS },
     audio: null,
     beatGrid: { bpm: 120, offset: 0, beatsPerBar: 4 },
+    clipVolume: 0,
     sources: {},
     bin: [],
     exclusions: [],
@@ -272,6 +275,7 @@ export function migrateProject(raw: unknown): PmvProject {
     effects: { ...DEFAULT_EFFECTS, ...r.effects },
     audio: r.audio ? { ...createAudioTrack("", null, null, 0), ...r.audio } : null,
     beatGrid: { ...base.beatGrid, ...r.beatGrid },
+    clipVolume: typeof r.clipVolume === "number" && Number.isFinite(r.clipVolume) ? Math.min(2, Math.max(0, r.clipVolume)) : 0,
     sources: r.sources ?? {},
     bin: r.bin ?? [],
     exclusions: r.exclusions ?? [],

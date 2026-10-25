@@ -26,6 +26,12 @@
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/audio" }]
     },
     "beatGrid": { "$ref": "#/$defs/beatGrid" },
+    "clipVolume": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2,
+      "description": "Clip-Ton, mit dem neue Clips starten (0 = nur Musik, 1 = Original-Pegel). Jeder Clip behält seinen eigenen Wert (clip.volume). Fehlt in Projekten vor 0.9.7 (= 0)."
+    },
 
     "sources": {
       "description": "Snapshot der verwendeten Stash-Szenen (Schlüssel = Szenen-ID). Enthält nur, was der Renderer braucht – keine Stream-URLs/API-Keys.",

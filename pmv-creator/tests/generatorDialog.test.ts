@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { MOODS, applyMood, defaultSettings, moodEffects } from "../src/generator/generate";
 import { chooseCut, cutChoiceOf, loadSaved, withPreset } from "../src/ui/generator/GeneratorDialog";
-import { HELPER_FOR_LOOKS, HELPER_FOR_SPLIT, helperFor, olderVersion } from "../src/ui/PcRender";
+import { HELPER_FOR_FFMPEG8, HELPER_FOR_LOOKS, HELPER_FOR_SPLIT, helperFor, olderVersion } from "../src/ui/PcRender";
 
 describe("render helper versions", () => {
   it("a helper from before the colour looks is told to update", () => {
@@ -14,11 +14,13 @@ describe("render helper versions", () => {
     expect(olderVersion("1.0", "0.9.5")).toBe(false);
   });
 
-  it("split screens need the helper 0.9.6 – it stops at them before", () => {
-    expect(helperFor({ split: true, looks: false })).toBe(HELPER_FOR_SPLIT);
-    expect(helperFor({ split: false, looks: true })).toBe(HELPER_FOR_LOOKS);
-    expect(helperFor({ split: false, looks: false })).toBeUndefined();
+  it("every render needs the FFmpeg 8 fix (0.9.7); the flags say what else an older helper misses", () => {
+    expect(helperFor({ split: true, looks: false })).toEqual({ version: HELPER_FOR_FFMPEG8, split: true, looks: false });
+    expect(helperFor({ split: false, looks: true })).toEqual({ version: HELPER_FOR_FFMPEG8, split: false, looks: true });
+    expect(helperFor({ split: false, looks: false })).toEqual({ version: HELPER_FOR_FFMPEG8, split: false, looks: false });
     expect(olderVersion("0.9.5", HELPER_FOR_SPLIT)).toBe(true);
+    expect(olderVersion("0.9.6", HELPER_FOR_FFMPEG8)).toBe(true);
+    expect(olderVersion("0.9.7", HELPER_FOR_FFMPEG8)).toBe(false);
   });
 });
 

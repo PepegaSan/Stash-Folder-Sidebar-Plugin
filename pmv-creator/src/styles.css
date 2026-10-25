@@ -577,6 +577,19 @@
   display: flex;
   gap: 2px;
 }
+/* two labelled buttons stacked at the right of a scene row ("+ Project", "→ Timeline") */
+.pmv-li-actions.is-col {
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: stretch;
+}
+.pmv-li-actions.is-col .btn {
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-align: left;
+}
 .pmv-empty {
   padding: 8px;
   color: var(--pmv-muted);
@@ -1095,6 +1108,23 @@
   top: 0;
   pointer-events: none;
   --pmv-wave: #4fb3a9;
+}
+/* the clips' sound over the clips (lower part of the lane) – one canvas per lane, the visible window only */
+.pmv-clip-waves {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  pointer-events: none;
+  --pmv-clip-wave: rgba(79, 179, 169, 0.8);
+}
+/* the open scene's sound behind the scrub bar */
+.pmv-scrub-wave {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  --pmv-clip-wave: rgba(79, 179, 169, 0.55);
 }
 .pmv-clip {
   position: absolute;

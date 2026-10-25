@@ -17,7 +17,10 @@ import { clipFromSnippet, findClip } from "../../timeline/ops";
 import { EPS, beatLength, clamp, formatBarBeat, formatTime, nearestGridTime, snapRange, snapTime } from "../../timeline/time";
 import { SpriteThumb, sceneHue, transitionLabel } from "../common";
 import { ClipActions, ClipNotice, ReplaceAllButton, SourceToggle } from "../monitor";
-import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions } from "../editing";
+import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions, wholeSceneAction } from "../editing";
+import { rememberWaveforms } from "../../state/prefs";
+import { peaksProgress, usePeaksVersion } from "../peaks";
+import { ClipWaves } from "./ClipWaves";
 import { useAudioAnalysis, useListen, useSprites, useTransportTime } from "../hooks";
 import { LayoutIcon, layoutLabel } from "../LayoutFields";
 import { reviewCut } from "../review";
@@ -28,6 +31,8 @@ const RULER_H = 30;
 const AUDIO_H = 56;
 const LAY_H = 24;
 const LANE_H = 52;
+/** Video tracks while 〰 is on: the clips' sound gets its own band under thumbnail and label (NLEs expand tracks for audio too). */
+const LANE_H_WAVES = 76;
 
 type DragKind = "move" | "trim-start" | "trim-end" | "slip";
 type LayoutDragKind = Exclude<DragKind, "slip">;
@@ -74,6 +79,9 @@ export function Timeline() {
   const scenes = useScenes(useMemo(() => Object.keys(project.sources), [project.sources]));
   const { analysis } = useAudioAnalysis(project.audio?.url);
   const now = useTransportTime(transport, 100);
+  usePeaksVersion();
+  const waveLoad = ui.waveforms ? peaksProgress() : null;
+  const laneH = ui.waveforms ? LANE_H_WAVES : LANE_H;
 
   const contentDur = Math.max(projectDuration(view) + 30, 60);
   const width = contentDur * zoom;
@@ -273,14 +281,19 @@ export function Timeline() {
     const payload = currentSnippetDrag();
     if (!payload) return null;
     const { project: p, ui: u } = latest.current;
-    const s = p.bin.find((x) => x.id === payload.snippetId);
     const trackId = trackAt(e.clientX, e.clientY);
-    if (!s || !trackId) return null;
-    const duration = dropDuration(p, u, s);
+    if (!trackId) return null;
     const opts = snapOptions(p, u, transport.time);
     const raw = timeAt(e.clientX);
+    if (payload.source) {
+      const start = opts ? snapRange(raw, payload.source.duration, opts) : raw;
+      return wholeSceneAction(p, u, payload.source, start, trackId, payload.clipId);
+    }
+    const s = p.bin.find((x) => x.id === payload.snippetId);
+    if (!s) return null;
+    const duration = dropDuration(p, u, s);
     const start = opts ? snapRange(raw, duration, opts) : raw;
-    return { type: "clip/insert", trackId, clip: { ...clipFromSnippet(s, start, { duration }), id: payload.clipId }, mode: u.editMode };
+    return { type: "clip/insert", trackId, clip: { ...clipFromSnippet(s, start, { duration, volume: p.clipVolume }), id: payload.clipId }, mode: u.editMode };
   };
 
   // ------------------------------------------------------------------ rendering helpers
@@ -346,6 +359,17 @@ export function Timeline() {
             </button>
           </>
         )}
+        <button
+          className={`btn btn-sm ${ui.waveforms ? "btn-primary" : "btn-secondary"}`}
+          title={t("Shows the clips' sound over the clips. The sound of every scene in view is worked out once on the server (it reads the whole file) and kept.")}
+          onClick={() => {
+            rememberWaveforms(!ui.waveforms);
+            dispatch({ type: "ui", patch: { waveforms: !ui.waveforms } });
+          }}
+        >
+          〰 {t("Waveform")}
+        </button>
+        {waveLoad && waveLoad.loading > 0 && <span className="pmv-li-meta">{t("Waveform: {n} of {m} scenes", { n: waveLoad.total - waveLoad.loading, m: waveLoad.total })}</span>}
         <button className="btn btn-sm btn-secondary" title={t("Zoom out")} onClick={() => dispatch({ type: "ui", patch: { zoom: clamp(zoom / 1.5, 4, 1000) } })}>
           −
         </button>
@@ -461,12 +485,12 @@ export function Timeline() {
           </div>
 
           {view.tracks.map((track, trackIdx) => (
-            <div key={track.id} className={`pmv-tl-row ${track.muted ? "is-muted" : ""} ${track.locked ? "is-locked" : ""}`} style={{ height: LANE_H }}>
+            <div key={track.id} className={`pmv-tl-row ${track.muted ? "is-muted" : ""} ${track.locked ? "is-locked" : ""}`} style={{ height: laneH }}>
               <TrackHead track={track} canRemove={view.tracks.length > 1} />
               <div
                 className="pmv-lane"
                 data-track-id={track.id}
-                style={{ ...gridStyle, height: LANE_H }}
+                style={{ ...gridStyle, height: laneH }}
                 onPointerDown={(e) => {
                   if (e.target !== e.currentTarget) return;
                   dispatch({ type: "ui", patch: { selectedClipId: null, selectedLayoutId: null } });
@@ -490,6 +514,7 @@ export function Timeline() {
                     onOpenSource={stable.openSource}
                   />
                 ))}
+                {ui.waveforms && <ClipWaves clips={track.clips} sources={view.sources} zoom={zoom} left={vp.left} width={vp.width} height={laneH} band={LANE_H_WAVES - LANE_H} />}
               </div>
             </div>
           ))}
@@ -639,6 +664,7 @@ const ClipBlock = memo(function ClipBlock({ clip, track, zoom, scene, sourceTitl
     `${formatTime(clip.start)} → ${formatTime(clipEnd(clip))} (${clip.duration.toFixed(3)} s)`,
     t("Source {from} – {to}", { from: formatTime(clip.sourceIn), to: formatTime(clipSourceOut(clip)) }),
     clip.speed !== 1 ? t("Speed {speed}×", { speed: clip.speed }) : "",
+    clip.volume > 0 ? t("Clip audio {pct} %", { pct: Math.round(clip.volume * 100) }) : "",
     excluded ? t("⚠ overlaps an excluded range") : "",
     clip.pinned ? t("📌 kept when generating again") : "",
     t("Drag: move · edges: trim · Alt+drag: slip · Shift: no snapping · double-click: edit the source"),
@@ -660,6 +686,7 @@ const ClipBlock = memo(function ClipBlock({ clip, track, zoom, scene, sourceTitl
       )}
       <div className="pmv-clip-label">
         {clip.pinned && <span className="pmv-badge">📌</span>}
+        {clip.volume > 0 && <span className="pmv-badge">🔊</span>}
         {clip.speed !== 1 && <span className="pmv-badge">{Number(clip.speed.toFixed(2))}×</span>}
         {clip.label || sourceTitle || clip.sceneId}
       </div>

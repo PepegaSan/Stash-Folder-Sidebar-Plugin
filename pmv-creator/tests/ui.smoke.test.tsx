@@ -56,6 +56,7 @@ function graphql(body: { query: string; variables?: Record<string, any> }) {
       list_presets: [{ name: "Hypno Mia", settings: { mood: "hypno", clips: { source: "project" } } }],
       list_media: [{ name: "Neon Nights.mp3", path: "/media/neon.mp3", url: "/plugin/pmv-creator/assets/media/neon.mp3", size: 4000000, mtime: 1792000000 }],
       render_result: { status: "done", file: "/renders/Smoke.mp4", scanned: false, pieces: 3, cached: 0, seconds: 1.5 },
+      audio_peaks: { pps: 50, peaks: btoa(String.fromCharCode(...Array.from({ length: 6000 }, (_, i) => (i % 50) * 5))), duration: 120, hasAudio: true },
     };
     if (args.op === "save_project") saved.push(args.project);
     return { runPluginOperation: out[args.op] ?? { path: "/x" } };
@@ -235,6 +236,62 @@ describe("PMV Creator UI (mocked Stash)", () => {
     await fire(byText("← back")!, new MouseEvent("click", { bubbles: true }));
     await fire(byText("My clips")!, new MouseEvent("click", { bubbles: true }));
     expect(container.textContent).toContain("Marker A");
+  });
+
+  it("puts a whole scene onto the timeline with a labelled button and shows clip audio without “More…”", async () => {
+    await fire(byText("Scenes")!, new MouseEvent("click", { bubbles: true }));
+    const before = $$(".pmv-clip").length;
+    const row = $$(".pmv-list-item").find((li) => li.textContent?.includes("Scene One"))!;
+    const toTimeline = Array.from(row.querySelectorAll("button")).find((b) => b.textContent?.trim() === "→ Timeline")!;
+    expect(toTimeline).toBeTruthy();
+    await fire(toTimeline, new MouseEvent("click", { bubbles: true }));
+    expect($$(".pmv-clip")).toHaveLength(before + 1);
+    // the whole 120 s scene, not quantised to the beat
+    const whole = () => $$(".pmv-clip").find((el) => el.title.includes("(120.000 s)"))!;
+    expect(whole()).toBeTruthy();
+    expect(whole().querySelector(".pmv-badge")).toBeNull();
+    await fire(whole(), new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await fire(window, new MouseEvent("pointerup", { bubbles: true }));
+    // the clip audio slider sits in the open part of the inspector
+    const slider = $$('.pmv-inspector input[type="range"]').find((i) => i.getAttribute("max") === "2") as HTMLInputElement;
+    expect(slider).toBeTruthy();
+    expect(slider.closest(".pmv-more")).toBeNull();
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(slider, "0.8");
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(whole().querySelector(".pmv-badge")!.textContent).toBe("🔊");
+    expect(whole().title).toContain("Clip audio 80 %");
+    const loud = () => $$(".pmv-clip .pmv-badge").filter((b) => b.textContent === "🔊").length;
+    expect(loud()).toBe(1);
+    await fire(byText("⇉ Clip audio for all clips")!, new MouseEvent("click", { bubbles: true }));
+    expect(loud()).toBe(before + 1);
+    // three steps back: all clips, the slider, the insert
+    for (let i = 0; i < 3; i++) await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    expect($$(".pmv-clip")).toHaveLength(before);
+    expect(loud()).toBe(0);
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  it("draws the clips' sound on demand and shows a scene's waveform in the scene view", async () => {
+    expect($(".pmv-clip-waves")).toBeNull();
+    const laneHeight = () => $$(".pmv-lane[data-track-id]")[0].style.height;
+    expect(laneHeight()).toBe("52px");
+    await fire(byText("〰 Waveform")!, new MouseEvent("click", { bubbles: true }));
+    expect($$(".pmv-clip-waves")).toHaveLength(2); // one canvas per track lane
+    expect(laneHeight()).toBe("76px"); // the tracks grow: the sound gets a band of its own
+    expect(localStorage.getItem("pmv-creator:waveforms")).toBe("1");
+    await waitFor(() => !container.textContent!.includes("of 1 scenes"));
+    await fire(byText("〰 Waveform")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-clip-waves")).toBeNull();
+    expect(laneHeight()).toBe("52px");
+    // the scene's peaks are there already: the scene view shows them under the bar instead of the button
+    await fire(byText("Scenes")!, new MouseEvent("click", { bubbles: true }));
+    await fire($$(".pmv-list-item").find((li) => li.textContent?.includes("Scene One"))!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-scrub-wave"));
+    expect(byText("〰 Load waveform")).toBeNull();
+    await fire(byText("← back")!, new MouseEvent("click", { bubbles: true }));
   });
 
   it("puts the selected clip on a marker of its scene without moving it on the timeline", async () => {

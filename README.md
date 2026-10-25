@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.6-informational)
+![Version](https://img.shields.io/badge/version-0.9.7-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -584,6 +584,7 @@ Works in classic Stash and in Stash UI.
 - **Beat-grid timeline** — BPM detection/tap, snap, ripple/overwrite modes, trim/slip/split, transitions, speed with beat-safe duration; music volume right on the music lane, 🔊 listening volume for the preview
 - **Scene view in the main player** — a scene opens big in place of the preview (tabs *PMV preview* / *Scene*): pick ranges, move a clip to another spot or put another scene into it
 - **Ground rule** — another part of the scene never changes a clip's place on the timeline
+- **Compilations too** — **→ Timeline** on every scene row puts the whole scene onto the timeline, one after another; **clip audio** right in the inspector (per clip, for all clips, the level new clips start with), and **〰 Waveform** draws the clips' own sound in a band of each clip, worked out once per scene on the server
 - **Generator** — tags, performers, rating, length, resolution, shape, markers, tag stages over the song, cutting by music energy or on every beat / every 2 / every 4 beats, transitions of your choice (or a mix) on every cut, bar or phrase, drops, speed ramps; experimental "clip speed follows the music" and "motion on the beat"; **presets** saved on the server; clips from one of your **saved Stash filters**; your own rendered PMVs are never picked as material
 - **Colour looks and beat/drop effects** — looks (warm, pink, cold, vivid, b&w, noir, own colour) and effects like the PMV Generator's: zoom pulse, shake, stutter, strobe, RGB split, glitch, tunnel, negative, echo, words, colour rush – timed by the beat and the drops, the same in preview, Quick record and render; moods switch them
 - **Split screens** like the PMV Generator's — 2-way, 3-way mirrored, 3-way, 4-way, kaleidoscope, side by side or stacked; each field shows a track (V1, V2, …) and stays editable; a lane above the tracks to add, move and resize them; the generator plans them by the music (calm full screen, loud more fields, drops the fullest), with flashes and glowing dividers
@@ -592,7 +593,7 @@ Works in classic Stash and in Stash UI.
 - **Touching up** — 🎲 another clip for one spot (N), 📌 keep the good ones when generating again (P), ⊘ take a scene out of the PMV (optionally for good, via a Stash tag), ⏮ ⏭ review the cuts one by one ([ ] or ↑ ↓)
 - **Song library** — songs uploaded once can be picked again without a new upload; **PMV with this performer/tag** right from the performer/tag page
 - **Render** — deterministic FFmpeg pipeline as a Stash task (segment cache, exact CFR), plus **Quick record** (real-time WebM in the browser, no server FFmpeg needed); the finished PMV is **labeled in Stash** (title, performers, shared tags, tag "PMV Creator"); renders run on without the dialog, **⏳** in the toolbar lists them and **🔔** tells you when one is done (chime, tab title, desktop notification where the browser allows it)
-- **Render on your PC** (optional) — a render helper on a PC renders with its own FFmpeg and saves to any folder on the PC; set up once in the render dialog. While it runs, the preview plays the videos of its mapped folders from the PC (also HEVC/MPEG-4, converted by the PC instead of the NAS)
+- **Render on your PC** (optional) — a render helper on a PC renders with its own FFmpeg and saves to any folder on the PC; set up once in the render dialog, from then on **▶ Start helper** and **⏹ Quit helper** right there (it runs without a window). While it runs, the preview plays the videos of its mapped folders from the PC (also HEVC/MPEG-4, converted by the PC instead of the NAS)
 - **Exports** — project JSON, CMX3600 EDL, OpenTimelineIO, render plan, FFmpeg scripts; CLI render without Stash
 - English interface, German when Stash (or Stash UI) is set to German
 
@@ -619,6 +620,14 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.7
+
+- **Fix**: renders failed with “Unrecognized option 'filter_complex_script'” on FFmpeg 8 – long filtergraphs now reach FFmpeg with `-/filter_complex` (FFmpeg 7+) or the old option (before), chosen by version; the exported Windows script does the same. Render on a PC: download the helper again (the dialog says so)
+- **Clip audio in plain sight**: the slider sits right in the clip inspector (plus **⇉ Clip audio for all clips**); with nothing selected, the block *Clip audio* sets the level new clips start with (by hand, generator, batch) and applies it to all clips; the generator dialog has the same slider next to the look; 🔊 marks clips with sound
+- **Whole scene onto the timeline** with one click: labelled **+ Project** / **→ Timeline** buttons on every scene row, **→ Whole scene onto the timeline** in the scene view, scene rows can be dragged onto a track; the playhead moves to the clip's end, so the next scene follows – a compilation in a few clicks
+- **Clip waveforms**: **〰 Waveform** above the timeline draws the clips' own sound in a band at the bottom of every clip (the tracks grow taller while it is on); each scene's sound is worked out once on the server and kept, two at a time, as it comes into view; **〰 Load waveform** in the scene view shows the whole scene's sound under the scrub bar
+- **Render helper without a window, started from the editor**: the download is a `.pyw` (no console, also from the startup folder, log next to it); the first start registers `pmvhelper://`, from then on **▶ Start helper on this PC** in the render dialog starts it and **⏹ Quit helper** stops it
 
 ### PMV Creator 0.9.6
 

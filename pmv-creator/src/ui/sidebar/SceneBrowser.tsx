@@ -9,12 +9,13 @@ import { type StashRef, type StashScene, sceneTitle } from "../../stash/types";
 import { useEditor } from "../../state/store";
 import { formatTime } from "../../timeline/time";
 import { RefPicker } from "../common";
+import { endSnippetDrag, startSceneDrag, wholeSceneAction } from "../editing";
 import { clipsOfScene } from "../monitor";
 
 const PER_PAGE = 30;
 
 export function SceneBrowser() {
-  const { state, dispatch } = useEditor();
+  const { state, dispatch, transport } = useEditor();
   const project = state.present;
   const [q, setQ] = useState("");
   const [tags, setTags] = useState<StashRef[]>([]);
@@ -57,6 +58,32 @@ export function SceneBrowser() {
     const src = sceneToSource(s);
     if (src) dispatch({ type: "sources/add", sources: [src] });
   };
+  /** The whole scene onto the timeline at the playhead; the playhead moves to its end, so the next scene follows. */
+  const toTimeline = (src: SourceMedia | null) => {
+    const action = src && wholeSceneAction(project, state.ui, src, transport.time);
+    if (!action) return;
+    dispatch(action);
+    if (action.type === "clip/insert") transport.seek(action.clip.start + action.clip.duration);
+  };
+  const dragStart = (e: React.DragEvent, src: SourceMedia | null) => {
+    if (!src) return e.preventDefault();
+    startSceneDrag(src);
+    e.dataTransfer.setData("text/plain", src.sceneId);
+    e.dataTransfer.effectAllowed = "copy";
+  };
+  const rowTitle = (inSwap: boolean) => (inSwap ? t("Replace with this scene") : t("Click: open the scene · drag: the whole scene onto the timeline"));
+  const timelineButton = (src: SourceMedia | null) => (
+    <button
+      className="btn btn-sm btn-secondary"
+      title={t("The whole scene onto the timeline at the playhead – press it on the next scene and that one follows")}
+      onClick={(e) => {
+        e.stopPropagation();
+        toTimeline(src);
+      }}
+    >
+      → {t("Timeline")}
+    </button>
+  );
   const pool = Object.values(project.sources);
   const searchTags = useCallback(findTags, []);
   const searchPerformers = useCallback(findPerformers, []);
@@ -117,7 +144,10 @@ export function SceneBrowser() {
               <li
                 key={s.sceneId}
                 className={`pmv-list-item ${swapFrom ? (s.sceneId === swapFrom ? "is-excluded" : "is-pickable") : ""}`}
-                title={swapFrom && s.sceneId !== swapFrom ? t("Replace with this scene") : undefined}
+                title={rowTitle(!!swapFrom && s.sceneId !== swapFrom)}
+                draggable={!swapFrom}
+                onDragStart={(e) => dragStart(e, s)}
+                onDragEnd={endSnippetDrag}
                 onClick={() => (swapFrom ? pick(s) : open(s.sceneId))}
               >
                 <div className="pmv-li-main">
@@ -127,6 +157,7 @@ export function SceneBrowser() {
                     {project.bin.some((b) => b.sceneId === s.sceneId) && ` · ${tn(project.bin.filter((b) => b.sceneId === s.sceneId).length, "{n} clips", "1 clip")}`}
                   </div>
                 </div>
+                {!swapFrom && timelineButton(s)}
                 {!isSourceUsed(project, s.sceneId) && (
                   <button
                     className="btn btn-sm btn-link"
@@ -209,7 +240,10 @@ export function SceneBrowser() {
                   <li
                     key={s.id}
                     className={`pmv-list-item ${swapFrom ? (s.id === swapFrom ? "is-excluded" : "is-pickable") : ""}`}
-                    title={swapFrom && s.id !== swapFrom ? t("Replace with this scene") : undefined}
+                    title={rowTitle(!!swapFrom && s.id !== swapFrom)}
+                    draggable={!swapFrom}
+                    onDragStart={(e) => dragStart(e, sceneToSource(s))}
+                    onDragEnd={endSnippetDrag}
                     onClick={() => (swapFrom ? pick(sceneToSource(s)) : open(s.id))}
                   >
                     {s.paths.screenshot && <img className="pmv-li-img" src={stashUrl(s.paths.screenshot)} alt="" loading="lazy" />}
@@ -220,17 +254,22 @@ export function SceneBrowser() {
                         {s.performers.length > 0 && ` · ${s.performers.map((p) => p.name).join(", ")}`}
                       </div>
                     </div>
-                    <button
-                      className={`btn btn-sm ${inPool ? "btn-success" : "btn-secondary"}`}
-                      title={inPool ? t("In the project") : t("Add to the project")}
-                      disabled={inPool}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addToPool(s);
-                      }}
-                    >
-                      {inPool ? "✓" : "+"}
-                    </button>
+                    {!swapFrom && (
+                      <div className="pmv-li-actions is-col">
+                        <button
+                          className={`btn btn-sm ${inPool ? "btn-success" : "btn-secondary"}`}
+                          title={inPool ? t("In the project – the generator may pick it") : t("Into the project – the generator picks from these scenes, and they are listed under “Project scenes”")}
+                          disabled={inPool}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToPool(s);
+                          }}
+                        >
+                          {inPool ? "✓" : "+"} {t("Project")}
+                        </button>
+                        {timelineButton(sceneToSource(s))}
+                      </div>
+                    )}
                   </li>
                 );
               })}

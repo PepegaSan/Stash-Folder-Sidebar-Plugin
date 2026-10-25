@@ -36,7 +36,7 @@ export function StartPanel() {
         </li>
         <li>
           <div className="pmv-start-h">{t("Clips")}</div>
-          <div className="pmv-li-meta">{t("The generator picks clips by tags and performers and cuts them to the beat – or pick scenes on the left yourself.")}</div>
+          <div className="pmv-li-meta">{t("The generator picks clips by tags and performers and cuts them to the beat – or pick scenes on the left yourself: a click opens one, “→ Timeline” puts the whole scene onto the timeline.")}</div>
           <div className="pmv-row pmv-wrap">
             <button className={`btn btn-sm ${p.audio ? "btn-primary" : "btn-secondary"}`} onClick={() => dispatch({ type: "ui", patch: { generator: {} } })}>
               ⚡ {t("Generate PMV")}

@@ -116,6 +116,17 @@ export const deletePreset = (name: string) => runOp<PresetEntry[]>({ op: "delete
 
 export const probeKeyframes = (path: string) => runOp<number[]>({ op: "keyframes", path });
 
+export interface AudioPeaks {
+  /** Peaks per second of the file. */
+  pps: number;
+  /** One byte (0–255) per peak, base64; empty without a sound track. */
+  peaks: string;
+  duration: number;
+  hasAudio: boolean;
+}
+/** The sound of a scene file as peaks – worked out once on the server (it reads the whole file), then kept. */
+export const audioPeaks = (path: string) => runOp<AudioPeaks>({ op: "audio_peaks", path });
+
 export interface GrayItem {
   key: string;
   fps: number;
@@ -186,6 +197,8 @@ export interface RenderHelper {
 
 export const listHelpers = () => runOp<RenderHelper[]>({ op: "helper_list" });
 export const setHelperConfig = (id: string, config: HelperConfig) => runOp<HelperConfig>({ op: "helper_config", name: id, config });
+/** Asks a connected helper to quit (it takes the flag along within ~20 s); ok = false when it is not connected. */
+export const quitHelper = (id: string) => runOp<{ ok: boolean }>({ op: "helper_quit", name: id });
 
 /** The backend file with the Stash address (and API key) filled in – a double-click starts the helper. */
 export async function helperScript(apiKey: string): Promise<string> {

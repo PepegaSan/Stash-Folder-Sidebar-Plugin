@@ -263,6 +263,16 @@ export function LookFields({ output, onChange }: { output: LookSettings; onChang
   );
 }
 
+/** Clip audio 0–200 % (1 = as loud as in the file). */
+export function VolumeSlider({ value, onChange, disabled, title }: { value: number; onChange: (v: number) => void; disabled?: boolean; title?: string }) {
+  return (
+    <span className="pmv-row" title={title}>
+      <input type="range" min={0} max={2} step={0.05} value={value} disabled={disabled} onChange={(e) => onChange(+e.target.value)} />
+      <span className="pmv-mono">{Math.round(value * 100)}%</span>
+    </span>
+  );
+}
+
 /** Display name of a transition (the ids are FFmpeg's xfade names). */
 export function transitionLabel(type: TransitionType): string {
   switch (type) {

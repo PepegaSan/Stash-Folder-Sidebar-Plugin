@@ -321,6 +321,15 @@ def main():
         assert rec.get("seconds") and abs(rec["seconds"] - 1.0) < 0.2, rec
         kf = call({"op": "keyframes", "path": str(a)})
         assert kf and kf[0] == 0.0, kf[:5]
+        # waveform peaks of a scene: 50 per second, a steady sine stays loud, the answer is kept; no sound -> none
+        pk = call({"op": "audio_peaks", "path": str(a)})
+        peaks = base64.b64decode(pk["peaks"])
+        assert pk["hasAudio"] and pk["pps"] == 50 and abs(len(peaks) - 12 * 50) <= 3, (pk["hasAudio"], pk["pps"], len(peaks))
+        mid = sorted(peaks[5:-5])
+        assert 25 <= max(peaks) <= 90 and mid[len(mid) // 2] > 20, (max(peaks), mid[len(mid) // 2])  # FFmpeg's sine is about -14 dBFS
+        assert (data / "cache" / "peaks").is_dir() and call({"op": "audio_peaks", "path": str(a)}) == pk
+        silent = call({"op": "audio_peaks", "path": str(b)})
+        assert silent["hasAudio"] is False and silent["peaks"] == "", silent
         try:
             call({"op": "load_project", "id": "../../etc/passwd"})
             raise AssertionError("path traversal not rejected")
@@ -386,6 +395,14 @@ def main():
         # the output folder is mapped too (as if Stash saw it as /stash/pmvs/): the result names the file as Stash sees it
         call({"op": "helper_config", "name": "TEST_PC", "config": {"outputDir": str(tmp / "pc-out"), "mappings": [{"from": "/data/", "to": "Y:\\"}, {"from": "/stash/pmvs/", "to": str(tmp / "pc-out")}, {"from": "", "to": "x"}]}})
         assert call({"op": "helper_list"})[0]["config"] == {"outputDir": str(tmp / "pc-out"), "mappings": [{"from": "/data/", "to": "Y:\\"}, {"from": "/stash/pmvs/", "to": str(tmp / "pc-out")}]}
+        # quit from the editor: the next hello (or claim) takes the flag along once and the helper shows as offline;
+        # a helper that is not connected gets no flag
+        assert call({"op": "helper_quit", "name": "TEST PC"}) == {"ok": True}
+        hello = call({"op": "helper_hello", "info": {"name": "TEST PC"}})
+        assert hello.get("quit") is True and not call({"op": "helper_list"})[0]["online"], hello
+        assert "quit" not in call({"op": "helper_hello", "info": {"name": "TEST PC"}})
+        assert call({"op": "helper_quit", "name": "Nobody"}) == {"ok": False}
+        assert call({"op": "helper_claim", "name": "TEST PC"}) is None
         stream = run_stream_server(a)
         broker = subprocess.Popen([sys.executable, str(BACKEND)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         broker.stdin.write(json.dumps({"args": {"mode": "pc", "renderId": "render_pc", "helper": "TEST_PC", "plan": json.dumps(plan)}}))

@@ -22,6 +22,7 @@ No third-party dependencies; Python >= 3.8 and FFmpeg >= 4.4.
 from __future__ import annotations
 
 import argparse
+import array
 import base64
 import hashlib
 import hmac
@@ -48,7 +49,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-VERSION = "0.9.6"
+try:
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        import audioop  # C-speed peaks; gone from Python 3.13 -> the array path in _peaks_of
+except ImportError:  # pragma: no cover
+    audioop = None  # type: ignore[assignment]
+
+VERSION = "0.9.7"
 PLUGIN_ID = "pmv-creator"
 PLAN_VERSION = 1
 # Bump when piece_command() changes, invalidates cached pieces.
@@ -59,7 +69,9 @@ FX_VERSION = 4
 BLUR_VERSION = 2
 # Intermediate container: MOV keeps an exact per-frame timescale (MKV rounds to 1 ms -> VFR jitter).
 PIECE_EXT = ".mov"
-# A filtergraph longer than this goes into a file (-filter_complex_script) – effects make long expressions.
+# A filtergraph longer than this goes into a file – effects make long expressions. FFmpeg >= 7 reads it with
+# "-/filter_complex <file>" (the generic option-from-file syntax); before that only "-filter_complex_script"
+# existed, which FFmpeg 7 deprecated and FFmpeg 8 builds drop ("Unrecognized option 'filter_complex_script'").
 GRAPH_INLINE = 16000
 CMD_GRAPH_INLINE = 6000  # the same for a Windows script (cmd.exe: 8191 characters per line)
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
@@ -68,6 +80,8 @@ MEDIA_URL = f"/plugin/{PLUGIN_ID}/assets/media/"
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 # Filled in by the editor when this file is downloaded as render helper ("stash", "apiKey"); empty inside Stash.
 HELPER_DEFAULTS: Dict[str, str] = {}
+# URL scheme the downloaded helper registers for its Windows user, so “Start helper” in the editor can start it.
+HELPER_PROTOCOL = "pmvhelper"
 XFADE = {
     "fade", "fadeblack", "fadewhite", "dissolve", "wipeleft", "wiperight", "slideleft",
     "slideright", "circleopen", "pixelize", "zoomin", "hblur", "radial",
@@ -261,6 +275,36 @@ def _terminate_all(*_: Any) -> None:
                 p.kill()
             except Exception:
                 pass
+
+
+def libavutil_major(version_text: str) -> Optional[int]:
+    """The libavutil major from `ffmpeg -version` output (58 = FFmpeg 6, 59 = FFmpeg 7, 60 = FFmpeg 8); None if absent."""
+    m = re.search(r"^libavutil\s+(\d+)\.", version_text, re.M)
+    return int(m.group(1)) if m else None
+
+
+_GRAPH_OPTION: Dict[str, str] = {}
+
+
+def graph_file_option(ff: str) -> str:
+    """How this FFmpeg takes a filtergraph from a file: "-/filter_complex" from FFmpeg 7 on (libavutil 59),
+    "-filter_complex_script" for older ones. Asked once per binary."""
+    opt = _GRAPH_OPTION.get(ff)
+    if opt is None:
+        major = None
+        try:
+            flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0  # type: ignore[attr-defined]
+            r = subprocess.run([ff, "-version"], capture_output=True, text=True, errors="replace", timeout=60, creationflags=flags)
+            major = libavutil_major(r.stdout)
+        except Exception:
+            pass
+        opt = _GRAPH_OPTION[ff] = "-/filter_complex" if major is not None and major >= 59 else "-filter_complex_script"
+    return opt
+
+
+def graph_option_rejected(error: str) -> bool:
+    """FFmpeg knew neither way to read the graph from a file (an exotic build) – the graph has to go on the command line."""
+    return "Unrecognized option" in error and "filter_complex" in error
 
 
 def run_ffmpeg(cmd: List[str], on_progress: Optional[Callable[[float], None]] = None) -> None:
@@ -1000,7 +1044,7 @@ def piece_command(ff: str, piece: Dict[str, Any], out: Out, clip_audio: bool, de
     text = ";".join(graph)
     if graph_file and len(text) > GRAPH_INLINE:
         Path(graph_file).write_text(text, encoding="utf-8")
-        filters = ["-filter_complex_script", graph_file]
+        filters = [graph_file_option(ff), graph_file]
     else:
         filters = ["-filter_complex", text]
     cmd = [ff, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", *inputs, *filters, "-map", f"[{vout}]"]
@@ -1147,7 +1191,14 @@ def render_plan(plan: Dict[str, Any], ff: str, dest: Path, cache_dir: Path, work
     def render_one(path: Path, piece: Dict[str, Any]) -> None:
         nonlocal done
         tmp = path.with_name(path.stem + ".part" + PIECE_EXT)
-        run_ffmpeg(piece_command(ff, piece, out, clip_audio, str(tmp), grade, font, str(work_dir / f"{path.stem}.graph")))
+        graph_file = str(work_dir / f"{path.stem}.graph")
+        try:
+            run_ffmpeg(piece_command(ff, piece, out, clip_audio, str(tmp), grade, font, graph_file))
+        except RuntimeError as e:
+            if not graph_option_rejected(str(e)) or not os.path.isfile(graph_file):
+                raise
+            log_warn(f"FFmpeg does not take the filtergraph from a file ({graph_file_option(ff)}) – passing it on the command line")
+            run_ffmpeg(piece_command(ff, piece, out, clip_audio, str(tmp), grade, font))
         os.replace(tmp, path)
         with lock:
             done += 1
@@ -1191,6 +1242,12 @@ def ffmpeg_script(plan: Dict[str, Any], shell: str = "sh", ff: str = "ffmpeg") -
     if shell == "cmd":
         q = lambda a: '"' + a.replace('"', '""').replace("%", "%%") + '"' if re.search(r'[\s;&|<>^()"%,=\[\]]', a) else a.replace("%", "%%")  # noqa: E731
         lines = ["@echo off", *([f"rem {note}"] if words else []), "setlocal", "cd /d \"%~dp0\"", "if not exist pieces mkdir pieces", "(", *[f"echo {line}" for line in listing], ") > pieces.ffconcat"]
+        if any(len(c[c.index("-filter_complex") + 1]) > CMD_GRAPH_INLINE for c in cmds):
+            # long filtergraphs come from files: FFmpeg >= 7 (libavutil 59+) reads them with -/filter_complex, older ones
+            # only with -filter_complex_script – the script asks the FFmpeg it runs with
+            lines += ['set "FCS=-filter_complex_script"', f"{q(ff)} -version > pieces\\ffversion.txt 2>nul",
+                      'findstr /r /c:"^libavutil *59\\." /c:"^libavutil *[6-9][0-9]\\." pieces\\ffversion.txt >nul && set "FCS=-/filter_complex"']
+        fcs = "\x00FCS"  # stands in for %FCS% while the arguments are quoted (q would double the percent signs)
         for i, c in enumerate(cmds):
             k = c.index("-filter_complex")
             if len(c[k + 1]) > CMD_GRAPH_INLINE:
@@ -1199,8 +1256,8 @@ def ffmpeg_script(plan: Dict[str, Any], shell: str = "sh", ff: str = "ffmpeg") -
                 b64 = base64.b64encode(c[k + 1].encode("utf-8")).decode()
                 stem = f"pieces\\{i:04d}"
                 lines += ["(", *[f"echo({b64[j:j + 76]}" for j in range(0, len(b64), 76)], f") > {stem}.b64", f"certutil -f -decode {stem}.b64 {stem}.graph >nul || exit /b 1"]
-                c = [*c[:k], "-filter_complex_script", f"{stem}.graph", *c[k + 2:]]
-            lines.append(" ".join(q(a) for a in c) + " || exit /b 1")
+                c = [*c[:k], fcs, f"{stem}.graph", *c[k + 2:]]
+            lines.append(" ".join(q(a) for a in c).replace(fcs, "%FCS%") + " || exit /b 1")
         lines.append(" ".join(q(a) for a in final))
         return "\r\n".join(lines) + "\r\n"
     lines = ["#!/usr/bin/env bash", "# generated by PMV Creator", *([f"# {note}"] if words else []), "set -euo pipefail", 'cd "$(dirname "$0")"', "mkdir -p pieces", "cat > pieces.ffconcat <<'EOF'", *listing, "EOF"]
@@ -1409,6 +1466,91 @@ def op_keyframes(ctx: Context, args: dict) -> list:
     return sorted(set(times))
 
 
+# Waveforms of the clips' sound: peaks per second of a scene file, and the rate its sound is decoded at for them
+# (transients survive 8 kHz; an hour of sound is 57 MB through the pipe and 180 KB of peaks).
+PEAKS_PER_SECOND = 50
+PEAKS_RATE = 8000
+
+
+def _peaks_of(data: bytes, step: int) -> bytes:
+    """One byte per `step` bytes of s16le mono: the largest |sample|, scaled to 0-255."""
+    n = len(data) // step
+    res = bytearray(n)
+    if audioop is not None:
+        for i in range(n):
+            res[i] = min(255, audioop.max(data[i * step:(i + 1) * step], 2) * 255 // 32767)
+        return bytes(res)
+    samples = array.array("h")
+    samples.frombytes(data[: n * step])
+    if sys.byteorder != "little":
+        samples.byteswap()
+    per = step // 2
+    for i in range(n):
+        seg = samples[i * per:(i + 1) * per]
+        res[i] = min(255, max(max(seg), -min(seg)) * 255 // 32767)
+    return bytes(res)
+
+
+def audio_peaks(ff: str, path: str, pps: int = PEAKS_PER_SECOND, timeout: float = 1800) -> Optional[bytes]:
+    """Max |sample| per 1/pps s of the file's first sound track as bytes (0-255); None when it has no sound.
+    FFmpeg has to read the whole file (the sound is interleaved with the picture) – over a NAS that takes a while."""
+    step = (PEAKS_RATE // pps) * 2  # bytes per bucket (s16)
+    cmd = [ff, "-v", "error", "-nostdin", "-i", path, "-map", "0:a:0", "-vn", "-sn", "-dn", "-ac", "1", "-ar", str(PEAKS_RATE), "-f", "s16le", "pipe:1"]
+    flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0  # type: ignore[attr-defined]
+    p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=flags)
+    out = bytearray()
+    rest = b""
+    started = time.time()
+    err = ""
+    try:
+        assert p.stdout is not None and p.stderr is not None
+        while True:
+            chunk = p.stdout.read(step * 512)
+            if not chunk:
+                break
+            if time.time() - started > timeout:
+                p.kill()
+                raise RuntimeError("decoding the sound of the file took too long")
+            data = rest + chunk
+            whole = len(data) - len(data) % step
+            out.extend(_peaks_of(data[:whole], step))
+            rest = data[whole:]
+        rest = rest[: len(rest) - len(rest) % 2]
+        if rest:
+            out.extend(_peaks_of(rest, len(rest)))
+        err = p.stderr.read().decode(errors="replace")
+        p.wait()
+    finally:
+        if p.poll() is None:
+            p.kill()
+    if p.returncode != 0:
+        if "matches no streams" in err or "does not contain any stream" in err:
+            return None
+        raise RuntimeError(f"FFmpeg failed ({p.returncode}): {err.strip()[-300:]}")
+    return bytes(out)
+
+
+def op_audio_peaks(ctx: Context, args: dict) -> dict:
+    """The sound of a scene file as peaks (50/s, one byte each, base64) for the waveforms in the editor – worked
+    out once with FFmpeg and kept in the cache (keyed by path, size and mtime)."""
+    path = str(args.get("path") or "")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"file not found: {path}")
+    st = os.stat(path)
+    key = hashlib.sha1(f"{path}|{st.st_size}|{int(st.st_mtime)}".encode("utf-8", "surrogateescape")).hexdigest()[:24]
+    cache = ctx.cache / "peaks" / f"{key}.json"
+    if cache.is_file():
+        try:
+            return json.loads(cache.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+    peaks = audio_peaks(ctx.tool("ffmpeg"), path)
+    result = {"pps": PEAKS_PER_SECOND, "peaks": base64.b64encode(peaks).decode() if peaks else "", "duration": len(peaks) / PEAKS_PER_SECOND if peaks else 0, "hasAudio": peaks is not None}
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(cache, json.dumps(result).encode("utf-8"))
+    return result
+
+
 GRAY_LONG_SIDE = 64  # the measuring picture of the motion analysis (Pepega's "tiny": 64 px on the long side)
 
 
@@ -1614,7 +1756,33 @@ def op_helper_hello(ctx: Context, args: dict) -> dict:
     cur["lastSeen"] = time.time()
     cur.setdefault("config", {"outputDir": "", "mappings": []})
     atomic_write(path, json.dumps(cur).encode())
-    return {"config": cur["config"]}
+    return {"config": cur["config"], **({"quit": True} if _take_quit(ctx, helper_key(info.get("name"))) else {})}
+
+
+def _take_quit(ctx: Context, key: str) -> bool:
+    """A quit asked for in the editor within the last two minutes – taken once; the helper then shows as offline."""
+    f = _helpers_dir(ctx) / f"{key}.quit"
+    try:
+        fresh = time.time() - float(f.read_text()) < 120
+        f.unlink()
+    except (OSError, ValueError):
+        return False
+    if fresh:
+        path = _helpers_dir(ctx) / f"{key}.json"
+        cur = _read_json(path, {}) or {}
+        cur["lastSeen"] = 0
+        atomic_write(path, json.dumps(cur).encode())
+    return fresh
+
+
+def op_helper_quit(ctx: Context, args: dict) -> dict:
+    """The editor asks a connected helper to quit – a flag it takes along with its next hello or claim (~20 s)."""
+    key = helper_key(args.get("name"))
+    cur = _read_json(_helpers_dir(ctx) / f"{key}.json", {}) or {}
+    if time.time() - float(cur.get("lastSeen") or 0) >= HELPER_ONLINE:
+        return {"ok": False}
+    (_helpers_dir(ctx) / f"{key}.quit").write_text(str(time.time()))
+    return {"ok": True}
 
 
 def op_helper_list(ctx: Context, args: dict) -> list:
@@ -1647,6 +1815,8 @@ def op_helper_config(ctx: Context, args: dict) -> dict:
 def op_helper_claim(ctx: Context, args: dict) -> Optional[dict]:
     """The helper asks for work: the oldest queued job for it, now marked as running."""
     key = helper_key(args.get("name"))
+    if _take_quit(ctx, key):
+        return {"quit": True}
     d = _jobs_dir(ctx)
     if not d.is_dir():
         return None
@@ -1975,6 +2145,101 @@ def helper_dirs() -> Dict[str, Path]:
     return {"cache": root / "cache", "work": root / "work", "output": (videos if videos.is_dir() else Path.home()) / "PMV Creator"}
 
 
+def windowless() -> bool:
+    """Started without a console: pythonw (the .pyw file), the editor's Start button or the startup folder.
+    (Handles may exist even then – a launcher's NUL device counts as a tty on Windows – so ask for the console window.)"""
+    if sys.stdin is None or sys.stdout is None:
+        return True
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            return ctypes.windll.kernel32.GetConsoleWindow() == 0  # type: ignore[attr-defined]
+        except Exception:
+            return False
+    return False
+
+
+def helper_log_quietly() -> None:
+    """Without a console the helper writes what it would print into a log next to itself (kept under 1 MB)."""
+    try:
+        log = Path(sys.argv[0]).resolve().with_suffix(".log") if sys.argv and sys.argv[0] else helper_dirs()["cache"].parent / "helper.log"
+        if log.exists() and log.stat().st_size > 1_000_000:
+            log.unlink()
+        f = open(log, "a", encoding="utf-8", errors="replace", buffering=1)
+        sys.stdout = sys.stderr = f
+        print(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} started without a window ---")
+    except OSError:
+        pass
+
+
+_INSTANCE_LOCK: Any = None  # held for the helper's lifetime
+
+
+def helper_single_instance() -> bool:
+    """True when no other helper runs on this PC (a named mutex on Windows, a locked file elsewhere)."""
+    global _INSTANCE_LOCK
+    if _INSTANCE_LOCK is not None:
+        return True
+    if os.name == "nt":
+        import ctypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateMutexW.restype = ctypes.c_void_p
+        k32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+        handle = k32.CreateMutexW(None, False, "Local\\PMVCreatorRenderHelper")
+        if not handle:
+            return True
+        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+            k32.CloseHandle(ctypes.c_void_p(handle))
+            return False
+        _INSTANCE_LOCK = handle
+        return True
+    try:
+        import fcntl
+
+        root = helper_dirs()["cache"].parent
+        root.mkdir(parents=True, exist_ok=True)
+        f = open(root / "helper.lock", "w")
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _INSTANCE_LOCK = f
+        return True
+    except ImportError:
+        return True
+    except OSError:
+        return False
+
+
+def helper_launch_command(script: Optional[Path] = None) -> str:
+    """What the URL scheme runs: pythonw (no window) when it is there, this helper file, the URL as its argument."""
+    exe = Path(sys.executable)
+    pyw = exe.with_name("pythonw.exe")
+    return f'"{pyw if pyw.is_file() else exe}" "{(script or Path(sys.argv[0])).resolve()}" "%1"'
+
+
+def register_helper_protocol(scheme: str = HELPER_PROTOCOL) -> bool:
+    """Registers <scheme>:// for this user (Windows, no admin rights), so the editor's Start button can start this
+    helper. Done at every start, so a moved file is found again. Best effort."""
+    if os.name != "nt":
+        return False
+    try:
+        import winreg
+
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{scheme}") as base:
+            winreg.SetValue(base, "", winreg.REG_SZ, "URL:PMV Creator render helper")
+            winreg.SetValueEx(base, "URL Protocol", 0, winreg.REG_SZ, "")
+            winreg.SetValue(base, r"shell\open\command", winreg.REG_SZ, helper_launch_command())
+        return True
+    except OSError:
+        return False
+
+
+def strip_protocol_args(argv: List[str]) -> tuple:
+    """Takes the <scheme>:// argument of a start from the editor out of argv -> (rest, started_from_editor)."""
+    rest = [a for a in argv if not a.lower().startswith(HELPER_PROTOCOL + ":")]
+    return rest, len(rest) != len(argv)
+
+
 def trim_cache(cache: Path, days: float = 14) -> None:
     if not cache.is_dir():
         return
@@ -2113,6 +2378,11 @@ def helper_main(stash: str, api_key: str = "", name: str = "", ffmpeg: str = "",
     if not re.match(r"^https?://", stash):
         stash = "http://" + stash
     signal.signal(signal.SIGINT, lambda *_: (_STOP.set(), _terminate_all()))
+    if not helper_single_instance():
+        print("The render helper is already running on this PC – nothing to do.")
+        if pause:
+            input("Press Enter to close …")
+        return 0
     client = HelperClient(stash, api_key)
     ff = ffmpeg or find_ffmpeg()
     name = name or socket.gethostname()
@@ -2127,7 +2397,12 @@ def helper_main(stash: str, api_key: str = "", name: str = "", ffmpeg: str = "",
         return 2
     print(f"FFmpeg: {ff} · {jobs} parallel jobs")
     print(f"Default output folder: {dirs['output']} (change it in PMV Creator → Render → On my PC)")
-    print("Waiting for renders – keep this window open (Ctrl+C stops the helper).", flush=True)
+    if HELPER_DEFAULTS.get("stash") and register_helper_protocol():
+        print(f"{HELPER_PROTOCOL}:// registered – “Start helper” in the editor starts this file from now on.")
+    if windowless():
+        print("Waiting for renders – no window: “Quit helper” in the editor (Render → My PC) stops it.", flush=True)
+    else:
+        print("Waiting for renders – keep this window open (Ctrl+C stops the helper).", flush=True)
     trim_cache(dirs["cache"])
     info: Dict[str, Any] = {"name": name, "version": VERSION, "ffmpeg": ff, "defaultOutput": str(dirs["output"]), "platform": sys.platform}
     serve: Optional[MediaServer] = None
@@ -2146,6 +2421,10 @@ def helper_main(stash: str, api_key: str = "", name: str = "", ffmpeg: str = "",
         try:
             if time.time() - last_hello > 30:
                 hello = client.op({"op": "helper_hello", "info": info})
+                if isinstance(hello, dict) and hello.get("quit"):
+                    print("Quit requested in the editor.", flush=True)
+                    _STOP.set()
+                    break
                 if serve and isinstance(hello, dict):  # the path mappings may have changed in the editor
                     serve.mappings = (hello.get("config") or {}).get("mappings") or []
                 last_hello = time.time()
@@ -2157,6 +2436,10 @@ def helper_main(stash: str, api_key: str = "", name: str = "", ffmpeg: str = "",
             if any("Render PMV" in (j.get("description") or "") for j in queue) or time.time() - last_claim > 20:
                 last_claim = time.time()
                 job = client.op({"op": "helper_claim", "name": name})
+                if isinstance(job, dict) and job.get("quit"):
+                    print("Quit requested in the editor.", flush=True)
+                    _STOP.set()
+                    break
                 if job:
                     try:
                         run_helper_job(job, client, ff, dirs, jobs, stream_only)
@@ -2193,6 +2476,7 @@ OPS: Dict[str, Callable[[Context, dict], Any]] = {
     "delete_preset": op_delete_preset,
     "save_recording": op_save_recording,
     "keyframes": op_keyframes,
+    "audio_peaks": op_audio_peaks,
     "gray_frames": op_gray_frames,
     "ffmpeg_script": op_ffmpeg_script,
     "render_result": op_render_result,
@@ -2200,6 +2484,7 @@ OPS: Dict[str, Callable[[Context, dict], Any]] = {
     "helper_hello": op_helper_hello,
     "helper_list": op_helper_list,
     "helper_config": op_helper_config,
+    "helper_quit": op_helper_quit,
     "helper_claim": op_helper_claim,
     "helper_progress": op_helper_progress,
 }
@@ -2276,11 +2561,15 @@ def cli_main(argv: List[str]) -> int:
 def main() -> int:
     signal.signal(signal.SIGTERM, _terminate_all)
     signal.signal(signal.SIGINT, _terminate_all)
-    if len(sys.argv) > 1:
-        return cli_main(sys.argv[1:])
-    if HELPER_DEFAULTS.get("stash") and sys.stdin.isatty():
-        # the downloaded helper, started with a double-click
-        return helper_main(HELPER_DEFAULTS["stash"], HELPER_DEFAULTS.get("apiKey", ""), pause=True)
+    argv, launched = strip_protocol_args(sys.argv[1:])
+    if argv:
+        return cli_main(argv)
+    tty = not windowless() and sys.stdin is not None and sys.stdin.isatty()
+    if HELPER_DEFAULTS.get("stash") and (launched or windowless() or tty):
+        # the downloaded helper: double-clicked, from the startup folder or the editor's Start button
+        if windowless():
+            helper_log_quietly()
+        return helper_main(HELPER_DEFAULTS["stash"], HELPER_DEFAULTS.get("apiKey", ""), pause=tty)
     return plugin_main()
 
 

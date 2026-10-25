@@ -79,7 +79,7 @@ export function trimTail(c: Clip, newEnd: number): Clip {
   return { ...c, duration: newEnd - c.start };
 }
 
-export function clipFromSnippet(s: Snippet, start: number, opts: { duration?: number; speed?: number } = {}): Clip {
+export function clipFromSnippet(s: Snippet, start: number, opts: { duration?: number; speed?: number; volume?: number } = {}): Clip {
   const speed = opts.speed ?? 1;
   return {
     id: uid("clip"),
@@ -90,7 +90,7 @@ export function clipFromSnippet(s: Snippet, start: number, opts: { duration?: nu
     duration: opts.duration ?? Math.max(EPS, (s.out - s.in) / speed),
     sourceIn: s.in,
     speed,
-    volume: 0,
+    volume: opts.volume ?? 0,
     transitionIn: null,
     fit: null,
     label: s.label,
@@ -296,6 +296,22 @@ export function updateClip(p: PmvProject, clipId: string, patch: ClipPatch): Pmv
  * One transition for every clip of the unlocked tracks. The first clip of a track keeps its own –
  * there is nothing before it to blend from (the generator leaves it a hard cut, too).
  */
+/** The same clip audio for every clip; locked tracks keep theirs. */
+export function setAllVolumes(p: PmvProject, volume: number): PmvProject {
+  const v = Math.min(2, Math.max(0, volume));
+  let changed = false;
+  const tracks = p.tracks.map((t) => {
+    if (t.locked) return t;
+    const clips = t.clips.map((c) => {
+      if (Math.abs(c.volume - v) < EPS) return c;
+      changed = true;
+      return { ...c, volume: v };
+    });
+    return { ...t, clips };
+  });
+  return changed ? { ...p, tracks } : p;
+}
+
 export function setAllTransitions(p: PmvProject, transition: Transition | null): PmvProject {
   const same = (a: Transition | null, b: Transition | null) => (a && b ? a.type === b.type && Math.abs(a.duration - b.duration) < EPS : a === b);
   let changed = false;

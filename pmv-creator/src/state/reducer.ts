@@ -9,7 +9,7 @@ import { type GenerationResult, type GeneratorSettings, applyGeneration } from "
 import type { ClipSource } from "../generator/material";
 import type { StashRef } from "../stash/types";
 import { type MaterialChange, applyMaterial } from "../generator/reroll";
-import { readAdvanced } from "./prefs";
+import { readAdvanced, readWaveforms } from "./prefs";
 import type { EffectSettings } from "../model/effects";
 import type { LayoutRange } from "../model/layouts";
 import type { AudioTrack, BeatGrid, Clip, CutTemplate, Exclusion, OutputSettings, PmvProject, Snippet, SourceMedia, TimelineMarker, Track, Transition } from "../model/project";
@@ -28,6 +28,7 @@ import {
   removeTrack,
   replaceClip,
   setAllTransitions,
+  setAllVolumes,
   setClipSource,
   setClipSpeed,
   slipClip,
@@ -39,7 +40,8 @@ import {
 } from "../timeline/ops";
 
 export type EditAction =
-  | { type: "clip/insert"; trackId: string; clip: Clip; mode: EditMode }
+  /** `sources`: the clip's scene when it is not in the project yet (a whole scene from the list) – one step. */
+  | { type: "clip/insert"; trackId: string; clip: Clip; mode: EditMode; sources?: SourceMedia[] }
   | { type: "clip/move"; clipId: string; trackId: string; start: number; mode: EditMode }
   | { type: "clip/trim"; clipId: string; edge: TrimEdge; time: number; mode: EditMode }
   | { type: "clip/slip"; clipId: string; sourceIn: number }
@@ -47,6 +49,10 @@ export type EditAction =
   | { type: "clip/update"; clipId: string; patch: ClipPatch }
   /** The same transition for every clip (the first clip of a track keeps its own). */
   | { type: "clips/transition"; transition: Transition | null }
+  /** The same clip audio for every clip (locked tracks keep theirs). */
+  | { type: "clips/volume"; volume: number }
+  /** Clip audio new clips start with. */
+  | { type: "project/clipVolume"; volume: number }
   /** Every clip of scene `from` gets scene `to` (same relative spot, places and lengths stay). */
   | { type: "scene/swap"; from: string; to: string; label: string; sources: SourceMedia[] }
   | { type: "clip/replace"; clipId: string; snippetId: string }
@@ -90,7 +96,7 @@ const addSources = (p: PmvProject, sources: SourceMedia[]): PmvProject =>
 export function applyEdit(p: PmvProject, a: EditAction): PmvProject {
   switch (a.type) {
     case "clip/insert":
-      return insertClip(p, a.trackId, a.clip, a.mode);
+      return insertClip(a.sources ? addSources(p, a.sources) : p, a.trackId, a.clip, a.mode);
     case "clip/move":
       return moveClip(p, a.clipId, a.trackId, a.start, a.mode);
     case "clip/trim":
@@ -103,6 +109,10 @@ export function applyEdit(p: PmvProject, a: EditAction): PmvProject {
       return updateClip(p, a.clipId, a.patch);
     case "clips/transition":
       return setAllTransitions(p, a.transition);
+    case "clips/volume":
+      return setAllVolumes(p, a.volume);
+    case "project/clipVolume":
+      return { ...p, clipVolume: Math.min(2, Math.max(0, a.volume)) };
     case "scene/swap": {
       const withSources = addSources(p, a.sources);
       const next = swapScene(withSources, a.from, a.to, a.label);
@@ -220,6 +230,7 @@ function coalesceKey(a: EditAction): string | null {
     case "output/update":
     case "effects/update":
     case "project/rename":
+    case "project/clipVolume":
       return a.type;
     case "layout/put":
       return `${a.type}:${a.layout.id}`;
@@ -267,6 +278,8 @@ export interface UiState {
   generator: { source?: ClipSource } | null;
   /** All settings and tools visible (off = simple mode). */
   advanced: boolean;
+  /** 〰: the clips' sound drawn over the clips on the timeline. */
+  waveforms: boolean;
   /** Open "several PMVs at once" dialog with the generator settings it starts from (null = the last used ones). */
   batch: { settings: GeneratorSettings | null } | null;
 }
@@ -311,6 +324,7 @@ export const DEFAULT_UI: UiState = {
   saveState: "saved",
   generator: null,
   advanced: readAdvanced(),
+  waveforms: readWaveforms(),
   batch: null,
 };
 
