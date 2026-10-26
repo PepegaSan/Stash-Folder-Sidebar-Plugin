@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.9-informational)
+![Version](https://img.shields.io/badge/version-0.9.10-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -620,6 +620,10 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.10
+
+- **↗ Stash opens the scene at the spot the player shows** – 0.9.9 opened it where Stash had last stopped it (its saved resume spot), because a link without a time makes Stash and Stash UI resume there and only the scene view in classic Stash sent one. Now every link carries the spot the editor knows: the scene view the player's spot (in Stash UI too), a *Project scenes* row the spot of that scene's clip in the PMV player (selected, or under the playhead), and the new **↗ Stash** next to *✎ Edit source* above the timeline the selected clip's scene at the very moment the PMV player shows
 
 ### PMV Creator 0.9.9
 

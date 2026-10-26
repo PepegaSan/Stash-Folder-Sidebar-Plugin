@@ -5,13 +5,16 @@
  */
 import React, { createContext, useState } from "react";
 import { t, tn } from "../i18n";
+import type { Clip, PmvProject } from "../model/project";
 import { SKIP_TAG } from "../stash/library";
 import { useScene } from "../stash/sceneCache";
 import { sceneTitle } from "../stash/types";
+import type { UiState } from "../state/reducer";
 import { useEditor } from "../state/store";
 import { findClip } from "../timeline/ops";
 import { anotherClip, sceneOut, skipForever } from "./clipActions";
 import { PreviewPlayer } from "./preview/PreviewPlayer";
+import { StashLink } from "./sidebar/StashLink";
 
 /** Element the scene player is portalled into; null until the monitor has mounted. */
 export const SourceHostContext = createContext<HTMLElement | null>(null);
@@ -65,6 +68,19 @@ export function SourceToggle() {
 export const clipsOfScene = (p: { tracks: Array<{ clips: Array<{ sceneId: string }> }> }, sceneId: string) => p.tracks.reduce((n, tr) => n + tr.clips.filter((c) => c.sceneId === sceneId).length, 0);
 
 /**
+ * Where a scene is in the PMV player right now, in source seconds: the selected clip of it (its spot under the
+ * playhead, else its in-point), otherwise the topmost clip of it under the playhead – null when none is there.
+ */
+export function sceneSpotInPlayer(p: PmvProject, ui: UiState, sceneId: string, time: number): number | null {
+  const inside = (c: Clip) => time >= c.start && time < c.start + c.duration;
+  const spot = (c: Clip) => c.sourceIn + (inside(c) ? (time - c.start) * c.speed : 0);
+  const sel = ui.selectedClipId ? findClip(p, ui.selectedClipId)?.clip : null;
+  if (sel && sel.sceneId === sceneId) return spot(sel);
+  for (const tr of p.tracks) for (const c of tr.clips) if (c.sceneId === sceneId && inside(c)) return spot(c);
+  return null;
+}
+
+/**
  * Next to "Edit source": replace every clip of the selected clip's scene with another scene – the scene list on
  * the left switches to picking it (see SceneBrowser). Only while that scene is in the PMV more than once.
  */
@@ -94,11 +110,11 @@ export function ReplaceAllButton() {
 }
 
 /**
- * Next to "Edit source": 🎲 another clip (N), 📌 keep it when generating again (P), ⊘ the scene out of this PMV.
- * The first and the last ask Stash for candidates of the last generator run.
+ * Next to "Edit source": 🎲 another clip (N), 📌 keep it when generating again (P), ⊘ the scene out of this PMV,
+ * ↗ the clip's scene in Stash at the spot the player shows. 🎲 and ⊘ ask Stash for candidates of the last generator run.
  */
 export function ClipActions() {
-  const { state, getState, dispatch } = useEditor();
+  const { state, getState, dispatch, transport } = useEditor();
   const ui = state.ui;
   const clip = !ui.swapFrom && ui.selectedClipId ? findClip(state.present, ui.selectedClipId)?.clip : null;
   if (!clip) return null;
@@ -129,6 +145,11 @@ export function ClipActions() {
       >
         ⊘ {t("Scene out")}
       </button>
+      <StashLink
+        sceneId={clip.sceneId}
+        at={() => sceneSpotInPlayer(getState().present, getState().ui, clip.sceneId, transport.time)}
+        title={t("This clip's scene in Stash in a new tab, at the spot the PMV player shows – add a marker there, say; the editor picks the change up when you come back")}
+      />
     </>
   );
 }

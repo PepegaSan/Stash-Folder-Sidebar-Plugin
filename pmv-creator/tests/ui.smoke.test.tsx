@@ -230,10 +230,22 @@ describe("PMV Creator UI (mocked Stash)", () => {
 
   it("links every project scene to its Stash page and fetches the scene anew on return", async () => {
     await fire(byText("Scenes")!, new MouseEvent("click", { bubbles: true }));
-    const row = $$(".pmv-list-item").find((li) => li.textContent?.includes("Scene One"))!;
-    const link = row.querySelector("a") as HTMLAnchorElement;
+    // a selected clip gives the link its spot: c1 (source in 5 s) – from the row and from the bar above the timeline
+    const v1Lane = $$(".pmv-lane[data-track-id]")[1];
+    const c1 = Array.from(v1Lane.querySelectorAll<HTMLElement>(".pmv-clip")).find((el) => el.style.left === "0px" && el.title.includes("(2.000 s)"))!;
+    await fire(c1, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await fire(window, new MouseEvent("pointerup", { bubbles: true }));
+    const barLink = $(".pmv-tl-toolbar a") as HTMLAnchorElement;
+    expect(barLink.textContent?.trim()).toBe("↗ Stash");
+    expect(barLink.getAttribute("href")).toMatch(/\/scenes\/1\?t=5$/);
+    const row = () => $$(".pmv-list-item").find((li) => li.textContent?.includes("Scene One"))!;
+    expect(row().querySelector("a")!.getAttribute("href")).toMatch(/\/scenes\/1\?t=5$/);
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect($(".pmv-tl-toolbar a")).toBeNull();
+    const link = row().querySelector("a") as HTMLAnchorElement;
     expect(link.textContent?.trim()).toBe("↗ Stash");
-    expect(link.getAttribute("href")).toMatch(/\/scenes\/1$/);
+    // no clip selected: the spot of a clip under the playhead, or none
+    expect(link.getAttribute("href")).toMatch(/\/scenes\/1(\?t=\d+(\.\d)?)?$/);
     expect(link.target).toBe("_blank");
     const fetchesOfScene1 = () =>
       (fetch as any).mock.calls.filter((c: any[]) => {

@@ -10,7 +10,7 @@ import { useEditor } from "../../state/store";
 import { formatTime } from "../../timeline/time";
 import { RefPicker } from "../common";
 import { endSnippetDrag, startSceneDrag, wholeSceneAction } from "../editing";
-import { clipsOfScene } from "../monitor";
+import { clipsOfScene, sceneSpotInPlayer } from "../monitor";
 import { StashLink } from "./StashLink";
 
 const PER_PAGE = 30;
@@ -161,7 +161,11 @@ export function SceneBrowser() {
                 {!swapFrom && (
                   <div className="pmv-li-actions is-col">
                     {timelineButton(s)}
-                    <StashLink sceneId={s.sceneId} />
+                    <StashLink
+                      sceneId={s.sceneId}
+                      at={() => sceneSpotInPlayer(project, state.ui, s.sceneId, transport.time)}
+                      title={t("The scene's page in Stash in a new tab – at the spot of its clip in the PMV player when one is selected or lies under the playhead; add a marker there, say; the editor picks the change up when you come back")}
+                    />
                   </div>
                 )}
                 {!isSourceUsed(project, s.sceneId) && (

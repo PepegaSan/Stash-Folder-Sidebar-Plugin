@@ -21,6 +21,12 @@ export interface Host {
   topOffset: () => number;
 }
 
+/** ?t=<seconds> of a scene link: both hosts start their player there instead of the saved resume spot; one decimal is enough. */
+const timeParam = (at?: number): string => {
+  const sec = Math.round((at ?? 0) * 10) / 10;
+  return sec > 0 ? `?t=${sec}` : "";
+};
+
 export function classicHost(): Host {
   return {
     kind: "classic",
@@ -36,10 +42,7 @@ export function classicHost(): Host {
       keys.forEach((k) => url.searchParams.delete(k));
       window.history.replaceState(window.history.state, "", url.toString());
     },
-    sceneHref: (id, at) => {
-      const sec = Math.floor(at ?? 0);
-      return stashUrl(`scenes/${id}${sec > 0 ? `?t=${sec}` : ""}`);
-    },
+    sceneHref: (id, at) => stashUrl(`scenes/${id}${timeParam(at)}`),
     topOffset: () => Math.round(document.querySelector(".navbar.fixed-top")?.getBoundingClientRect().bottom ?? 50),
   };
 }
@@ -52,7 +55,7 @@ export function stashuiHost(query: URLSearchParams): Host {
     query,
     setProjectParam: null,
     clearQueryParams: null,
-    sceneHref: (id) => stashUrl(`${STASHUI_APP.replace(/^\//, "")}#/scene/${id}`),
+    sceneHref: (id, at) => stashUrl(`${STASHUI_APP.replace(/^\//, "")}#/scene/${id}${timeParam(at)}`),
     topOffset: () => 0,
   };
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.10 (2026-10-26)
+
+- **↗ Stash opens the scene at the spot the player shows.** In 0.9.9 the scene came up where Stash had last stopped it (its saved resume spot), not where the editor was: a link without a time makes both Stash and Stash UI resume there, and only the scene view in classic Stash sent one. Now every link carries the spot the editor knows – from the scene view the player's spot (in Stash UI too), from a *Project scenes* row the spot of that scene's clip in the PMV player when one is selected or lies under the playhead, and the new **↗ Stash** next to *✎ Edit source* above the timeline takes the selected clip's scene at the very moment the PMV player shows. Only a scene none of whose clips is at the playhead still opens where Stash stopped it last.
+
 ## 0.9.9 (2026-10-26)
 
 - **↗ Stash** (asked for in the forum): every row under *Project scenes* has a second labelled button that opens the scene's page in Stash in a new tab – to add a marker you found while editing, say. The scene view has the same link next to *← back*, and from there the scene opens at the spot its player is at (classic Stash). When you come back to the editor the scene is fetched anew, so the new marker is there without a reload; **↻ Reload** next to it does the same by hand and now keeps the player where it is instead of starting the scene view over.

@@ -686,6 +686,8 @@ const de: Record<string, string> = {
   // --- ui/sidebar/StashLink.tsx
   "The scene's page in Stash in a new tab – add a marker there, say; the editor picks the change up when you come back": "Die Seite der Szene in Stash in einem neuen Tab – etwa um dort einen Marker zu setzen; kommst du zurück, holt sich der Editor die Änderung",
   "The scene's page in Stash in a new tab, at this spot – add a marker there, say; the editor picks the change up when you come back": "Die Seite der Szene in Stash in einem neuen Tab, an dieser Stelle – etwa um dort einen Marker zu setzen; kommst du zurück, holt sich der Editor die Änderung",
+  "The scene's page in Stash in a new tab – at the spot of its clip in the PMV player when one is selected or lies under the playhead; add a marker there, say; the editor picks the change up when you come back": "Die Seite der Szene in Stash in einem neuen Tab – an der Stelle ihres Clips im PMV-Player, wenn einer gewählt ist oder am Playhead liegt; etwa um dort einen Marker zu setzen; kommst du zurück, holt sich der Editor die Änderung",
+  "This clip's scene in Stash in a new tab, at the spot the PMV player shows – add a marker there, say; the editor picks the change up when you come back": "Die Szene dieses Clips in Stash in einem neuen Tab, an der Stelle, die der PMV-Player zeigt – etwa um dort einen Marker zu setzen; kommst du zurück, holt sich der Editor die Änderung",
 
   // --- ui/sidebar/BinPanel.tsx
   "Drag: onto the timeline · double-click: open in the scene": "Ziehen: auf die Timeline · Doppelklick: in der Szene öffnen",
