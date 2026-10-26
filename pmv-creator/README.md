@@ -103,7 +103,7 @@ Edit modes (toolbar): **Snap to neighbours** (clips stop at their neighbours, de
 | Previous / next cut (selects the clip, plays from a second before it) | [ ] or ↑ ↓ |
 | Delete · ripple delete | Del · Shift+Del |
 | Remove the selected split screen (back to full screen there) | Del |
-| Timeline marker | M (double-click in the ruler removes it) |
+| Timeline marker at the playhead – and away again | M, or **◆ Timeline marker** above the timeline (*Advanced*); on a marker both say **◆ Remove marker** (a double-click on the glyph in the ruler removes it too). A note for yourself that goes into the OTIO export, not a Stash marker |
 | Undo / redo | Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) |
 | Zoom | Ctrl+wheel, + / − · wheel = scroll horizontally |
 

@@ -1076,6 +1076,7 @@
 .pmv-ruler-marker {
   position: absolute;
   top: 0;
+  padding: 0 4px; /* a wider target than the glyph itself */
   color: var(--pmv-warn);
   cursor: pointer;
   transform: translateX(-50%);

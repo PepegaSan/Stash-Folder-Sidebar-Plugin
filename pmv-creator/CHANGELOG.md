@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.11 (2026-10-26)
+
+- **Timeline markers can be removed in plain sight.** The ◆ button above the timeline (*Advanced*) is **◆ Timeline marker** now and, as soon as the playhead sits on a marker (a click on its glyph in the ruler puts it there), **◆ Remove marker**; the key **M** toggles the same way. Until now only a precise double-click on the tiny glyph removed one, and its tooltip was the only place that said so. The tooltip also says what these markers are: a note for yourself in the ruler that goes into the OTIO export – not a Stash marker (that is what **↗ Stash** is for).
+
 ## 0.9.10 (2026-10-26)
 
 - **↗ Stash opens the scene at the spot the player shows.** In 0.9.9 the scene came up where Stash had last stopped it (its saved resume spot), not where the editor was: a link without a time makes both Stash and Stash UI resume there, and only the scene view in classic Stash sent one. Now every link carries the spot the editor knows – from the scene view the player's spot (in Stash UI too), from a *Project scenes* row the spot of that scene's clip in the PMV player when one is selected or lies under the playhead, and the new **↗ Stash** next to *✎ Edit source* above the timeline takes the selected clip's scene at the very moment the PMV player shows. Only a scene none of whose clips is at the playhead still opens where Stash stopped it last.

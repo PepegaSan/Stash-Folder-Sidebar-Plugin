@@ -103,7 +103,7 @@ Bearbeitungsmodi (Toolbar): **An Nachbarn stoppen** (Standard) · **Ripple** (Fo
 | Vorheriger / nächster Schnitt (wählt den Clip, spielt ab einer Sekunde davor) | [ ] oder ↑ ↓ |
 | Löschen · Ripple-Löschen | Entf · Shift+Entf |
 | Gewählten Split-Screen entfernen (dort wieder Vollbild) | Entf |
-| Timeline-Marker | M (Doppelklick im Lineal entfernt ihn) |
+| Timeline-Marke am Playhead – und wieder weg | M oder **◆ Timeline-Marke** über der Timeline (*Erweitert*); auf einer Marke heißen beide **◆ Marke entfernen** (Doppelklick auf das Symbol im Lineal entfernt sie auch). Eine Notiz für dich, die in den OTIO-Export mitgeht, kein Stash-Marker |
 | Undo / Redo | Strg+Z / Strg+Y (Strg+Shift+Z) |
 | Zoom | Strg+Mausrad, + / − · Mausrad = horizontal scrollen |
 

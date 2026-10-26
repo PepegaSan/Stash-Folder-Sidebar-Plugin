@@ -269,6 +269,30 @@ describe("PMV Creator UI (mocked Stash)", () => {
     expect(fetchesOfScene1()).toBe(before + 1);
   });
 
+  it("sets a timeline marker with the ◆ button and removes it with the same button or M", async () => {
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    const advanced = $$(".pmv-adv input[type=checkbox]")[0] as HTMLInputElement;
+    expect(advanced).toBeTruthy();
+    const wasAdvanced = advanced.checked;
+    if (!wasAdvanced) await fire(advanced, new MouseEvent("click", { bubbles: true }));
+    const marks = () => $$(".pmv-ruler-marker").length;
+    const before = marks();
+    const add = byText("◆ Timeline marker")!;
+    expect(add).toBeTruthy();
+    await fire(add, new MouseEvent("click", { bubbles: true }));
+    expect(marks()).toBe(before + 1);
+    // the playhead sits on the new marker: the same button now removes it
+    await waitFor(() => !!byText("◆ Remove marker"));
+    await fire(byText("◆ Remove marker")!, new MouseEvent("click", { bubbles: true }));
+    expect(marks()).toBe(before);
+    // key M toggles the same way
+    await fire(document.body, new KeyboardEvent("keydown", { key: "m", bubbles: true }));
+    expect(marks()).toBe(before + 1);
+    await fire(document.body, new KeyboardEvent("keydown", { key: "m", bubbles: true }));
+    expect(marks()).toBe(before);
+    if (!wasAdvanced) await fire(advanced, new MouseEvent("click", { bubbles: true }));
+  });
+
   it("drills into a scene and picks a marker", async () => {
     await fire(byText("Scenes")!, new MouseEvent("click", { bubbles: true }));
     await fire($$(".pmv-list-item")[0], new MouseEvent("click", { bubbles: true }));

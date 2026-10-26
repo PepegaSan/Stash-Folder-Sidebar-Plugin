@@ -262,7 +262,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
         [t("Previous / next cut: select the clip, play from a second before it"), t("[ ] or ↑ ↓ · ⏮ ⏭ above the timeline")],
         [t("Delete · ripple delete"), t("Del · Shift+Del")],
         [t("Remove the selected split screen (back to full screen there)"), t("Del")],
-        [t("Timeline marker"), t("M (double-click in the ruler removes it)")],
+        [t("Timeline marker"), t("M or ◆ above the timeline – on a marker both remove it (a double-click on the glyph does too)")],
         [t("Clear selection"), "Esc"],
         [t("Undo / redo"), t("Ctrl+Z / Ctrl+Y")],
         [t("Zoom"), t("Ctrl+wheel, + / − · wheel = scroll horizontally")],

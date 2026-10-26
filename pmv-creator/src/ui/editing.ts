@@ -7,6 +7,15 @@ import { clipFromSnippet, findClip } from "../timeline/ops";
 import { type SnapOptions, beatLength } from "../timeline/time";
 import type { EditAction } from "../state/reducer";
 
+/** The timeline marker at this time (within a frame or two), if any. */
+export const markerAt = (p: PmvProject, time: number) => p.markers.find((m) => Math.abs(m.time - time) < 0.05) ?? null;
+
+/** ◆ and key M toggle: a marker at the playhead goes away, otherwise a new one (M1, M2 …) is set there. */
+export function toggleMarkerAction(p: PmvProject, time: number): EditAction {
+  const hit = markerAt(p, time);
+  return hit ? { type: "marker/remove", markerId: hit.id } : { type: "marker/add", marker: { id: uid("mrk"), time, label: `M${p.markers.length + 1}` } };
+}
+
 /** Track of the selected clip, otherwise the bottom-most unlocked track (V1). */
 export function targetTrackId(p: PmvProject, selectedClipId: string | null): string | null {
   if (selectedClipId) {

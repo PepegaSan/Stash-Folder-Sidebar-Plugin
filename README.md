@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.10-informational)
+![Version](https://img.shields.io/badge/version-0.9.11-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -620,6 +620,10 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.11
+
+- **Timeline markers can be removed in plain sight**: the ◆ button above the timeline (*Advanced*) is **◆ Timeline marker** and, with the playhead on a marker (a click on its glyph in the ruler puts it there), **◆ Remove marker**; the key **M** toggles the same way. Until now only a precise double-click on the tiny glyph removed one. The tooltip says what these markers are: a note for yourself in the ruler that goes into the OTIO export – not a Stash marker (that is what **↗ Stash** is for)
 
 ### PMV Creator 0.9.10
 

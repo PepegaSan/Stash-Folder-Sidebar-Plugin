@@ -3,7 +3,6 @@ import { sceneToSource } from "../culling/culling";
 import { type Host, HostProvider, classicHost, useHost } from "../host";
 import { detectLang, t } from "../i18n";
 import { gql } from "../stash/graphql";
-import { uid } from "../model/ids";
 import { type SourceMedia, createProject, projectDuration } from "../model/project";
 import { fetchScenes, performerRef, tagRef } from "../stash/queries";
 import { primeScenes } from "../stash/sceneCache";
@@ -11,6 +10,7 @@ import { EditorProvider, useEditor } from "../state/store";
 import { findClip } from "../timeline/ops";
 import { clamp } from "../timeline/time";
 import { anotherClip } from "./clipActions";
+import { toggleMarkerAction } from "./editing";
 import { GeneratorDialog } from "./generator/GeneratorDialog";
 import { Inspector } from "./Inspector";
 import { BatchDialog } from "./BatchDialog";
@@ -182,7 +182,7 @@ function useShortcuts() {
             break;
           }
           case "m":
-            dispatch({ type: "marker/add", marker: { id: uid("mrk"), time: transport.time, label: `M${p.markers.length + 1}` } });
+            dispatch(toggleMarkerAction(p, transport.time));
             break;
           case "[":
           case "]":

@@ -17,7 +17,7 @@ import { clipFromSnippet, findClip } from "../../timeline/ops";
 import { EPS, beatLength, clamp, formatBarBeat, formatTime, nearestGridTime, snapRange, snapTime } from "../../timeline/time";
 import { SpriteThumb, sceneHue, transitionLabel } from "../common";
 import { ClipActions, ClipNotice, ReplaceAllButton, SourceToggle } from "../monitor";
-import { currentSnippetDrag, dropDuration, endSnippetDrag, snapOptions, wholeSceneAction } from "../editing";
+import { currentSnippetDrag, dropDuration, endSnippetDrag, markerAt, snapOptions, toggleMarkerAction, wholeSceneAction } from "../editing";
 import { rememberWaveforms } from "../../state/prefs";
 import { peaksProgress, usePeaksVersion } from "../peaks";
 import { ClipWaves } from "./ClipWaves";
@@ -351,8 +351,16 @@ export function Timeline() {
         <span className="pmv-spacer" />
         {ui.advanced && (
           <>
-            <button className="btn btn-sm btn-secondary" title={t("Timeline marker at the playhead")} onClick={() => dispatch({ type: "marker/add", marker: { id: uid("mrk"), time: transport.time, label: `M${project.markers.length + 1}` } })}>
-              ◆ {t("Marker")}
+            <button
+              className="btn btn-sm btn-secondary"
+              title={
+                markerAt(project, now)
+                  ? t("Removes the timeline marker at the playhead (M)")
+                  : t("Timeline marker at the playhead – a note for yourself in the ruler (a click there jumps to it) that goes into the OTIO export; not a Stash marker. On a marker the button removes it (M)")
+              }
+              onClick={() => dispatch(toggleMarkerAction(project, transport.time))}
+            >
+              ◆ {markerAt(project, now) ? t("Remove marker") : t("Timeline marker")}
             </button>
             <button className="btn btn-sm btn-secondary" onClick={() => dispatch({ type: "track/add" })}>
               + {t("Track")}
@@ -430,7 +438,7 @@ export function Timeline() {
                   key={m.id}
                   className="pmv-ruler-marker"
                   style={{ left: m.time * zoom }}
-                  title={t("{label} – double-click removes it", { label: m.label })}
+                  title={t("{label} – click: jump there, then “◆ Remove marker” above the timeline takes it away (a double-click here does too)", { label: m.label })}
                   onPointerDown={(e) => {
                     e.stopPropagation();
                     transport.seek(m.time);
