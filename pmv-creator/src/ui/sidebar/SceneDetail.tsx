@@ -13,13 +13,12 @@ import {
   snippetFromMarker,
   snippetFromRange,
 } from "../../culling/culling";
-import { useHost } from "../../host";
 import { t, tn } from "../../i18n";
 import { clipEnd } from "../../model/project";
 import { probeKeyframes } from "../../stash/backend";
 import { stashUrl } from "../../stash/graphql";
 import { SKIP_TAG } from "../../stash/library";
-import { invalidateScene, useScene } from "../../stash/sceneCache";
+import { refreshScenes, useScene } from "../../stash/sceneCache";
 import { VideoSlot, onStreamChange } from "../../stash/streams";
 import { type StashMarker, type StashScene, markerLabel, sceneTitle } from "../../stash/types";
 import { useEditor } from "../../state/store";
@@ -32,6 +31,7 @@ import { useListen, useSprites } from "../hooks";
 import { LocalMediaBadge } from "../localMedia";
 import { SourceHostContext, sourceKeys } from "../monitor";
 import { ScrubWave, WaveButton } from "./SceneWave";
+import { StashLink } from "./StashLink";
 
 const nearest = (list: number[], x: number) => list.reduce((best, v) => (Math.abs(v - x) < Math.abs(best - x) ? v : best), list[0] ?? x);
 
@@ -53,7 +53,6 @@ export function SceneDetail({ sceneId, onBack }: { sceneId: string; onBack: () =
 
 function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => void }) {
   const { state, dispatch, transport, backend } = useEditor();
-  const host = useHost();
   const monitorEl = useContext(SourceHostContext);
   const project = state.present;
   const ui = state.ui;
@@ -458,11 +457,9 @@ function SceneDetailView({ scene, onBack }: { scene: StashScene; onBack: () => v
         <button className="btn btn-sm btn-link" onClick={onBack}>
           ← {t("back")}
         </button>
-        <a className="btn btn-sm btn-link" href={host.sceneHref(scene.id)} target="_blank" rel="noreferrer" title={host.kind === "stashui" ? t("Open in Stash UI") : t("Open in Stash")}>
-          ↗
-        </a>
-        <button className="btn btn-sm btn-link" title={t("Reload (e.g. after changing markers in Stash)")} onClick={() => invalidateScene(scene.id)}>
-          ↻
+        <StashLink sceneId={scene.id} at={time} className="btn btn-sm btn-link" />
+        <button className="btn btn-sm btn-link" title={t("Reload (e.g. after changing markers in Stash)")} onClick={() => void refreshScenes([scene.id]).catch(() => undefined)}>
+          ↻ {t("Reload")}
         </button>
       </div>
       <div className="pmv-li-title">{sceneTitle(scene)}</div>

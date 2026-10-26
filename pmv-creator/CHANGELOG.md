@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.9 (2026-10-26)
+
+- **↗ Stash** (asked for in the forum): every row under *Project scenes* has a second labelled button that opens the scene's page in Stash in a new tab – to add a marker you found while editing, say. The scene view has the same link next to *← back*, and from there the scene opens at the spot its player is at (classic Stash). When you come back to the editor the scene is fetched anew, so the new marker is there without a reload; **↻ Reload** next to it does the same by hand and now keeps the player where it is instead of starting the scene view over.
+
 ## 0.9.8 (2026-10-25)
 
 - **Fix: the preview stood still for a clip or two** – a scene played, the next one or two showed only its last picture, then it went on. Since 0.9.6 the preview has eight players (for the split screens), and every one kept its connection after its clip: a stream from the PC helper until the player was used again, a file from Stash for some 17 seconds. The browser allows six connections to a host, so the clips coming up waited for one – a second, sometimes three – and the last picture was held meanwhile (measured: the same waits whether the helper allowed 6 or 20 streams, so it was the browser's limit, for Stash files and helper streams alike). Now a player gives up its connection as soon as its clip is over (a helper stream is cut off, its picture and buffer stay; a Stash file is let go – the browser closes its connection only for a new source), only the last picture and the clip just over stay open (a jump back with ⏮ or the review keys is still a seek, not a reload), the preview keeps at most four connections to Stash for the players on screen and the clips loaded ahead (as in 0.9.3, where that was measured), and a helper that answers “busy” is asked again instead of that scene coming from Stash for the rest of the session.

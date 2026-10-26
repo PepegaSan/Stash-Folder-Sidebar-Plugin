@@ -11,6 +11,7 @@ import { formatTime } from "../../timeline/time";
 import { RefPicker } from "../common";
 import { endSnippetDrag, startSceneDrag, wholeSceneAction } from "../editing";
 import { clipsOfScene } from "../monitor";
+import { StashLink } from "./StashLink";
 
 const PER_PAGE = 30;
 
@@ -157,7 +158,12 @@ export function SceneBrowser() {
                     {project.bin.some((b) => b.sceneId === s.sceneId) && ` · ${tn(project.bin.filter((b) => b.sceneId === s.sceneId).length, "{n} clips", "1 clip")}`}
                   </div>
                 </div>
-                {!swapFrom && timelineButton(s)}
+                {!swapFrom && (
+                  <div className="pmv-li-actions is-col">
+                    {timelineButton(s)}
+                    <StashLink sceneId={s.sceneId} />
+                  </div>
+                )}
                 {!isSourceUsed(project, s.sceneId) && (
                   <button
                     className="btn btn-sm btn-link"

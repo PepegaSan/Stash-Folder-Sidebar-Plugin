@@ -24,6 +24,23 @@ export function invalidateScene(id: string): void {
   void ensureScenes([id]);
 }
 
+/**
+ * Fetch these scenes again and swap them in place: the old ones stay in view until the new ones are there
+ * (no "Loading…", the scene view keeps its spot), a scene Stash no longer knows becomes unknown.
+ */
+export async function refreshScenes(ids: string[]): Promise<void> {
+  const want = [...new Set(ids)];
+  if (!want.length) return;
+  const found = await fetchScenes(want);
+  const got = new Set(found.map((s) => s.id));
+  for (const id of want) {
+    if (got.has(id)) continue;
+    cache.delete(id);
+    unknown.add(id);
+  }
+  primeScenes(found);
+}
+
 export const isUnknownScene = (id: string) => unknown.has(id);
 
 export async function ensureScenes(ids: string[]): Promise<void> {

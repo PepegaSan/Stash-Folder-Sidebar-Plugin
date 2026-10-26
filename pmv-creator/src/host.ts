@@ -15,8 +15,8 @@ export interface Host {
   setProjectParam: ((id: string) => void) | null;
   /** Drop consumed deep-link params from the address bar. */
   clearQueryParams: ((keys: string[]) => void) | null;
-  /** Link that opens a scene in the host's own UI (new tab). */
-  sceneHref: (sceneId: string) => string;
+  /** Link that opens a scene in the host's own UI (new tab); `at` = seconds into the scene where its player should start (classic Stash's ?t=). */
+  sceneHref: (sceneId: string, at?: number) => string;
   /** Top edge of the editor (classic: below Stash's fixed navbar). */
   topOffset: () => number;
 }
@@ -36,7 +36,10 @@ export function classicHost(): Host {
       keys.forEach((k) => url.searchParams.delete(k));
       window.history.replaceState(window.history.state, "", url.toString());
     },
-    sceneHref: (id) => stashUrl(`scenes/${id}`),
+    sceneHref: (id, at) => {
+      const sec = Math.floor(at ?? 0);
+      return stashUrl(`scenes/${id}${sec > 0 ? `?t=${sec}` : ""}`);
+    },
     topOffset: () => Math.round(document.querySelector(".navbar.fixed-top")?.getBoundingClientRect().bottom ?? 50),
   };
 }

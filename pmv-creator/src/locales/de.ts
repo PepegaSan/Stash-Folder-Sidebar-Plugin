@@ -597,9 +597,9 @@ const de: Record<string, string> = {
   "Loading scene…": "Szene wird geladen…",
   "loading…": "lade…",
   "{n} keyframes": "{n} Keyframes",
-  "Open in Stash UI": "In Stash UI öffnen",
   "Open in Stash": "In Stash öffnen",
   "Reload (e.g. after changing markers in Stash)": "Neu laden (z. B. nach Marker-Änderungen in Stash)",
+  Reload: "Neu laden",
   "Click/drag: scrub · Shift+drag: pick a range": "Klick/Ziehen: scrubben · Shift+Ziehen: Bereich wählen",
   "Selected clip – drag: another part, its place on the timeline stays": "Gewählter Clip – Ziehen: anderer Teil, der Platz auf der Timeline bleibt",
   Sound: "Ton",
@@ -682,6 +682,10 @@ const de: Record<string, string> = {
   "Whole scene onto the timeline": "Ganze Szene auf die Timeline",
   "or pick a part: I/O or Shift+drag under the player": "oder einen Teil wählen: I/O oder Shift+Ziehen unter dem Player",
   "Page {page} / {pages}": "Seite {page} / {pages}",
+
+  // --- ui/sidebar/StashLink.tsx
+  "The scene's page in Stash in a new tab – add a marker there, say; the editor picks the change up when you come back": "Die Seite der Szene in Stash in einem neuen Tab – etwa um dort einen Marker zu setzen; kommst du zurück, holt sich der Editor die Änderung",
+  "The scene's page in Stash in a new tab, at this spot – add a marker there, say; the editor picks the change up when you come back": "Die Seite der Szene in Stash in einem neuen Tab, an dieser Stelle – etwa um dort einen Marker zu setzen; kommst du zurück, holt sich der Editor die Änderung",
 
   // --- ui/sidebar/BinPanel.tsx
   "Drag: onto the timeline · double-click: open in the scene": "Ziehen: auf die Timeline · Doppelklick: in der Szene öffnen",

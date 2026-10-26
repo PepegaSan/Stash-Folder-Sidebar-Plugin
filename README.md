@@ -574,7 +574,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.8-informational)
+![Version](https://img.shields.io/badge/version-0.9.9-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -620,6 +620,10 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.9
+
+- **↗ Stash** (asked for in the forum): every row under *Project scenes* has a second labelled button that opens the scene's page in Stash in a new tab – to add a marker you found while editing, say. The scene view has the same link next to *← back*, and from there the scene opens at the spot its player is at (classic Stash). Back in the editor the scene is fetched anew, so the new marker is there without a reload; **↻ Reload** next to it does the same by hand and keeps the player where it is
 
 ### PMV Creator 0.9.8
 

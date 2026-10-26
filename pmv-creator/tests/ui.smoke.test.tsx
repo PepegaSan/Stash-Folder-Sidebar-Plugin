@@ -228,6 +228,35 @@ describe("PMV Creator UI (mocked Stash)", () => {
     expect($$(".pmv-clip")).toHaveLength(4);
   });
 
+  it("links every project scene to its Stash page and fetches the scene anew on return", async () => {
+    await fire(byText("Scenes")!, new MouseEvent("click", { bubbles: true }));
+    const row = $$(".pmv-list-item").find((li) => li.textContent?.includes("Scene One"))!;
+    const link = row.querySelector("a") as HTMLAnchorElement;
+    expect(link.textContent?.trim()).toBe("↗ Stash");
+    expect(link.getAttribute("href")).toMatch(/\/scenes\/1$/);
+    expect(link.target).toBe("_blank");
+    const fetchesOfScene1 = () =>
+      (fetch as any).mock.calls.filter((c: any[]) => {
+        const body = typeof c[1]?.body === "string" ? JSON.parse(c[1].body) : null;
+        return body?.query?.includes("findScenes") && body.variables?.ids?.join() === "1";
+      }).length;
+    const before = fetchesOfScene1();
+    // the browser would open the tab – jsdom must not try to navigate
+    window.addEventListener("click", (e) => e.preventDefault(), { capture: true, once: true });
+    await fire(link, new MouseEvent("click", { bubbles: true, cancelable: true }));
+    // the row's own click (open the scene view) does not fire, nothing is fetched yet
+    expect(container.textContent).toContain("Project scenes");
+    expect(fetchesOfScene1()).toBe(before);
+    // back in the editor: the scene (with its new markers) is fetched again, once
+    await fire(window, new Event("focus"));
+    await waitFor(() => fetchesOfScene1() === before + 1);
+    await fire(window, new Event("focus"));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(fetchesOfScene1()).toBe(before + 1);
+  });
+
   it("drills into a scene and picks a marker", async () => {
     await fire(byText("Scenes")!, new MouseEvent("click", { bubbles: true }));
     await fire($$(".pmv-list-item")[0], new MouseEvent("click", { bubbles: true }));

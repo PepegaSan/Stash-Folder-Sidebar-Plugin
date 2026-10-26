@@ -58,7 +58,7 @@ try:
 except ImportError:  # pragma: no cover
     audioop = None  # type: ignore[assignment]
 
-VERSION = "0.9.8"
+VERSION = "0.9.9"
 PLUGIN_ID = "pmv-creator"
 PLAN_VERSION = 1
 # Bump when piece_command() changes, invalidates cached pieces.
