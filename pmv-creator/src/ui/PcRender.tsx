@@ -1,12 +1,11 @@
 /**
  * "Render on my PC" (opt-in): pick a connected render helper, its output folder and optional path mappings;
- * without a helper, offer it for download (one .py file with the Stash address filled in).
+ * always offer a fresh helper download, including while a helper is connected.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { type HelperConfig, type HelperMapping, type RenderHelper, helperScript, listHelpers, quitHelper, setHelperConfig } from "../stash/backend";
 import { More } from "./common";
-import { downloadText } from "./download";
 
 const LS_HELPER = "pmv-creator:render-helper";
 
@@ -70,17 +69,64 @@ export function launchHelper(): void {
  * The helper file with the Stash address (and an API key for a Stash with a login) filled in: a .pyw runs without
  * a window (pythonw); the .py shows a console – for troubleshooting.
  */
-function useHelperDownload() {
-  const [status, setStatus] = useState<string | null>(null);
+function HelperDownload({ connected }: { connected: boolean }) {
+  const [apiKey, setApiKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [file, setFile] = useState<{ url: string; name: string } | null>(null);
+  const request = useRef(0);
+  const pending = useRef(false);
+  // Keep the file available for a real link click if the browser blocks the automatic download.
+  useEffect(() => () => { if (file) URL.revokeObjectURL(file.url); }, [file]);
+  useEffect(() => () => { request.current++; }, []);
   const download = async (apiKey: string, withWindow = false) => {
+    if (pending.current) return;
+    pending.current = true;
+    const id = ++request.current;
+    setBusy(true);
+    setError(null);
+    setFile(null);
     try {
-      downloadText(withWindow ? "pmv-render-helper.py" : "pmv-render-helper.pyw", await helperScript(apiKey), "text/x-python");
-      setStatus(withWindow ? t("Downloaded – start it with a double-click; its window shows what it does.") : t("Downloaded – start it once with a double-click: it runs without a window and shows up here within a few seconds."));
+      const script = await helperScript(apiKey);
+      if (id !== request.current) return;
+      const next = { url: URL.createObjectURL(new Blob([script], { type: "text/x-python;charset=utf-8" })), name: withWindow ? "pmv-render-helper.py" : "pmv-render-helper.pyw" };
+      setFile(next);
+      const a = document.createElement("a");
+      a.href = next.url;
+      a.download = next.name;
+      document.body.appendChild(a);
+      try { a.click(); } finally { a.remove(); }
     } catch (e) {
-      setStatus(t("Error: {error}", { error: String(e) }));
+      if (id === request.current) setError(t("Error: {error}", { error: String(e) }));
+    } finally {
+      if (id === request.current) {
+        pending.current = false;
+        setBusy(false);
+      }
     }
   };
-  return { download, status };
+  return (
+    <div className="pmv-helper-download">
+      <div className="pmv-row pmv-wrap">
+        <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => void download(apiKey)}>
+          ⬇ {busy ? t("Preparing download…") : file || connected ? t("Download render helper again") : t("Download render helper")}
+        </button>
+        <button className="btn btn-sm btn-link" disabled={busy} onClick={() => void download(apiKey, true)}>
+          {t("with a window (.py, for troubleshooting)")}
+        </button>
+      </div>
+      {file && <div className="pmv-li-meta" role="status">
+        {t("Download requested. If no file appeared in your downloads, use this link:")}{" "}
+        <a href={file.url} download={file.name}>{t("Save helper file again")} ({file.name})</a>
+      </div>}
+      {error && <div className="pmv-error" role="alert">{error}</div>}
+      {connected && <div className="pmv-li-meta">{t("To use the new file, quit the connected helper first, wait until it is offline, then start the downloaded file.")}</div>}
+      <More label={t("Stash with a login?")}>
+        <div className="pmv-li-meta">{t("Then the helper needs an API key (Stash: Settings → Security). It is written into the downloaded file.")}</div>
+        <input className="form-control form-control-sm" type="password" autoComplete="off" value={apiKey} disabled={busy} placeholder={t("API key")} onChange={(e) => { setApiKey(e.target.value); setFile(null); }} onKeyDown={(e) => e.stopPropagation()} />
+      </More>
+    </div>
+  );
 }
 
 /** ⏹ for the connected helper: it quits after its next check-in (and after a render that is running). */
@@ -141,11 +187,9 @@ export function PcRender({ onHelper, disabled, needs }: { onHelper: (id: string 
   const current = online.find((h) => h.id === picked) ?? online[0] ?? null;
   useEffect(() => onHelper(current?.id ?? null, current?.name ?? null), [current?.id]);
 
-  if (!helpers) return <div className="pmv-li-meta">{error ?? t("Loading…")}</div>;
-
   return (
     <div className="pmv-pc">
-      {current ? (
+      {!helpers ? <div className="pmv-li-meta">{t("Loading…")}</div> : current ? (
         <>
           <div className="pmv-row pmv-wrap">
             {online.length > 1 ? (
@@ -179,6 +223,7 @@ export function PcRender({ onHelper, disabled, needs }: { onHelper: (id: string 
         <HelperSetup known={helpers} />
       )}
       {error && <div className="pmv-error">{error}</div>}
+      <HelperDownload connected={!!current} />
     </div>
   );
 }
@@ -242,8 +287,6 @@ function HelperSettings({ helper, disabled }: { helper: RenderHelper; disabled: 
 
 /** An older helper misses something this render needs (the oldest missing thing is named): offer the new one. */
 function OutdatedHelper({ version, needs }: { version?: string; needs: HelperNeed }) {
-  const [apiKey, setApiKey] = useState("");
-  const { download, status } = useHelperDownload();
   const v = { version: version ?? "?" };
   return (
     <div className="pmv-error">
@@ -253,21 +296,12 @@ function OutdatedHelper({ version, needs }: { version?: string; needs: HelperNee
         : needs.split && olderVersion(version, HELPER_FOR_SPLIT)
           ? t("The helper on this PC ({version}) can't render split screens yet. Download it again, close the old window and start the new file:", v)
           : t("The helper on this PC ({version}) fails with FFmpeg 8 (“Unrecognized option 'filter_complex_script'”). Download it again, close the old window and start the new file:", v)}
-      <div className="pmv-row">
-        <button className="btn btn-sm btn-primary" onClick={() => void download(apiKey)}>
-          ⬇ {t("Download render helper")}
-        </button>
-        <input className="form-control form-control-sm" value={apiKey} placeholder={t("API key (only for a Stash with a login)")} onChange={(e) => setApiKey(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
-      </div>
-      {status && <div className="pmv-li-meta">{status}</div>}
     </div>
   );
 }
 
 function HelperSetup({ known }: { known: RenderHelper[] }) {
-  const [apiKey, setApiKey] = useState("");
   const [started, setStarted] = useState(false);
-  const { download: fetchHelper, status } = useHelperDownload();
   const start = () => {
     launchHelper();
     setStarted(true);
@@ -286,21 +320,9 @@ function HelperSetup({ known }: { known: RenderHelper[] }) {
       <More label={t("Not set up on this PC yet?")} defaultOpen={known.length === 0}>
         <ol className="pmv-help-steps">
           <li>{t("Needs Python 3 (python.org) and FFmpeg (e.g. “winget install Gyan.FFmpeg”) on the PC.")}</li>
-          <li>
-            <button className="btn btn-sm btn-primary" onClick={() => void fetchHelper(apiKey)}>
-              ⬇ {t("Download render helper")}
-            </button>{" "}
-            <button className="btn btn-sm btn-link" onClick={() => void fetchHelper(apiKey, true)}>
-              {t("with a window (.py, for troubleshooting)")}
-            </button>{" "}
-            {status && <span className="pmv-li-meta">{status}</span>}
-          </li>
+          <li>{t("Download the render helper using the button below.")}</li>
           <li>{t("Start it once with a double-click. It runs without a window and shows up here within a few seconds. From then on ▶ Start helper above starts it – also after Windows restarted. If nothing shows up, pmv-render-helper.log next to the file tells why.")}</li>
         </ol>
-        <More label={t("Stash with a login?")}>
-          <div className="pmv-li-meta">{t("Then the helper needs an API key (Stash: Settings → Security). It is written into the downloaded file.")}</div>
-          <input className="form-control form-control-sm" value={apiKey} placeholder={t("API key")} onChange={(e) => setApiKey(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
-        </More>
       </More>
       {known.length > 0 && (
         <div className="pmv-li-meta">

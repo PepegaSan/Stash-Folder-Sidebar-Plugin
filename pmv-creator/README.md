@@ -117,9 +117,11 @@ Deep links: `/pmv-creator?scenes=12,34,56` puts scenes straight into the project
 
 By default the render runs inside Stash. With the **render helper** it runs on a PC instead – much faster than on a NAS, and the video is saved on that PC, on any drive.
 
-1. **Render** → *Render on*: **My PC** → *Not set up on this PC yet?* → **Download render helper**. It is a single Python file (`.pyw`: it runs without a window) with your Stash address already filled in. The PC needs Python 3 ([python.org](https://www.python.org/downloads/)) and FFmpeg (e.g. `winget install Gyan.FFmpeg`).
+1. **Render** → *Render on*: **My PC** → **Download render helper**. It is a single Python file (`.pyw`: it runs without a window) with your Stash address already filled in. The PC needs Python 3 ([python.org](https://www.python.org/downloads/)) and FFmpeg (e.g. `winget install Gyan.FFmpeg`).
 2. Start it once with a double-click. No window opens; the PC shows up in the render dialog within a few seconds (if not, `pmv-render-helper.log` next to the file says why). That first start registers `pmvhelper://` for your Windows user – from then on **▶ Start helper on this PC** in the render dialog starts it (the browser asks once whether it may), also after Windows restarted, and **⏹ Quit helper** stops it. A startup-folder entry (Win+R → `shell:startup`) still works but is not needed any more. *With a window (.py)* is the same helper with a console, for troubleshooting.
 3. Enter **Save to** once (e.g. `I:\PMVs`), then **Render on <PC>**. Progress shows in the dialog and in Stash's task list; *Cancel* stops the PC as well.
+
+The download button remains available while a helper is connected. **Download render helper again** fetches the current file; if no file arrives, click **Save helper file again** directly. “Download requested” only confirms that the browser was asked to save it. To switch to the new file, **Quit helper**, wait until it is offline, then start the new file.
 
 The PC fetches the videos and the music over Stash, so nothing else has to be set up. If the videos are also on a drive of the PC (e.g. the NAS as `Y:`), *Read the videos from a drive* maps Stash's paths onto it (`/data/` → `Y:\`). For Stash with a login, enter an API key before downloading the helper.
 

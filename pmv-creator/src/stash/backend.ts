@@ -202,7 +202,7 @@ export const quitHelper = (id: string) => runOp<{ ok: boolean }>({ op: "helper_q
 
 /** The backend file with the Stash address (and API key) filled in – a double-click starts the helper. */
 export async function helperScript(apiKey: string): Promise<string> {
-  const res = await fetch(stashUrl(`/plugin/${PLUGIN_ID}/assets/helper/pmv_backend.py`), { credentials: "same-origin" });
+  const res = await fetch(stashUrl(`/plugin/${PLUGIN_ID}/assets/helper/pmv_backend.py`), { credentials: "same-origin", cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const src = await res.text();
   const marker = "HELPER_DEFAULTS: Dict[str, str] = {}";

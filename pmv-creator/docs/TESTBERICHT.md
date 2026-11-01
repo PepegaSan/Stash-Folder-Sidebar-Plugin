@@ -6,6 +6,16 @@
 
 Die Umgebung lässt sich nachstellen mit [tests/e2e-stash/start-stash.ps1](../tests/e2e-stash/start-stash.ps1) (isolierte Instanz) und [tests/e2e-stash/sync-plugin.ps1](../tests/e2e-stash/sync-plugin.ps1) (Build → Plugin-Ordner → „Plugins neu laden“). Die Oberfläche wurde über Edge mit Remote-Debugging bedient; jeder Schritt wurde per Screenshot und DOM-Abfrage geprüft.
 
+## Erneuter Render-Helfer-Download 0.9.16
+
+Der Nutzer bestätigte die Meldung im PMV-Creator. Im bisherigen Code verschwand der Download für verbundene, ausreichend neue Helfer; bei bekannten Offline-PCs lag er in eingeklappten Einrichtungsschritten. Zudem behauptete „Heruntergeladen“ nur aufgrund eines programmgesteuerten Linkklicks, die Datei sei gespeichert. Eine dauerhafte technische Sperre durch diesen Status ließ sich im Code nicht nachweisen.
+
+Der Download steht jetzt unabhängig von Verbindungsstatus und Helper-Listenfehlern offen. Er lädt das aktuelle Template ohne Browsercache und lässt sich beliebig wiederholen. Nach der Anforderung bleibt ein echter Speicherlink bestehen. Die Meldung bestätigt nur „Download angefordert“. Wechsel des API-Schlüssels, neuer Download und Schließen räumen den vorherigen Blob-Link auf; nach dem Schließen wird keine verspätete Anfrage mehr als Download gestartet.
+
+**Unabhängige GPT-Astra-Prüfung vor Deployment:** keine funktionalen Deployment-Blocker; 46 gezielte Tests, Typprüfung und Übersetzungen erfolgreich. Gesamtprüfung: **279 Tests in 29 Dateien**, Typprüfung, Übersetzungsprüfung (0 fehlende/0 leere Einträge) und beide Builds erfolgreich. Neun zusätzliche Download-Regressionsfälle prüfen insbesondere Wiederholung, aktuelle/alte/Offline-Helfer, Listenfehler, API-Schlüsselwechsel, beide Dateivarianten und verspätete Antworten.
+
+Echte Dateidownloads in isoliertem Chrome 156.0.8078.76: produktive `PcRender`-Komponente, simulierter verbundener PC, echtes Helper-Template. Erstdownload, erneuter Download, direkter Speicherlink und `.py`-Variante erzeugten jeweils die erwartete Datei mit Version 0.9.16 und ausgefüllter Testadresse. Drei Template-Anfragen für vier Downloads (der Speicherlink verwendet die vorbereitete Datei), keine JavaScript-Seitenfehler. [Messwerte](verification/2026-11-01-helper-download.json). Die zuvor versuchte isolierte Edge-Instanz brach beim Start ab; sie lieferte keinen Download-Nachweis. Die konkrete Browserkonfiguration des Nutzers wurde nicht verändert oder geprüft, und kein heruntergeladener Helfer wurde ausgeführt.
+
 ## Explizite Materialwahl 0.9.15 und unabhängiger Astra-Review
 
 Nach erneutem Bericht über einen kleinen Ausschnitt und unerwünschten Markerfokus wurden zwei nachweisbare Begrenzungen entfernt: übernommene alte Markerflags sowie die automatische Beschränkung der Quelle „Meine Clips“ auf bereits gespeicherte Schnipsel. Die Materialwahl ist jetzt offen in Einfach/Erweitert sichtbar. Fehlt `materialMode` in alten Einstellungen oder Presets, gilt „Ganze Videos“; nur bewusst gewählte Marker-/Bereichsmodi schränken darauf ein. Die Quelle „Meine Clips“ lädt im Ganzvideo-Modus deduplizierte Szenen-IDs aus der Bin mit aktueller voller Dateidauer. Intro-/Outroabzug ist sichtbar und abschaltbar.

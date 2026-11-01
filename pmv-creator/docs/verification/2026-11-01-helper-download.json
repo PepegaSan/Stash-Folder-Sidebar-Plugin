@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-01",
+  "version": "0.9.16",
+  "browser": "156.0.8078.76",
+  "harness": "Production PcRender component; simulated connected helper, real packaged helper template, isolated headless Chrome downloads",
+  "realUserBrowserTested": false,
+  "templateRequests": 3,
+  "results": [
+    {
+      "label": "first",
+      "filename": "pmv-render-helper.pyw",
+      "bytes": 122834,
+      "version": "0.9.16"
+    },
+    {
+      "label": "repeat",
+      "filename": "pmv-render-helper.pyw",
+      "bytes": 122834,
+      "version": "0.9.16"
+    },
+    {
+      "label": "direct-link",
+      "filename": "pmv-render-helper.pyw",
+      "bytes": 122834,
+      "version": "0.9.16"
+    },
+    {
+      "label": "console",
+      "filename": "pmv-render-helper.py",
+      "bytes": 122834,
+      "version": "0.9.16"
+    }
+  ],
+  "pageErrors": []
+}

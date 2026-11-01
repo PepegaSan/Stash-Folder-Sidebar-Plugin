@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.16 (2026-11-01)
+
+- Render helper downloads remain available with connected or previously known PCs, including when the helper list cannot load. Repeated downloads fetch the current helper template without browser caching. Both the windowless `.pyw` and console `.py` can be downloaded again.
+- The UI reports “Download requested” instead of claiming a file was saved, and keeps a direct **Save helper file again** link for retrying a blocked or cancelled download. Old file links are released when replaced, when the API key changes, or when the dialog closes. The connected-helper instructions explain how to switch to the downloaded file.
+- Added download regressions for retries, connected/old/offline helpers, listing failures, API-key changes, file variants, polling and closing the dialog during a request.
+- Independent GPT Astra review: no functional deployment blockers; 46 targeted tests, typecheck and translations passed. Full suite: 279 tests. Isolated Chrome verified four real downloads: initial, repeated, direct save link and console file.
+
 ## 0.9.15 (2026-11-01)
 
 - Generator material is now an explicit choice in both views: **Whole videos** (default), **Markers only**, or **Selected ranges only** for My clips. Old settings and presets without the new choice no longer restore hidden marker restrictions. In whole-video mode, My clips selects the video IDs and reloads their full source ranges instead of repeatedly cutting its old snippets. Explicit marker/range choices remain available.

@@ -117,9 +117,11 @@ Deep-Link: `/pmv-creator?scenes=12,34,56` legt Szenen direkt in den Projekt-Pool
 
 Standardmäßig rendert Stash selbst. Mit dem **Render-Helfer** rendert stattdessen ein PC – deutlich schneller als eine NAS, und das Video landet auf diesem PC, auf einem beliebigen Laufwerk.
 
-1. **Rendern** → *Rendern auf*: **Mein PC** → *Auf diesem PC noch nicht eingerichtet?* → **Render-Helfer herunterladen**. Das ist eine einzelne Python-Datei (`.pyw`: sie läuft ohne Fenster), in der deine Stash-Adresse schon eingetragen ist. Der PC braucht Python 3 ([python.org](https://www.python.org/downloads/)) und FFmpeg (z. B. `winget install Gyan.FFmpeg`).
+1. **Rendern** → *Rendern auf*: **Mein PC** → **Render-Helfer herunterladen**. Das ist eine einzelne Python-Datei (`.pyw`: sie läuft ohne Fenster), in der deine Stash-Adresse schon eingetragen ist. Der PC braucht Python 3 ([python.org](https://www.python.org/downloads/)) und FFmpeg (z. B. `winget install Gyan.FFmpeg`).
 2. Einmal per Doppelklick starten. Es öffnet sich kein Fenster; der PC erscheint nach ein paar Sekunden im Render-Dialog (wenn nicht, sagt `pmv-render-helper.log` neben der Datei, warum). Dieser erste Start registriert `pmvhelper://` für deinen Windows-Benutzer – ab dann startet ihn **▶ Helfer auf diesem PC starten** im Render-Dialog (der Browser fragt einmal, ob er darf), auch nach einem Neustart von Windows, und **⏹ Helfer beenden** stoppt ihn. Ein Eintrag im Autostart-Ordner (Win+R → `shell:startup`) geht weiterhin, ist aber nicht mehr nötig. *Mit Fenster (.py)* ist derselbe Helfer mit Konsole, zur Fehlersuche.
 3. Einmal **Speichern in** eintragen (z. B. `I:\PMVs`), dann **Auf <PC> rendern**. Der Fortschritt steht im Dialog und in Stashs Task-Liste; *Abbrechen* stoppt auch den PC.
+
+Der Download-Knopf bleibt auch bei verbundenem Helfer verfügbar. **Render-Helfer erneut herunterladen** holt die aktuelle Datei; wenn keine Datei ankommt, lässt sich **Helfer-Datei erneut speichern** direkt anklicken. Die Meldung „Download angefordert“ bestätigt nur die Übergabe an den Browser. Zum Wechsel auf die neue Datei erst **Helfer beenden**, auf „offline“ warten und dann die neue Datei starten.
 
 Der PC holt sich Videos und Musik über Stash, sonst muss nichts eingerichtet werden. Liegen die Videos auch auf einem Laufwerk des PCs (z. B. die NAS als `Y:`), bildet *Videos von einem Laufwerk lesen* Stashs Pfade darauf ab (`/data/` → `Y:\`). Für Stash mit Anmeldung vor dem Herunterladen einen API-Schlüssel eintragen.
 
