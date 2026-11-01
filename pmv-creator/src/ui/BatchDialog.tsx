@@ -8,6 +8,7 @@ import { buildRenderPlan } from "../export/renderPlan";
 import { type GeneratorSettings, MOODS, applyGeneration } from "../generator/generate";
 import { usesSplit } from "../generator/layouts";
 import { type EnergyFn, peaksEnergy } from "../generator/rhythm";
+import { normalizeMaterialOptions } from "../generator/material";
 import { t, tn } from "../i18n";
 import { anyEffect } from "../model/effects";
 import { colorGrade } from "../model/look";
@@ -43,7 +44,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 /** One line about what the settings pick: the mood and where the clips come from. */
 function describe(s: GeneratorSettings, p: PmvProject): string {
   const mood = s.mood === "custom" ? t("Custom") : t(MOODS[s.mood].label);
-  const c = s.clips;
+  const c = normalizeMaterialOptions(s.clips);
   const names = (refs: Array<{ name: string }>) => refs.map((r) => r.name).join(", ");
   let clips: string;
   if (c.source === "saved") clips = t("saved filter “{name}”", { name: c.savedFilter?.name ?? "?" });
@@ -52,7 +53,8 @@ function describe(s: GeneratorSettings, p: PmvProject): string {
   else if (c.source === "bin") clips = t("My clips ({n})", { n: p.bin.length });
   else clips = [names(c.tags), names(c.performers)].filter(Boolean).join(" · ") || t("the whole library");
   const count = c.source === "filter" || c.source === "saved" || c.source === "watched" ? ` · ${t("up to {n} scenes", { n: c.limit })}` : "";
-  return `${mood} · ${clips}${count}`;
+  const material = c.materialMode === "markers" ? t("Markers only") : c.materialMode === "ranges" ? t("Selected ranges only") : t("Whole videos");
+  return `${mood} · ${clips}${count} · ${material}`;
 }
 
 export function BatchDialog() {

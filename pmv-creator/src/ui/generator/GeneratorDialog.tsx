@@ -9,7 +9,7 @@ import type { PickOrder, TransitionPick, TransitionWhen } from "../../generator/
 import { type GeneratorSettings, MOODS, type Mood, type StyleOptions, applyMood, defaultSettings, fieldCapacity, generationRange, savedEffects, savedLayouts, upgradeStyle, withinFields } from "../../generator/generate";
 import { groupsNeeded, usesSplit } from "../../generator/layouts";
 import { LAYOUTS, groupTrackIndex } from "../../model/layouts";
-import type { ClipOptions, ClipSource, TagStage } from "../../generator/material";
+import { type ClipOptions, type ClipSource, type MaterialMode, type TagStage, normalizeMaterialOptions } from "../../generator/material";
 import type { CutOptions, Pace } from "../../generator/rhythm";
 import { t, tn } from "../../i18n";
 import { type EffectSettings, anyEffect } from "../../model/effects";
@@ -40,7 +40,7 @@ export function loadSaved(fallbackTrack: string, trackIds: string[]): GeneratorS
     return {
       ...base,
       ...s,
-      clips: { ...base.clips, ...s.clips },
+      clips: normalizeMaterialOptions({ ...base.clips, ...s.clips }),
       select: { ...base.select, ...s.select },
       cut: { ...base.cut, ...s.cut },
       style: { ...base.style, ...upgradeStyle(s.style), fx: savedEffects(s), layouts: savedLayouts(s) },
@@ -65,7 +65,7 @@ export function withPreset(x: GeneratorSettings, ps: Partial<GeneratorSettings>)
   return {
     ...x,
     mood: ps.mood ?? x.mood,
-    clips: { ...base.clips, ...ps.clips },
+    clips: normalizeMaterialOptions({ ...base.clips, ...ps.clips }),
     select: { ...base.select, ...ps.select },
     cut: { ...base.cut, ...ps.cut },
     style: { ...base.style, ...upgradeStyle(ps.style), fx: savedEffects(ps), layouts: savedLayouts(ps) },
@@ -145,7 +145,7 @@ export function GeneratorDialog() {
     const loaded = project.generator || anyEffect(project.effects) ? { ...saved, style: { ...saved.style, fx: project.effects } } : saved;
     // "PMV with this performer/tag" from Stash: just that filter, nothing left over from earlier runs
     if (clipPreset) return { ...loaded, clips: { ...defaultSettings(defaultTrack).clips, limit: loaded.clips.limit, performers: clipPreset.performers, tags: clipPreset.tags } };
-    return preset?.source ? { ...loaded, clips: { ...loaded.clips, source: preset.source } } : loaded;
+    return preset?.source ? { ...loaded, clips: normalizeMaterialOptions({ ...loaded.clips, source: preset.source }) } : loaded;
   });
   useEffect(() => {
     if (clipPreset) dispatch({ type: "ui", patch: { clipPreset: null } });
@@ -163,7 +163,7 @@ export function GeneratorDialog() {
     rememberAdvanced(on);
     dispatch({ type: "ui", patch: { advanced: on } });
   };
-  const setClips = (patch: Partial<ClipOptions>) => setS((x) => ({ ...x, clips: { ...x.clips, ...patch } }));
+  const setClips = (patch: Partial<ClipOptions>) => setS((x) => ({ ...x, clips: normalizeMaterialOptions({ ...x.clips, ...patch }) }));
   const setCut = (patch: Partial<CutOptions>) => setS((x) => ({ ...x, mood: "custom", cut: { ...x.cut, ...patch } }));
   const setStyle = (patch: Partial<GeneratorSettings["style"]>) => setS((x) => ({ ...x, mood: "custom", style: { ...x.style, ...patch } }));
   const setFx = (patch: Partial<EffectSettings>) => setS((x) => ({ ...x, mood: "custom", style: { ...x.style, fx: { ...x.style.fx, ...patch } } }));
@@ -325,8 +325,18 @@ export function GeneratorDialog() {
           </label>
           <div className="pmv-li-meta" id="pmv-variance-help">{t("Low: allow repeats. High: prefer unused parts of each video throughout the PMV. 100%: reuse only when no unused part fits. Markers and selected ranges limit the available material.")}</div>
           <div className="pmv-li-meta">{t("High variance also alternates distant sections of long videos, rather than only avoiding identical clips.")}</div>
-          {c.preferMarkers && c.source !== "bin" && !(c.source === "filter" && c.kind === "markers") && (
-            <button className="btn btn-sm btn-link" disabled={!!busy} onClick={() => setClips({ preferMarkers: false })}>{t("Only marker ranges are used. Use whole videos for more variety.")}</button>
+          <div className="pmv-row pmv-wrap">
+            <span className="pmv-gen-label">{t("Use material")}</span>
+            <Seg<MaterialMode> value={c.materialMode ?? "whole"} onChange={(materialMode) => setClips({ materialMode })} options={[["whole", t("Whole videos")], ...(c.source === "bin" ? [["ranges", t("Selected ranges only")] as [MaterialMode, string]] : [["markers", t("Markers only")] as [MaterialMode, string]])]} />
+          </div>
+          <div className="pmv-li-meta">{c.materialMode === "whole" ? t("Whole videos are used. Existing markers do not restrict the chosen parts.") : c.materialMode === "markers" ? t("Only marker ranges are used. Switch to whole videos to use other parts.") : t("Only the ranges in My clips are used. Switch to whole videos to use other parts of those videos.")}</div>
+          {c.materialMode === "whole" && (
+            <div className="pmv-row pmv-wrap">
+              <span className="pmv-li-meta">{t("Skip intro/credits")}</span>
+              <NumField value={c.skipPercent} onCommit={(v) => setClips({ skipPercent: v })} min={0} max={40} step={1} digits={0} suffix="%" />
+              <span className="pmv-li-meta">{t("Skipped at both the beginning and the end.")}</span>
+              {c.skipPercent > 0 && <button className="btn btn-sm btn-link" onClick={() => setClips({ skipPercent: 0 })}>{t("Use full duration")}</button>}
+            </div>
           )}
           {s.select.offset === "start" && !s.select.followTimeline && !s.select.paceMatch && (
             <button className="btn btn-sm btn-link" onClick={() => setSelect({ offset: "random" })}>{t("Start point is set to beginning. Use random start points for more variance.")}</button>
@@ -419,8 +429,6 @@ export function GeneratorDialog() {
               {c.source === "filter" && (
                 <>
                   <div className="pmv-grid2">
-                    <label>{t("What")}</label>
-                    <Seg<ClipOptions["kind"]> value={c.kind} onChange={(v) => setClips({ kind: v })} options={[["scenes", t("Scenes")], ["markers", t("Markers"), t("Every clip starts at a marker; the tag filter looks at the marker's tags")]]} />
                     <label>{t("Tags")}</label>
                     <span className="pmv-row">
                       <RefPicker placeholder={t("Tags (optional)")} value={c.tags} onChange={(v) => setClips({ tags: v })} search={searchTags} />
@@ -477,13 +485,6 @@ export function GeneratorDialog() {
                 </>
               )}
               {savedPick}
-              {c.source !== "bin" && !(c.source === "filter" && c.kind === "markers") && (
-                <div className="pmv-row pmv-wrap">
-                  <Check label={t("Prefer markers")} title={t("Scenes with markers contribute their markers as clips")} checked={c.preferMarkers} onChange={(v) => setClips({ preferMarkers: v })} />
-                  <span className="pmv-li-meta">{t("Skip intro/credits")}</span>
-                  <NumField value={c.skipPercent} onCommit={(v) => setClips({ skipPercent: v })} min={0} max={40} step={1} digits={0} suffix="%" />
-                </div>
-              )}
             </div>
 
             <div className="pmv-gen-col">
@@ -636,6 +637,7 @@ export function GeneratorDialog() {
           {outcome && !busy && (
             <div className="pmv-success">
               ✓ {t("{clips} clips from {scenes} scenes", { clips: outcome.stats.clips, scenes: outcome.stats.scenes })}
+              <div className="pmv-li-meta">{t("Material: {mode} · {duration} available", { mode: outcome.material.mode === "whole" ? t("Whole videos") : outcome.material.mode === "markers" ? t("Markers only") : t("Selected ranges only"), duration: formatTime(outcome.material.availableSeconds) })}</div>
               {adv && (
                 <>
                   {" "}

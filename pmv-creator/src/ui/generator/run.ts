@@ -1,7 +1,7 @@
 /** Runs the generator: fetches clips from Stash, analyses music/motion, builds the result (not yet applied). */
 import { sceneToSource } from "../../culling/culling";
-import { type GenerationResult, type GenerationStats, type GeneratorSettings, applyBeatSync, buildGenerationAsync, generationRange } from "../../generator/generate";
-import { type ClipOptions, type MaterialItem, buildMarkerFilter, buildSceneFilter, clientAnyTags, markerItem, sceneItems } from "../../generator/material";
+import { type GenerationResult, type GenerationStats, type GeneratorSettings, allowedParts, applyBeatSync, buildGenerationAsync, generationRange } from "../../generator/generate";
+import { type ClipOptions, type MaterialItem, type MaterialMode, buildMarkerFilter, buildSceneFilter, clientAnyTags, markerItem, materialSeconds, normalizeMaterialOptions, sceneItems } from "../../generator/material";
 import { DEFAULT_PREVIEW_CONFIG, type Rhythm, type SpeedSpot, decodeGrayFrames, makePercentile, motionCurve, rhythmOf, speedMapFromPreview, toFrames } from "../../generator/motion";
 import { peaksEnergy } from "../../generator/rhythm";
 import { t } from "../../i18n";
@@ -24,7 +24,7 @@ const hasAny = (tagIds: Set<string>, tags: Array<{ id: string }>) => !tagIds.siz
  * those only when the tags of the generator don't ask for them.
  */
 async function skipTags(o: ClipOptions): Promise<StashRef[]> {
-  if (o.source === "bin") return [];
+  if (o.source === "bin" && o.materialMode === "ranges") return [];
   const asked = new Set([...o.tags, ...o.mainTags, ...(o.stagesOn ? o.stages.flatMap((st) => st.tags) : [])].map((x) => x.id));
   const refs = await Promise.all([SKIP_TAG, PMV_TAG].map(async (name) => ({ id: await cachedTagId(name).catch(() => null), name })));
   return refs.filter((r): r is StashRef => !!r.id && (r.name === SKIP_TAG || !asked.has(r.id)));
@@ -35,7 +35,13 @@ async function collectOne(o: ClipOptions, p: PmvProject, seed: number, favId: st
   // left out by the filter where Stash can, checked here anyway
   const skipIds = new Set(skip.map((x) => x.id));
   const ok = (s: StashSceneCore) => !s.tags.some((x) => skipIds.has(x.id));
-  if (o.source === "bin") return { items: p.bin.map((snippet) => ({ snippet, performers: [], fixedStart: !!snippet.markerId })), sources: [] };
+  if (o.source === "bin") {
+    if (o.materialMode === "ranges") return { items: p.bin.map((snippet) => ({ snippet, performers: [], fixedStart: !!snippet.markerId })), sources: [] };
+    // The bin chooses which videos; only an explicit "selected ranges" choice limits where to cut them.
+    const scenes = (await fetchScenes([...new Set(p.bin.map((sn) => sn.sceneId))])).filter(ok);
+    primeScenes(scenes);
+    return { items: scenes.flatMap((s) => sceneItems(s, o)), sources: sourcesOf(scenes) };
+  }
   if (o.source === "project") {
     const scenes = (await fetchScenes(Object.keys(p.sources))).filter(ok);
     primeScenes(scenes);
@@ -74,6 +80,7 @@ async function collectOne(o: ClipOptions, p: PmvProject, seed: number, favId: st
 
 /** One pool per tag stage (or a single pool). */
 export async function collectPools(o: ClipOptions, p: PmvProject, seed: number): Promise<{ pools: MaterialItem[][]; sources: SourceMedia[] }> {
+  o = normalizeMaterialOptions(o);
   let favId: string | null = null;
   if (o.favoritesOnly && o.source === "filter") {
     favId = await tagIdByName("Favorite");
@@ -170,15 +177,18 @@ export interface RunOutcome {
   synced: number;
   /** Scenes with a speed map (clip speed follows the music). */
   mapped: number;
+  material: { mode: MaterialMode; availableSeconds: number };
 }
 
 export async function runGenerator(p: PmvProject, s: GeneratorSettings, playhead: number, status: Status): Promise<RunOutcome> {
+  s = { ...s, clips: normalizeMaterialOptions(s.clips) };
   const range = generationRange(p, s.target, playhead);
   if (!(range.to > range.from)) throw new Error(t("No range: without music choose “Bars” from the playhead."));
 
   status(t("Loading clips from Stash…"));
   const { pools, sources } = await collectPools(s.clips, p, s.seed);
   if (!pools.some((x) => x.length)) throw new Error(t("No matching clips – loosen the filters."));
+  const material = { mode: s.clips.materialMode ?? "whole", availableSeconds: materialSeconds(pools.flat().flatMap((it) => allowedParts(it, p.exclusions))) };
 
   let energy;
   if (p.audio?.url) {
@@ -217,5 +227,5 @@ export async function runGenerator(p: PmvProject, s: GeneratorSettings, playhead
     built.result.fields = done.slice(1).map((x) => x.clips);
     synced = done.reduce((n, x) => n + x.synced, 0);
   }
-  return { ...built, synced, mapped: Object.keys(speedMaps).length };
+  return { ...built, synced, mapped: Object.keys(speedMaps).length, material };
 }

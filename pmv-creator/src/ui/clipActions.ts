@@ -4,7 +4,7 @@
  * per session; a project that was never generated draws from its own scenes.
  */
 import { exclusionFromRange, snippetFromRange } from "../culling/culling";
-import type { MaterialItem } from "../generator/material";
+import { type MaterialItem, normalizeMaterialOptions } from "../generator/material";
 import { type RerollOptions, rerollClips } from "../generator/reroll";
 import { t, tn } from "../i18n";
 import type { PmvProject, SourceMedia } from "../model/project";
@@ -34,7 +34,7 @@ function projectPool(p: PmvProject): MaterialItem[] {
 async function candidates(p: PmvProject): Promise<Candidates> {
   const memo = p.generator;
   if (memo) {
-    const o = memo.settings.clips;
+    const o = normalizeMaterialOptions(memo.settings.clips);
     const key = o.source === "filter" || o.source === "watched" || o.source === "saved" ? JSON.stringify([o, memo.settings.seed]) : null;
     let run = key ? poolCache.get(key) : undefined;
     if (!run) {
@@ -46,7 +46,8 @@ async function candidates(p: PmvProject): Promise<Candidates> {
     }
     const { pools, sources } = await run;
     const opts = { variety: memo.settings.select.variety, followTimeline: memo.settings.select.followTimeline, range: { from: memo.from, to: memo.to } };
-    if (pools.some((x) => x.length)) return { pools, sources, opts };
+    // An empty filtered pool must not revive excluded modes or scenes through an unfiltered fallback.
+    return { pools, sources, opts };
   }
   return { pools: [projectPool(p)], sources: [], opts: { variety: true, followTimeline: false, range: null } };
 }

@@ -50,6 +50,15 @@ describe("when to cut", () => {
 });
 
 describe("settings saved by older versions", () => {
+  it("does not inherit old marker restrictions from browser settings or presets", () => {
+    const legacy = { clips: { source: "filter", kind: "markers", preferMarkers: true } };
+    localStorage.setItem("pmv-creator:generator", JSON.stringify(legacy));
+    expect(loadSaved("t1", ["t1"]).clips).toMatchObject({ materialMode: "whole", kind: "scenes", preferMarkers: false });
+    expect(withPreset(defaultSettings("t1"), legacy as never).clips).toMatchObject({ materialMode: "whole", kind: "scenes", preferMarkers: false });
+    localStorage.setItem("pmv-creator:generator", JSON.stringify({ clips: { source: "filter", materialMode: "markers" } }));
+    expect(loadSaved("t1", ["t1"]).clips).toMatchObject({ materialMode: "markers", kind: "markers", preferMarkers: true });
+  });
+
   it("defaults older settings to maximum clip variance and preserves a saved slider value", () => {
     localStorage.setItem("pmv-creator:generator", JSON.stringify({ select: { offset: "random" } }));
     expect(loadSaved("t1", ["t1"]).select.variance).toBe(100);

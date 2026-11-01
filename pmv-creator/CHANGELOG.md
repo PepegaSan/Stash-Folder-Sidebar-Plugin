@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.15 (2026-11-01)
+
+- Generator material is now an explicit choice in both views: **Whole videos** (default), **Markers only**, or **Selected ranges only** for My clips. Old settings and presets without the new choice no longer restore hidden marker restrictions. In whole-video mode, My clips selects the video IDs and reloads their full source ranges instead of repeatedly cutting its old snippets. Explicit marker/range choices remain available.
+- Intro/credits trimming is visible in simple mode too, with **Use full duration**. The completed run shows its actual material mode and available source time after exclusions, counting overlapping stage pools only once. Batch summaries include the mode.
+- Another clip respects the last run's filtered pool even when empty; it no longer falls back to unfiltered project scenes, bypassing material choices or skip tags.
+- Independent GPT Astra review before deployment: no new deployment blockers, typecheck and 96 targeted tests passed. Full suite: 270 tests. Regression coverage includes a five-second marker in a 30-minute source, saved filters, old settings, bin expansion, explicit restricted modes and empty reroll pools.
+
 ## 0.9.14 (2026-11-01)
 
 - High clip variance now balances twelve temporal sections of each source and prefers jumps away from its last selected neighbourhood (18% of the available span when fresh distant material fits). This makes a small number of cuts from a long video more widely distributed, even before exact source ranges have repeated. Usage is shared across stages and split-screen fields; exclusions, marker/bin limits and timeline-follow windows still apply.

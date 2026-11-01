@@ -404,15 +404,24 @@ describe("PMV Creator UI (mocked Stash)", () => {
     await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
   });
 
-  it("exposes a saved marker restriction in the simple generator and can switch to whole videos", async () => {
+  it("opens legacy marker settings as whole videos and makes marker-only use an explicit simple-mode choice", async () => {
     const raw = localStorage.getItem("pmv-creator:generator");
     const settings = JSON.parse(raw ?? "{}");
-    localStorage.setItem("pmv-creator:generator", JSON.stringify({ ...settings, clips: { ...settings.clips, source: "project", preferMarkers: true } }));
+    localStorage.setItem("pmv-creator:generator", JSON.stringify({ ...settings, clips: { ...settings.clips, materialMode: undefined, source: "project", kind: "markers", preferMarkers: true } }));
     await fire(byText("⚡ Generate PMV")!, new MouseEvent("click", { bubbles: true }));
-    const restriction = "Only marker ranges are used. Use whole videos for more variety.";
-    expect(byText(restriction)).not.toBeNull();
-    await fire(byText(restriction)!, new MouseEvent("click", { bubbles: true }));
-    expect(byText(restriction)).toBeNull();
+    const whole = "Whole videos are used. Existing markers do not restrict the chosen parts.";
+    expect($(".pmv-gen")!.textContent).toContain(whole);
+    expect($(".pmv-gen")!.textContent).toContain("Skipped at both the beginning and the end.");
+    await fire(byText("Use full duration")!, new MouseEvent("click", { bubbles: true }));
+    expect(byText("Use full duration")).toBeNull();
+    await fire(byText("Markers only")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-gen")!.textContent).toContain("Only marker ranges are used. Switch to whole videos to use other parts.");
+    await fire(byText("Whole videos")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-gen")!.textContent).toContain(whole);
+    await fire($$(".pmv-gen .pmv-seg button").find((b) => b.textContent?.startsWith("My clips ("))!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-gen")!.textContent).toContain(whole);
+    await fire(byText("Selected ranges only")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-gen")!.textContent).toContain("Only the ranges in My clips are used.");
     await fire(byText("Close")!, new MouseEvent("click", { bubbles: true }));
     if (raw === null) localStorage.removeItem("pmv-creator:generator");
     else localStorage.setItem("pmv-creator:generator", raw);

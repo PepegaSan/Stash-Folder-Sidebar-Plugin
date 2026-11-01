@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-01",
+  "release": "0.9.15",
+  "stashVersion": "v0.31.1",
+  "sourceDurationSeconds": 1202.7,
+  "inputMarkerSeconds": 5,
+  "shortenedBinRangeFixture": true,
+  "legacySettings": {
+    "source": "bin",
+    "kind": "markers",
+    "preferMarkers": true,
+    "materialMode": "missing"
+  },
+  "effectiveMode": "whole",
+  "availableSourceSeconds": 1010.2680000000001,
+  "selectedMarkerCount": 0,
+  "generatedClips": 90,
+  "earliestSourceSeconds": 98.92064509053097,
+  "latestSourceSeconds": 1101.2835658548481,
+  "explicitRangesPreserved": true,
+  "actualUserSettingsInspected": false,
+  "mediaDecoded": false,
+  "projectWrittenToStash": false
+}

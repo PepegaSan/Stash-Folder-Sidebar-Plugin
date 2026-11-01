@@ -6,9 +6,9 @@ Deterministic PMV (music video) editor inside [Stash](https://github.com/stashap
 
 Architecture, data model and render pipeline: **[docs/KONZEPT.md](docs/KONZEPT.md)** (German) · project format: [schema/pmv-project.schema.json](schema/pmv-project.schema.json) · first-user test in a real Stash 0.31: [docs/TESTBERICHT.md](docs/TESTBERICHT.md) (German) · changes: [CHANGELOG.md](CHANGELOG.md)
 
-**Generator clip variance:** A 0–100% slider is available in both views (default 100%). High values prefer unused source ranges throughout the PMV, including other split-screen fields and kept clips. At 100%, material is reused when no unused range fits the available candidates. Lower values allow more repetition. Markers and bin ranges still restrict the available material; use scenes without “Prefer markers” and random start points to sample the whole video. Following the scenes' timeline still restricts picks to its progress window. Older settings default to 100%; the same seed remains reproducible.
+**Generator clip variance:** The slider runs from 0 to 100% (default 100%). High values prefer unused, distant source ranges. The visible **Use material → Whole videos** choice is the default, including for older settings with marker flags. **Markers only**, or **Selected ranges only** under My clips, requires an explicit choice. In whole-video mode My clips chooses the source video IDs; its old snippets do not restrict source times. Intro/credits trimming is visible in both views and **Use full duration** disables it. The completed run reports its effective mode and available source time. The same seed and settings remain reproducible.
 
-For long sources, high clip variance also balances twelve temporal sections and prefers large jumps between picks. A saved “Prefer markers” restriction is visible in simple mode with an action to use whole videos. This distributes source times; it does not detect different visual motifs.
+For long sources, high variance balances twelve temporal sections and prefers large jumps between picks. This distributes source times; it does not detect different visual motifs.
 
 ## Installation
 

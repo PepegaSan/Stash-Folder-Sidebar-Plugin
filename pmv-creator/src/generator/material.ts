@@ -13,6 +13,7 @@ export interface MaterialItem {
 /** saved = one of Stash's own saved scene filters (stash/savedFilters.ts). */
 export type ClipSource = "filter" | "watched" | "project" | "bin" | "saved";
 export type ClipKind = "scenes" | "markers";
+export type MaterialMode = "whole" | "markers" | "ranges";
 export type AllAny = "all" | "any";
 export type Shape = "all" | "portrait" | "landscape";
 
@@ -24,6 +25,8 @@ export interface TagStage {
 export interface ClipOptions {
   source: ClipSource;
   kind: ClipKind;
+  /** Explicit scope. Old settings without this field use whole videos, never inherited marker restrictions. */
+  materialMode?: MaterialMode;
   tags: StashRef[];
   xtags: StashRef[];
   tagMode: AllAny;
@@ -58,6 +61,28 @@ export interface ClipOptions {
 const MAX_RES: Record<number, string> = { 720: "FULL_HD", 1080: "QUAD_HD", 1440: "VR_HD" }; // "up to …" = below the next size
 
 const ids = (refs: StashRef[]) => refs.map((r) => r.id);
+
+/** One authoritative material choice; legacy kind/preferMarkers cannot silently narrow it. */
+export function normalizeMaterialOptions(o: ClipOptions): ClipOptions {
+  const mode = o.materialMode === "markers" && o.source !== "bin" ? "markers" : o.materialMode === "ranges" && o.source === "bin" ? "ranges" : "whole";
+  return { ...o, materialMode: mode, kind: mode === "markers" ? "markers" : "scenes", preferMarkers: mode === "markers" };
+}
+
+/** Available source time, counting overlapping candidates/stages only once. */
+export function materialSeconds(items: MaterialItem[]): number {
+  const scenes = new Map<string, Array<[number, number]>>();
+  for (const { snippet: s } of items) {
+    const ranges = scenes.get(s.sceneId) ?? [];
+    ranges.push([s.in, s.out]); scenes.set(s.sceneId, ranges);
+  }
+  let seconds = 0;
+  for (const ranges of scenes.values()) {
+    ranges.sort((a, b) => a[0] - b[0]);
+    let end = -Infinity;
+    for (const [a, b] of ranges) { seconds += Math.max(0, b - Math.max(a, end)); end = Math.max(end, b); }
+  }
+  return seconds;
+}
 
 /** Tags that are asked for in "any" mode next to main tags – Stash can't express that in one filter. */
 export const clientAnyTags = (o: ClipOptions, favId: string | null): string[] =>
@@ -105,12 +130,12 @@ export interface SceneWithMarkers extends StashSceneCore {
   scene_markers?: StashMarker[];
 }
 
-export function sceneItems(scene: SceneWithMarkers, o: Pick<ClipOptions, "preferMarkers" | "skipPercent" | "markerLength">): MaterialItem[] {
+export function sceneItems(scene: SceneWithMarkers, o: Pick<ClipOptions, "materialMode" | "preferMarkers" | "skipPercent" | "markerLength">): MaterialItem[] {
   const dur = scene.files[0]?.duration ?? 0;
   if (!(dur > 0)) return [];
   const performers = scene.performers.map((p) => p.id);
   const markers = scene.scene_markers ?? [];
-  if (o.preferMarkers && markers.length) {
+  if (o.materialMode === "markers") {
     return markers.map((m) => ({ snippet: snippetFromMarker(m, scene.id, dur, o.markerLength), performers, fixedStart: true }));
   }
   const skip = Math.min(40, Math.max(0, o.skipPercent)) / 100;

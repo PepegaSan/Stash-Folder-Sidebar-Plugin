@@ -6,6 +6,18 @@
 
 Die Umgebung lässt sich nachstellen mit [tests/e2e-stash/start-stash.ps1](../tests/e2e-stash/start-stash.ps1) (isolierte Instanz) und [tests/e2e-stash/sync-plugin.ps1](../tests/e2e-stash/sync-plugin.ps1) (Build → Plugin-Ordner → „Plugins neu laden“). Die Oberfläche wurde über Edge mit Remote-Debugging bedient; jeder Schritt wurde per Screenshot und DOM-Abfrage geprüft.
 
+## Explizite Materialwahl 0.9.15 und unabhängiger Astra-Review
+
+Nach erneutem Bericht über einen kleinen Ausschnitt und unerwünschten Markerfokus wurden zwei nachweisbare Begrenzungen entfernt: übernommene alte Markerflags sowie die automatische Beschränkung der Quelle „Meine Clips“ auf bereits gespeicherte Schnipsel. Die Materialwahl ist jetzt offen in Einfach/Erweitert sichtbar. Fehlt `materialMode` in alten Einstellungen oder Presets, gilt „Ganze Videos“; nur bewusst gewählte Marker-/Bereichsmodi schränken darauf ein. Die Quelle „Meine Clips“ lädt im Ganzvideo-Modus deduplizierte Szenen-IDs aus der Bin mit aktueller voller Dateidauer. Intro-/Outroabzug ist sichtbar und abschaltbar.
+
+Der Generator zeigt nach dem Lauf die wirksame Materialwahl und verfügbare Quellzeit nach Ausschlüssen, ohne doppelte Stufen mehrfach zu zählen. Ein Test mit einem fünfsekündigen Marker in einer 1800-s-Quelle erzeugt Ganzvideo-Picks mit Starts unter 400 und über 1400 s und meldet 1512 s verfügbares Material (je 8 % Intro/Outro abgezogen). Explizite Marker-/Bereichswahl und Markerszenen ohne Marker sind separat geprüft. Vorhandene Generator-Memos behalten beim Reroll ihren gefilterten Pool verbindlich bei, auch wenn er leer ist.
+
+Read-only-Prüfung mit echten Stash-Metadaten: 1202,7-s-Quelle, für den Test auf fünf Sekunden gekürzter Bin-Bereich an einem vorhandenen Marker, übernommene alte Markerflags. Ergebnis: wirksam „Ganze Videos“, 1010,268 s verfügbar, 90 Clips ohne Marker-ID, Starts etwa 99–1101 s. Expliziter Bereichsmodus behält die fünf Sekunden. Keine Medien dekodiert oder Projekte in Stash gespeichert; die konkreten Einstellungen des Nutzerlaufs wurden nicht eingesehen. [Nachweis](verification/2026-11-01-material-scope.json).
+
+**Vor dem Deployment unabhängig durch GPT Astra gegengeprüft:** finale Freigabe ohne neue Deployment-Blocker; Typprüfung und 96 Tests aus sechs relevanten Suiten unabhängig grün. Gesamtprüfung: 270 Tests, Typprüfung, Übersetzungsprüfung und Build grün. Astra bestätigt die beiden konkreten Begrenzungen; die individuelle Vorschau-Ursache bleibt ohne die ursprünglichen Laufdaten unbestätigt.
+
+Vorbestandene Grenzen außerhalb dieses Patches: `reroll.ts` kann bei einem zu kurzen Marker-/Bin-Bereich über dessen Ende hinausgehen, weil sein Speed-Fit die Datei statt des Bereichs begrenzt. Die standardmäßig deaktivierte experimentelle BeatSync-Nachbearbeitung prüft Bereichs-/Exclusion-Grenzen nach Tempo-/Startänderungen nicht erneut. Der ebenfalls gefundene ungefilterte Reroll-Rückfall wurde in diesem Patch dagegen beseitigt.
+
 ## Verteilung langer Quellen 0.9.14
 
 Auf die Rückmeldung „zufällig, bisher nur in der Vorschau geprüft“ wurde die tatsächliche Wiedergabe untersucht. Ein allgemeiner Seek-Fehler ließ sich lokal nicht nachstellen: Die produktive PreviewEngine spielte zwölf weit entfernte Stellen eines neutralen 30-Minuten-Videos mit sichtbarer Quellzeit korrekt, direkt und über neu gestartete FFmpeg-Transcode-Streams. Verglichen wurden per `requestVideoFrameCallback` dekodierte Frames mit den erwarteten Quellzeiten, nicht nur die angeforderten `currentTime`-Werte. Dies ist kein Nachweis für das konkrete Video oder Netzwerk des Nutzers.

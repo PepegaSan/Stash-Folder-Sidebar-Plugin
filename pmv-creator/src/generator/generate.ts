@@ -128,6 +128,7 @@ export function defaultSettings(trackId: string): GeneratorSettings {
     clips: {
       source: "filter",
       kind: "scenes",
+      materialMode: "whole",
       tags: [],
       xtags: [],
       tagMode: "all",
