@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.13 (2026-11-01)
+
+- Fix a browser freeze introduced by 0.9.12's clip variance, especially with one source whose unused ranges run out. Source usage now merges occupied intervals and indexes reuse depth; the least-reused fallback sweeps its boundaries once instead of comparing every candidate with every previous clip. Single-item pools skip candidate scoring; scene counts and queue membership are cached.
+- Generator selection now yields to browser input, timers and painting about every 8 ms and displays selection progress. Its synchronous and cooperative APIs consume the same deterministic calculation, so pausing between slices does not change the picks.
+- Added exact reuse-index checks against an independent overlap calculation, exhausted-single-source stress coverage, sync/async equivalence and a timer-responsiveness regression.
+
 ## 0.9.12 (2026-11-01)
 
 - Generator: **Clip variance** slider (0–100%, default 100%) in both views, saved with runs and presets. High variance tracks complete source ranges throughout the PMV, across tag stages and split-screen fields, including kept clips. It prefers unused material rather than forgetting starts after eight uses, and falls back to fresh scene ranges when the few preview motion spots have been used. Markers stay within their selected ranges; exhausted material can repeat to finish the song. Explicit beginning/continue offsets stay available.

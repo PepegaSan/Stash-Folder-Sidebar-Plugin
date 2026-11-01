@@ -1,6 +1,6 @@
 /** Runs the generator: fetches clips from Stash, analyses music/motion, builds the result (not yet applied). */
 import { sceneToSource } from "../../culling/culling";
-import { type GenerationResult, type GenerationStats, type GeneratorSettings, applyBeatSync, buildGeneration, generationRange } from "../../generator/generate";
+import { type GenerationResult, type GenerationStats, type GeneratorSettings, applyBeatSync, buildGenerationAsync, generationRange } from "../../generator/generate";
 import { type ClipOptions, type MaterialItem, buildMarkerFilter, buildSceneFilter, clientAnyTags, markerItem, sceneItems } from "../../generator/material";
 import { DEFAULT_PREVIEW_CONFIG, type Rhythm, type SpeedSpot, decodeGrayFrames, makePercentile, motionCurve, rhythmOf, speedMapFromPreview, toFrames } from "../../generator/motion";
 import { peaksEnergy } from "../../generator/rhythm";
@@ -197,7 +197,11 @@ export async function runGenerator(p: PmvProject, s: GeneratorSettings, playhead
   const speedPct = makePercentile(Object.values(speedMaps).flatMap((m) => m.map((x) => x.speed)));
 
   status(t("Cutting to the beat…"));
-  const built = buildGeneration(p, s, range, { pools, sources, energy, context: { speedMaps, speedPct } });
+  let percent = -1;
+  const built = await buildGenerationAsync(p, s, range, { pools, sources, energy, context: { speedMaps, speedPct } }, (fraction) => {
+    const next = Math.floor(fraction * 100);
+    if (next !== percent) { percent = next; status(t("Cutting to the beat… {percent}%", { percent })); }
+  });
   // (with split screens the clips go onto V1, whatever track was chosen)
   const onto = p.tracks.find((x) => x.id === built.result.trackId);
   if (onto?.locked) throw new Error(t("Track {name} is locked – unlock it (L) to generate onto it.", { name: onto.name }));

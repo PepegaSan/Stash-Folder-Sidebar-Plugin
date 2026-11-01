@@ -10,7 +10,8 @@ import type { Clip, PmvProject, Snippet, SourceMedia } from "../model/project";
 import { audioEnd, clipEnd } from "../model/project";
 import { carve, ensureTracks } from "../timeline/ops";
 import { EPS, beatLength, nearestGridTime } from "../timeline/time";
-import { type FillContext, type FillOptions, type OffsetMode, type PickOrder, type TransitionPick, type TransitionPolicy, type TransitionWhen, fillGroups } from "./assemble";
+import { type FillContext, type FillOptions, type OffsetMode, type PickOrder, type TransitionPick, type TransitionPolicy, type TransitionWhen, fillGroupsSteps } from "./assemble";
+import { finish, finishAsync } from "./cooperate";
 import { FULL_ONLY, LAYOUT_PICKS, type LayoutChoice, type LayoutPick, layoutRanges, layoutSlots, planLayouts, snapLayouts, usesSplit, withLayouts } from "./layouts";
 import type { ClipOptions, MaterialItem, Shape } from "./material";
 import { type Rhythm, beatFit } from "./motion";
@@ -252,6 +253,16 @@ export const withinFields = (c: LayoutChoice, fields: number): LayoutChoice => {
 };
 
 export function buildGeneration(p: PmvProject, s: GeneratorSettings, range: { from: number; to: number }, input: BuildInput): { result: GenerationResult; stats: GenerationStats } {
+  return finish(generationSteps(p, s, range, input));
+}
+
+/** UI entry point: identical picks, with short pauses so the browser remains responsive. */
+export function buildGenerationAsync(p: PmvProject, s: GeneratorSettings, range: { from: number; to: number }, input: BuildInput, progress?: (fraction: number) => void): Promise<{ result: GenerationResult; stats: GenerationStats }> {
+  return finishAsync(generationSteps(p, s, range, input), progress);
+}
+
+function* generationSteps(p: PmvProject, s: GeneratorSettings, range: { from: number; to: number }, input: BuildInput): Generator<number, { result: GenerationResult; stats: GenerationStats }> {
+  yield 0;
   const sourceMap = { ...p.sources, ...Object.fromEntries(input.sources.map((x) => [x.sceneId, x])) };
   const withSources = { ...p, sources: sourceMap };
   // candidates without their excluded parts; a stage without clips borrows from the others
@@ -287,7 +298,7 @@ export function buildGeneration(p: PmvProject, s: GeneratorSettings, range: { fr
   const groups = Math.max(1, ...steps.map((x) => LAYOUT_INFO[x.kind].groups));
   const trackId = split ? p.tracks[p.tracks.length - 1].id : s.target.trackId;
   const pins = Array.from({ length: groups }, (_, g) => (g === 0 ? pinnedClips(p, trackId) : pinnedClips(p, p.tracks[groupTrackIndex(p.tracks.length, g)]?.id ?? "")));
-  let filled = fillGroups(withSources, slots, stages, pools, fill, input.context, pins);
+  let filled = yield* fillGroupsSteps(withSources, slots, stages, pools, fill, input.context, pins);
   filled = Array.from({ length: groups }, (_, g) => filled[g] ?? []);
 
   const used = new Set(filled.flat().map((c) => c.snippetId));

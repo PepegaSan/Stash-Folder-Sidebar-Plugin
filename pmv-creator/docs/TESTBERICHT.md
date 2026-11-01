@@ -1,10 +1,18 @@
 # Testbericht: Erstnutzer-Durchlauf in echtem Stash
 
-**Aktuelle Ergänzung:** [Generator-Varianz vom 01.11.2026](#generator-varianz-am-01112026) und [Audio-Nachprüfung vom 31.10.2026](#nachprüfung-am-31102026-arbeitsstand-nach-0911). Der ursprüngliche Bericht unten bleibt als historischer Nachweis für den Stand vom 21.10. erhalten.
+**Aktuelle Ergänzung:** [Varianz-Laufzeitkorrektur 0.9.13](#varianz-laufzeitkorrektur-0913), [Generator-Varianz vom 01.11.2026](#generator-varianz-am-01112026) und [Audio-Nachprüfung vom 31.10.2026](#nachprüfung-am-31102026-arbeitsstand-nach-0911). Der ursprüngliche Bericht unten bleibt als historischer Nachweis für den Stand vom 21.10. erhalten.
 
 **Stand:** 21.10.2026 · **Stash:** v0.31.1 (Windows, isolierte Zweitinstanz auf Port 9977, eigene Datenbank) · **Browser:** Edge 155 · **Material:** 26 Testvideos (22 Szenen, 15 s bis 2 h 24 min, H.264 und HEVC, 360p bis 1080p60), 17 angelegte Marker, 5 Tags, 2 Performer, ein synthetischer 128-BPM-Track.
 
 Die Umgebung lässt sich nachstellen mit [tests/e2e-stash/start-stash.ps1](../tests/e2e-stash/start-stash.ps1) (isolierte Instanz) und [tests/e2e-stash/sync-plugin.ps1](../tests/e2e-stash/sync-plugin.ps1) (Build → Plugin-Ordner → „Plugins neu laden“). Die Oberfläche wurde über Edge mit Remote-Debugging bedient; jeder Schritt wurde per Screenshot und DOM-Abfrage geprüft.
+
+## Varianz-Laufzeitkorrektur 0.9.13
+
+Nach der Meldung „Chrome: Seite reagiert nicht“ wurde die erschöpfte Einzelquelle als eigener Lastfall gemessen. In 0.9.12 verglich die Ausweichsuche jeden Kandidaten mit sämtlichen vorherigen Clips. Der neue Intervall-Index und ein einzelner Durchlauf der Grenzen ersetzen diese verschachtelte Suche. Die Oberfläche nutzt zusätzlich die kooperative Berechnung mit etwa 8-ms-Zeitabschnitten und Fortschrittsanzeige.
+
+Direkter Vergleich unter Node.js mit identischen 1.000 Auswahlen aus einer 30-s-Quelle: **1686 ms vorher, 14,5 ms danach**. 2.400 Auswahlen: 31 ms; 10.000: 102 ms. Eine vollständige kooperative Generierung mit echten Stash-Metadaten, 30-s-Quellbereich und 2.400 Schnitten dauerte rund 45 ms; der Timer lief währenddessen weiter, alle Picks blieben im Quellbereich und entsprachen exakt der synchronen Berechnung. Details: [Laufzeitbericht](verification/2026-11-01-variance-performance.json). Diese Zahlen messen Auswahl und Generierung, kein Medien-Decoding oder Rendern; sie sind keine gemessenen Chrome-Endzeiten.
+
+248 Tests erfolgreich, darunter ein exakter Vergleich des gewichteten Index mit unabhängigen Überlappungssummen, ein Lasttest mit einer erschöpften Quelle, Sync/Async-Gleichheit und ein Timer-Test zwischen Rechenabschnitten. Typprüfung, Übersetzungen und Build erfolgreich. Testinstallation `E:\Stash` aktualisiert.
 
 ## Generator-Varianz am 01.11.2026
 

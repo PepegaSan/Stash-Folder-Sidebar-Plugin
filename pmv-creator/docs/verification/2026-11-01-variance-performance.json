@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-01",
+  "release": "0.9.13",
+  "runtime": "Node.js; browser timer cooperation additionally covered by unit regression",
+  "sameWorkload": {
+    "clips": 1000,
+    "sourceSeconds": 30,
+    "cutSeconds": 0.5,
+    "oldMilliseconds": 1685.56,
+    "newMilliseconds": 14.49
+  },
+  "stress": [
+    {
+      "clips": 2400,
+      "milliseconds": 31.41
+    },
+    {
+      "clips": 10000,
+      "milliseconds": 101.58
+    }
+  ],
+  "liveSceneMetadata": {
+    "stashVersion": "v0.31.1",
+    "sourceDurationSeconds": 1704.37,
+    "selectedRangeSeconds": 30
+  },
+  "cooperativeGeneration": {
+    "clips": 2400,
+    "milliseconds": 44.9,
+    "timerTicks": 4,
+    "progressUpdates": 4,
+    "identicalSyncAsyncPicks": true,
+    "allPicksWithinSelectedRange": true
+  },
+  "mediaDecoded": false,
+  "projectWrittenToStash": false
+}

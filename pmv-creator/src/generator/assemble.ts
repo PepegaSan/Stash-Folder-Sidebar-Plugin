@@ -8,6 +8,7 @@ import type { SpeedSpot } from "./motion";
 import { mulberry32 } from "./random";
 import type { Slot } from "./rhythm";
 import { SourceUsage } from "./usage";
+import { finish } from "./cooperate";
 
 /** shuffle = seeded mix, interleave = round-robin over scenes, source = order as delivered. */
 export type PickOrder = "shuffle" | "interleave" | "source";
@@ -80,15 +81,15 @@ const REUSE_PENALTY = 0.6;
 /** A queue that refills (re-shuffled) when it runs dry; picks the best of the next few in line. */
 class Pool {
   private queue: MaterialItem[] = [];
+  private queued = new Set<MaterialItem>();
   private uses = new Map<MaterialItem, number>();
+  readonly scenes: number;
   constructor(
     readonly items: MaterialItem[],
     private order: PickOrder,
     private rnd: () => number,
-  ) {}
-
-  get scenes(): number {
-    return new Set(this.items.map((i) => i.snippet.sceneId)).size;
+  ) {
+    this.scenes = new Set(items.map((i) => i.snippet.sceneId)).size;
   }
 
   /**
@@ -96,7 +97,11 @@ class Pool {
    * a fast scene has more than one fast spot, and on a long loud part the fast ones in line run out.
    */
   take(cost: (it: MaterialItem) => number, reuse = false, threshold = REUSE_THRESHOLD, lookahead = LOOKAHEAD): MaterialItem {
-    if (!this.queue.length) this.queue = this.order === "shuffle" ? shuffle(this.items, this.rnd) : this.order === "interleave" ? interleave(this.items) : this.items.slice();
+    if (this.items.length === 1) return this.items[0];
+    if (!this.queue.length) {
+      this.queue = this.order === "shuffle" ? shuffle(this.items, this.rnd) : this.order === "interleave" ? interleave(this.items) : this.items.slice();
+      this.queued = new Set(this.queue);
+    }
     let best = 0;
     let low = Infinity;
     for (let i = 0; i < Math.min(lookahead, this.queue.length); i++) {
@@ -106,12 +111,13 @@ class Pool {
     let pick: MaterialItem | null = null;
     if (reuse && low > threshold) {
       for (const [it, n] of this.uses) {
-        if (this.queue.includes(it)) continue;
+        if (this.queued.has(it)) continue;
         const c = cost(it) + REUSE_PENALTY * n;
         if (c < low) [low, pick] = [c, it];
       }
     }
     pick ??= this.queue.splice(best, 1)[0];
+    this.queued.delete(pick);
     this.uses.set(pick, (this.uses.get(pick) ?? 0) + 1);
     return pick;
   }
@@ -161,6 +167,10 @@ export function fillSlots(p: PmvProject, slots: Slot[], stages: number[], pools:
  * first. Deterministic: all randomness comes from `o.seed`.
  */
 export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools: MaterialItem[][], o: FillOptions, ctx: FillContext, pinned: Clip[][] = []): Clip[][] {
+  return finish(fillGroupsSteps(p, slots, stages, pools, o, ctx, pinned));
+}
+
+export function* fillGroupsSteps(p: PmvProject, slots: Slot[], stages: number[], pools: MaterialItem[][], o: FillOptions, ctx: FillContext, pinned: Clip[][] = []): Generator<number, Clip[][]> {
   const rnd = mulberry32(o.seed ^ 0x9e3779b9);
   const queues = pools.map((items) => new Pool(items, o.order, rnd));
   const beat = beatLength(p.beatGrid);
@@ -181,7 +191,7 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
   for (const pin of pinned.flat()) usage.add(pin.sceneId, pin.sourceIn, pin.duration * pin.speed);
   const continued = new Map<string, number>();
 
-  const fresh = (sceneId: string, t: number, need: number) => usage.overlap(sceneId, t, need) < EPS;
+  const fresh = (sceneId: string, t: number, need: number) => usage.fresh(sceneId, t, need);
   const windowFor = (it: MaterialItem, need: number, slot: Slot): [number, number] => {
     const s = it.snippet;
     const [a, b] = o.followTimeline ? timelineWindow(s.in, s.out, slot.progress) : [s.in, s.out];
@@ -210,7 +220,8 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
   const out: Clip[][] = [];
   // what each field shows (scene, until when)
   const showing: Array<{ sceneId: string; until: number } | undefined> = [];
-  slots.forEach((slot, k) => {
+  for (let k = 0; k < slots.length; k++) {
+    const slot = slots[k];
     const group = slot.group ?? 0;
     const mid = slot.start + slot.duration / 2;
     const pin = (pinned[group] ?? []).find((c) => c.start <= mid && c.start + c.duration > mid);
@@ -218,7 +229,8 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
       recentScenes.push(pin.sceneId);
       recentPerformers.push([]);
       showing[group] = { sceneId: pin.sceneId, until: pin.start + pin.duration };
-      return;
+      yield (k + 1) / slots.length;
+      continue;
     }
     const others = new Set(showing.flatMap((x, g) => (x && g !== group && x.until > slot.start + EPS ? [x.sceneId] : [])));
     const pool = queues[stages[k]] ?? queues[0];
@@ -232,7 +244,7 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
       const need = Math.min(wantedNeed, cand.snippet.out - cand.snippet.in);
       if (protect && (cand.fixedStart || variesOffset)) {
         const [lo, hi] = windowFor(cand, need, slot);
-        if (!usage.free(cand.snippet.sceneId, lo, hi, need).length) c += 1000;
+        if (!usage.hasFree(cand.snippet.sceneId, lo, hi, need)) c += 1000;
       }
       if (o.variety) {
         if (recentScenes.slice(-varietyWindow).includes(cand.snippet.sceneId) && varietyWindow > 0) c += 100;
@@ -305,7 +317,8 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
       label: s.label,
     });
     showing[group] = { sceneId: s.sceneId, until: slot.start + slot.duration };
-  });
+    yield (k + 1) / slots.length;
+  }
   return Array.from(out, (x) => x ?? []);
 }
 
