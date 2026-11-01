@@ -317,6 +317,17 @@ export function GeneratorDialog() {
             )}
           </div>
         )}
+        <div className="pmv-gen-variance">
+          <label className="pmv-row pmv-wrap">
+            <span className="pmv-gen-label">{t("Clip variance")}</span>
+            <input type="range" min={0} max={100} step={5} value={s.select.variance ?? 100} disabled={!!busy} onChange={(e) => setSelect({ variance: +e.target.value })} aria-label={t("Clip variance")} aria-describedby="pmv-variance-help" />
+            <span>{s.select.variance ?? 100}%</span>
+          </label>
+          <div className="pmv-li-meta" id="pmv-variance-help">{t("Low: allow repeats. High: prefer unused parts of each video throughout the PMV. 100%: reuse only when no unused part fits. Markers and selected ranges limit the available material.")}</div>
+          {s.select.offset === "start" && !s.select.followTimeline && !s.select.paceMatch && (
+            <button className="btn btn-sm btn-link" onClick={() => setSelect({ offset: "random" })}>{t("Start point is set to beginning. Use random start points for more variance.")}</button>
+          )}
+        </div>
         {clipPreset && <div className="pmv-li-meta">{t("Clips with {name} – change it below.", { name: clipPreset.label })}</div>}
         {!adv && (
           <>
@@ -355,9 +366,10 @@ export function GeneratorDialog() {
             {/* the look belongs to the PMV, not to a generator run: it changes the project right away */}
             <div className="pmv-grid2 pmv-gen-look">
               <LookFields output={project.output} onChange={(patch) => dispatch({ type: "output/update", patch })} />
-              <label>{t("Clip audio")}</label>
+              <label>{t("New clips' audio")}</label>
               <VolumeSlider value={project.clipVolume} onChange={(v) => dispatch({ type: "project/clipVolume", volume: v })} title={t("The clips' own sound under the music – like the look it belongs to the PMV and changes the project right away")} />
             </div>
+            <div className="pmv-li-meta">{t("Changes the project's level for new clips immediately, even if you close the generator.")}</div>
             <More label={t("Effects: {list}", { list: effectSummary(s.style.fx) })}>{effects}</More>
           </>
         )}
@@ -542,9 +554,10 @@ export function GeneratorDialog() {
                 <label>{t("Speed")}</label>
                 <NumField value={s.style.speed} onCommit={(v) => setStyle({ speed: v })} min={0.25} max={4} step={0.05} suffix="×" />
                 <LookFields output={project.output} onChange={(patch) => dispatch({ type: "output/update", patch })} />
-                <label>{t("Clip audio")}</label>
+                <label>{t("New clips' audio")}</label>
                 <VolumeSlider value={project.clipVolume} onChange={(v) => dispatch({ type: "project/clipVolume", volume: v })} title={t("The clips' own sound under the music – like the look it belongs to the PMV and changes the project right away")} />
               </div>
+              <div className="pmv-li-meta">{t("Changes the project's level for new clips immediately, even if you close the generator.")}</div>
               <div className="pmv-gen-label" title={t("Change to the beat – the louder, the more fields")}>
                 {t("Split screens")}
               </div>

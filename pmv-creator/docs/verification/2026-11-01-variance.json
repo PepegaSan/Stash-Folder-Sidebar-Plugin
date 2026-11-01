@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-01",
+  "stashVersion": "v0.31.1",
+  "sourceDurationSeconds": 1704.37,
+  "liveSceneMetadata": true,
+  "mediaDecoded": false,
+  "projectWrittenToStash": false,
+  "singleSource": {
+    "clips": 75,
+    "durations": [
+      5,
+      10,
+      20
+    ],
+    "overlappingPairs": 0,
+    "earliest": 137.76780958904448,
+    "latest": 1551.5378023407072
+  },
+  "sparseMotionMap": {
+    "synthetic": true,
+    "measuredSpots": 4,
+    "lowVarianceUniqueStarts": 4,
+    "highVarianceUniqueStarts": 75,
+    "highVarianceOverlappingPairs": 0
+  },
+  "generatedTimelines": [
+    {
+      "layout": "full",
+      "clips": 120,
+      "overlappingPairs": 0,
+      "timelineEnd": 240
+    },
+    {
+      "layout": "quad",
+      "clips": 123,
+      "overlappingPairs": 0,
+      "timelineEnd": 240
+    }
+  ]
+}

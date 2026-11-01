@@ -7,6 +7,7 @@ import type { MaterialItem } from "./material";
 import type { SpeedSpot } from "./motion";
 import { mulberry32 } from "./random";
 import type { Slot } from "./rhythm";
+import { SourceUsage } from "./usage";
 
 /** shuffle = seeded mix, interleave = round-robin over scenes, source = order as delivered. */
 export type PickOrder = "shuffle" | "interleave" | "source";
@@ -25,6 +26,8 @@ export interface FillOptions {
   offset: OffsetMode;
   /** The same scene not within the last 24 clips, the same performer preferably not within the last 4. */
   variety: boolean;
+  /** 0..100: how often unused source ranges take priority. Missing in old saved runs = 100. */
+  variance?: number;
   /** Take a clip from the part of its scene that matches the song's progress (±12 %). */
   followTimeline: boolean;
   /** Experimental: spots whose motion speed fits the music's energy (needs speed maps). */
@@ -92,11 +95,11 @@ class Pool {
    * `reuse`: if nothing in line costs less than `threshold`, clips used before count too (less with every use) –
    * a fast scene has more than one fast spot, and on a long loud part the fast ones in line run out.
    */
-  take(cost: (it: MaterialItem) => number, reuse = false, threshold = REUSE_THRESHOLD): MaterialItem {
+  take(cost: (it: MaterialItem) => number, reuse = false, threshold = REUSE_THRESHOLD, lookahead = LOOKAHEAD): MaterialItem {
     if (!this.queue.length) this.queue = this.order === "shuffle" ? shuffle(this.items, this.rnd) : this.order === "interleave" ? interleave(this.items) : this.items.slice();
     let best = 0;
     let low = Infinity;
-    for (let i = 0; i < Math.min(LOOKAHEAD, this.queue.length); i++) {
+    for (let i = 0; i < Math.min(lookahead, this.queue.length); i++) {
       const c = cost(this.queue[i]) + i * 1e-3; // (earlier in line wins ties)
       if (c < low) [low, best] = [c, i];
     }
@@ -171,13 +174,24 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
   };
   const recentScenes: string[] = [];
   const recentPerformers: string[][] = [];
-  const usedSpots = new Map<string, number[]>();
+  const usage = new SourceUsage();
+  // Independent of the pool/transition draws; turning up variance stays deterministic.
+  const varianceRnd = mulberry32(o.seed ^ 0x6a09e667);
+  const variance = clamp(Number.isFinite(o.variance) ? o.variance! : 100, 0, 100) / 100;
+  for (const pin of pinned.flat()) usage.add(pin.sceneId, pin.sourceIn, pin.duration * pin.speed);
   const continued = new Map<string, number>();
 
-  const fresh = (sceneId: string, t: number) => !(usedSpots.get(sceneId) ?? []).some((u) => Math.abs(u - t) < 3);
+  const fresh = (sceneId: string, t: number, need: number) => usage.overlap(sceneId, t, need) < EPS;
+  const windowFor = (it: MaterialItem, need: number, slot: Slot): [number, number] => {
+    const s = it.snippet;
+    const [a, b] = o.followTimeline ? timelineWindow(s.in, s.out, slot.progress) : [s.in, s.out];
+    // Keep the whole clip inside the snippet, even in the narrow window at a scene's end.
+    const lo = Math.min(a, Math.max(s.in, s.out - need));
+    return [lo, Math.max(b, lo + need)];
+  };
   const mapSpots = (it: MaterialItem, need: number, slot: Slot) => {
     const s = it.snippet;
-    const win = o.followTimeline ? timelineWindow(s.in, s.out, slot.progress) : [s.in, s.out];
+    const win = windowFor(it, need, slot);
     return (ctx.speedMaps[s.sceneId] ?? []).filter((x) => x.t >= win[0] && x.t + need <= Math.min(win[1], s.out) + EPS);
   };
   // how far the best spot of an item is from the wanted pace (null = unknown)
@@ -186,7 +200,7 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
     for (const x of mapSpots(it, need, slot)) {
       const pct = ctx.speedPct(x.speed);
       if (pct == null) continue;
-      const v = Math.abs(pct - slot.energy) + (fresh(it.snippet.sceneId, x.t) ? 0 : 0.5);
+      const v = Math.abs(pct - slot.energy) + (fresh(it.snippet.sceneId, x.t, need) ? 0 : 0.5);
       if (d == null || v < d) d = v;
     }
     return d;
@@ -203,17 +217,23 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
     if (pin) {
       recentScenes.push(pin.sceneId);
       recentPerformers.push([]);
-      usedSpots.set(pin.sceneId, [...(usedSpots.get(pin.sceneId) ?? []), pin.sourceIn].slice(-8));
       showing[group] = { sceneId: pin.sceneId, until: pin.start + pin.duration };
       return;
     }
     const others = new Set(showing.flatMap((x, g) => (x && g !== group && x.until > slot.start + EPS ? [x.sceneId] : [])));
     const pool = queues[stages[k]] ?? queues[0];
-    const speed = rampedSpeed(o, slot);
-    const need = slot.duration * speed;
+    const wantedSpeed = rampedSpeed(o, slot);
+    const wantedNeed = slot.duration * wantedSpeed;
+    const protect = variance > 0 && (variance === 1 || varianceRnd() < variance);
+    const variesOffset = o.offset === "random" || o.followTimeline || o.paceMatch;
     const varietyWindow = Math.min(RECENT_SCENES, Math.max(0, pool.scenes - 1));
     const it = pool.take((cand) => {
       let c = 0;
+      const need = Math.min(wantedNeed, cand.snippet.out - cand.snippet.in);
+      if (protect && (cand.fixedStart || variesOffset)) {
+        const [lo, hi] = windowFor(cand, need, slot);
+        if (!usage.free(cand.snippet.sceneId, lo, hi, need).length) c += 1000;
+      }
       if (o.variety) {
         if (recentScenes.slice(-varietyWindow).includes(cand.snippet.sceneId) && varietyWindow > 0) c += 100;
         for (const perfs of recentPerformers.slice(-RECENT_PERFORMERS)) for (const id of cand.performers) if (perfs.includes(id)) c += 0.6;
@@ -227,41 +247,40 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
       if (others.has(cand.snippet.sceneId)) c += ON_SCREEN;
       return c;
       // in a split screen, when only scenes on screen are left in line, clips used before count too
-    }, o.paceMatch || others.size > 0, o.paceMatch ? REUSE_THRESHOLD : ON_SCREEN - 1);
+    }, protect || o.paceMatch || others.size > 0, protect || o.paceMatch ? REUSE_THRESHOLD : ON_SCREEN - 1, protect ? Infinity : LOOKAHEAD);
     const s = it.snippet;
     const len = s.out - s.in;
+    // A short marker/range fills the slot by slowing down instead of spilling past its end.
+    const speed = Math.min(wantedSpeed, len / slot.duration);
+    const need = slot.duration * speed;
     let start = s.in;
 
     if (it.fixedStart) {
       // markers: from their start; re-used ones play on inside the marker
       const off = continued.get(s.id) ?? 0;
       start = s.in + (off + need <= len + EPS ? off : 0);
+      if (protect && !fresh(s.sceneId, start, need)) start = usage.free(s.sceneId, s.in, s.out, need)[0]?.[0] ?? usage.pick(s.sceneId, s.in, s.out, need, rnd);
       continued.set(s.id, start - s.in + need);
     } else {
       const spots = o.paceMatch ? mapSpots(it, need, slot) : [];
       const scored = spots
         .map((x) => ({ x, pct: ctx.speedPct(x.speed) }))
         .filter((c) => c.pct != null)
-        .map((c) => ({ t: c.x.t, d: Math.abs(c.pct! - slot.energy) + (fresh(s.sceneId, c.x.t) ? 0 : 0.5) + rnd() * 0.12 }))
+        .filter((c) => !protect || fresh(s.sceneId, c.x.t, need))
+        .map((c) => ({ t: c.x.t, d: Math.abs(c.pct! - slot.energy) + (fresh(s.sceneId, c.x.t, need) ? 0 : 0.5) + rnd() * 0.12 }))
         .sort((a, b) => a.d - b.d);
       if (scored.length) start = scored[0].t;
-      else if (o.offset === "continue") {
+      else if (protect && variesOffset) {
+        const [lo, hi] = windowFor(it, need, slot);
+        start = usage.pick(s.sceneId, lo, hi, need, rnd);
+      } else if (o.offset === "continue") {
         const off = continued.get(s.id) ?? 0;
         start = s.in + (off + need <= len + EPS ? off : 0);
         continued.set(s.id, start - s.in + need);
       } else if (o.offset === "random" || o.followTimeline) {
-        const [lo, hi] = o.followTimeline ? timelineWindow(s.in, s.out, slot.progress) : [s.in, s.out];
+        const [lo, hi] = windowFor(it, need, slot);
         const room = Math.max(0, Math.min(hi, s.out) - need - lo);
-        // a few seeded tries, the one farthest from spots used before in this scene
-        let bestT = lo;
-        let bestGap = -1;
-        for (let tries = 0; tries < 3; tries++) {
-          const t = lo + rnd() * room;
-          const gap = Math.min(99, ...(usedSpots.get(s.sceneId) ?? [99]).map((u) => Math.abs(u - t)));
-          if (gap > bestGap) [bestT, bestGap] = [t, gap];
-          if (gap >= 3) break;
-        }
-        start = bestT;
+        start = lo + rnd() * room;
       }
     }
     const fileDur = p.sources[s.sceneId]?.duration ?? 0;
@@ -269,7 +288,7 @@ export function fillGroups(p: PmvProject, slots: Slot[], stages: number[], pools
 
     recentScenes.push(s.sceneId);
     recentPerformers.push(it.performers);
-    usedSpots.set(s.sceneId, [...(usedSpots.get(s.sceneId) ?? []), start].slice(-8));
+    usage.add(s.sceneId, start, need);
 
     (out[group] ??= []).push({
       id: uid("clip"),

@@ -13,6 +13,7 @@ import type { Transport } from "../../state/transport";
 import { flattenTimeline, resolveTransitions } from "../../timeline/flatten";
 import { Compositor } from "./compositor";
 import { PREVIEW_SLOTS, PreviewEngine } from "./engine";
+import { captureElement, mediaAudioContext } from "./audio";
 
 export interface RecordProgress {
   time: number;
@@ -31,27 +32,18 @@ export function recordingSupported(): boolean {
   return typeof MediaRecorder !== "undefined" && typeof HTMLCanvasElement.prototype.captureStream === "function" && MIMES.some((m) => MediaRecorder.isTypeSupported(m));
 }
 
-// one AudioContext per page; a media element can be captured only once, the node then owns its output
-let audioCtx: AudioContext | null = null;
-const sources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
-function captureElement(el: HTMLMediaElement): MediaElementAudioSourceNode {
-  audioCtx ??= new AudioContext();
-  let node = sources.get(el);
-  if (!node) {
-    node = audioCtx.createMediaElementSource(el);
-    sources.set(el, node);
-  }
-  return node;
-}
+const musicSpeakers = new WeakSet<HTMLMediaElement>();
 
 /** The music keeps playing to the speakers – through the listening volume, which the recording never gets. */
 function captureMusic(transport: Transport): MediaElementAudioSourceNode {
-  const known = sources.has(transport.audio);
+  const known = musicSpeakers.has(transport.audio);
   const node = captureElement(transport.audio);
   if (!known) {
-    const speaker = audioCtx!.createGain();
-    node.connect(speaker).connect(audioCtx!.destination);
+    const ctx = mediaAudioContext()!;
+    const speaker = ctx.createGain();
+    node.connect(speaker).connect(ctx.destination);
     transport.routeSpeaker(speaker);
+    musicSpeakers.add(transport.audio);
   }
   return node;
 }
@@ -67,6 +59,10 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
   const { width, height, fps, fit } = project.output;
   const duration = projectDuration(project);
   const mime = MIMES.find((m) => MediaRecorder.isTypeSupported(m))!;
+  const ctx = mediaAudioContext();
+  if (!ctx) throw new Error("Web Audio is unavailable");
+  await ctx.resume();
+  const dest = ctx.createMediaStreamDestination();
 
   // hidden players – tiny, in the corner and (nearly) transparent: off screen Chrome renders them on a slow timer
   const host = document.createElement("div");
@@ -86,15 +82,12 @@ export async function recordSequence(project: PmvProject, scenes: Record<string,
   canvas.height = height;
   const compositor = new Compositor(canvas);
   const grade = colorGrade(project.output);
-  const engine = new PreviewEngine(videos);
+  const engine = new PreviewEngine(videos, { audioDestination: dest });
   const segs = withStutters(flattenTimeline(project), fx, fps);
   engine.setTimeline({ segs, trans: resolveTransitions(project, segs), fps, scenes, fit });
 
   // audio: music (also to the speakers, as always) + the hidden players' clip audio (recording only)
-  const ctx = (audioCtx ??= new AudioContext());
-  await ctx.resume().catch(() => undefined);
-  const dest = ctx.createMediaStreamDestination();
-  const nodes = [captureMusic(transport), ...videos.map((v) => captureElement(v))];
+  const nodes = [captureMusic(transport)];
   nodes.forEach((n) => n.connect(dest));
 
   const stream = new MediaStream([...canvas.captureStream(fps).getVideoTracks(), ...dest.stream.getAudioTracks()]);

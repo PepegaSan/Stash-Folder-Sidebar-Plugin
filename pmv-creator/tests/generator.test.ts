@@ -320,11 +320,13 @@ describe("generate end-to-end", () => {
 
   it("fills the song exactly, overwrites only the range, one undo step", () => {
     const { p, s } = settings();
+    p.clipVolume = 0.6;
     const pools = [[item("1", 0, 100), item("2", 0, 100), item("3", 0, 100)]];
     const range = generationRange(p, s.target, 0);
     const { result, stats } = buildGeneration(p, s, range, { pools, sources: [], energy: quietThenLoud, context: noMaps });
     expect(result.clips.reduce((n, c) => n + c.duration, 0)).toBeCloseTo(32);
     expect(stats.drops).toBe(1);
+    expect(result.clips.every((c) => c.volume === 0.6)).toBe(true);
 
     let st = initialEditorState(p);
     st = editorReducer(st, { type: "generate/apply", result });

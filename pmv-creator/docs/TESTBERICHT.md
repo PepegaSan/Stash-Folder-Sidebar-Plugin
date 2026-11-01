@@ -1,8 +1,21 @@
 # Testbericht: Erstnutzer-Durchlauf in echtem Stash
 
+**Aktuelle Ergänzung:** [Generator-Varianz vom 01.11.2026](#generator-varianz-am-01112026) und [Audio-Nachprüfung vom 31.10.2026](#nachprüfung-am-31102026-arbeitsstand-nach-0911). Der ursprüngliche Bericht unten bleibt als historischer Nachweis für den Stand vom 21.10. erhalten.
+
 **Stand:** 21.10.2026 · **Stash:** v0.31.1 (Windows, isolierte Zweitinstanz auf Port 9977, eigene Datenbank) · **Browser:** Edge 155 · **Material:** 26 Testvideos (22 Szenen, 15 s bis 2 h 24 min, H.264 und HEVC, 360p bis 1080p60), 17 angelegte Marker, 5 Tags, 2 Performer, ein synthetischer 128-BPM-Track.
 
 Die Umgebung lässt sich nachstellen mit [tests/e2e-stash/start-stash.ps1](../tests/e2e-stash/start-stash.ps1) (isolierte Instanz) und [tests/e2e-stash/sync-plugin.ps1](../tests/e2e-stash/sync-plugin.ps1) (Build → Plugin-Ordner → „Plugins neu laden“). Die Oberfläche wurde über Edge mit Remote-Debugging bedient; jeder Schritt wurde per Screenshot und DOM-Abfrage geprüft.
+
+## Generator-Varianz am 01.11.2026
+
+Arbeitsstand nach 0.9.11, installiert in der vom Nutzer freigegebenen separaten Installation `E:\Stash`, Stash v0.31.1 auf `127.0.0.1:9978`. Backend-Ping, Plugin-Reload und Auswahl mit echten Szenendaten erfolgreich. Ergebnisse: [maschinenlesbarer Bericht](verification/2026-11-01-variance.json).
+
+- Eine Quelle mit 1704,37 s: 75 Ausschnitte von 5/10/20 s, **keine überlappenden Quellbereiche**, verteilt von etwa 138 bis 1552 s.
+- Nachgestellte dünne Tempokarte mit vier Messpunkten: bei 0 % vier Startpunkte, bei 100 % **75 unterschiedliche Ausschnitte ohne Überlappung**. Die Messpunkte sind synthetisch; Szenendauern und Kandidaten stammen aus Stash.
+- Vollständige 240-s-Timelines mit Vollbild und Split-Screens: bis exakt 240 s gefüllt, keine wiederholten Quellbereiche. Timeline-Ergebnis im Reducer angewendet; kein Testprojekt in Stash gespeichert.
+- 244 Tests erfolgreich, einschließlich 9 neuer Auswahl-Regressionen für lange Quellen, Tag-Stufen, Felder, zukünftige Pins, überlappende Marker, Kandidaten nach Position 24, erschöpftes Material und Speed-Rampen. UI-Smoke-Test bedient den Regler und wechselt zwischen Einfach/Erweitert. Ältere Einstellungen und Presets geprüft; Typprüfung, Übersetzungsprüfung und Build erfolgreich.
+
+Diese Nachprüfung betrifft Quellauswahl und UI-Logik; die Medien wurden dafür nicht dekodiert oder gerendert.
 
 ## Was funktioniert (verifiziert)
 
@@ -78,3 +91,45 @@ Beobachtung ohne Änderung: Beim Öffnen des Editors fordert der Browser für je
 * API-Key statt Login (das Backend ruft Previews mit dem Session-Cookie ab; mit API-Key wurde das nicht ausgelöst).
 * Browser ohne HEVC-Decoder (Firefox): der Transcode-Fallback greift laut Code, wurde aber hier nicht ausgelöst, weil Edge HEVC direkt abspielt.
 * macOS.
+
+## Nachprüfung am 31.10.2026 (Arbeitsstand nach 0.9.11)
+
+**Geltungsbereich:** lokale, noch nicht veröffentlichte Änderungen auf Basis von 0.9.11. Paket- und Manifestversion bleiben 0.9.11; der Changelog führt die Änderungen unter *Unreleased*. Keine neue Installation in einer produktiven Stash-Instanz. Die Browserprüfung verwendet synthetisches Material und gemockte Stash-Antworten. Der ursprüngliche Erstnutzerbericht ist keine vollständige Abnahme der heutigen Funktionen.
+
+### Ziele und Ergebnisse
+
+| Ziel | Ergebnis und Nachweis |
+|---|---|
+| Clip-Ton über 100 % wie im FFmpeg-Render | Vorschau und Schnellaufnahme verwenden einen Web-Audio-GainNode für den Clip-Pegel 0–200 %. Die Browser-Hörlautstärke multipliziert den vollen Clip-Pegel erst danach; sie geht nicht in den Clip-Ton der Aufnahme ein. [Routing](../src/ui/preview/audio.ts), [Engine](../src/ui/preview/engine.ts), [Regressionen](../tests/previewAudio.test.ts) |
+| Gesperrte Clips verständlich behandeln | Der Clip-Ton-Regler ist deaktiviert und erklärt das Entsperren. Die Sammelaktion zählt nur entsperrte Clips, nennt gesperrte separat und meldet tatsächlich geänderte Clips. Ohne Änderung bzw. mit vollständig gesperrten Spuren ist sie deaktiviert. Ein Undo-Schritt stellt die vorherigen Pegel wieder her. [UI-Test](../tests/ui.smoke.test.tsx), [Sammelaktion](../src/ui/ClipAudioApply.tsx) |
+| Standard neuer Clips von vorhandenen Pegeln trennen | Der Projektblock erklärt, dass sein Regler nur den Startpegel neuer Clips ändert. „Auch für neue Clips verwenden“ übernimmt einen gewählten Clip-Pegel als Projektstandard. Der Generator erklärt seine sofortige Wirkung auch beim Schließen. Tests prüfen Generator- und Stapelübernahme; vorhandene Migration-/Einfügetests bleiben grün. [Generator-Test](../tests/generator.test.ts), [Einfügen/Migration](../tests/editing.test.ts), [UI-Test](../tests/ui.smoke.test.tsx) |
+| Bestehende Funktionen erhalten | 234 Tests in 25 Dateien erfolgreich (vor den Änderungen: 228 in 24). Typprüfung ohne Fehler, Übersetzungsprüfung ohne fehlende Schlüssel, beide Frontend-Bundles gebaut. Backend-E2E mit echtem FFmpeg vollständig erfolgreich. |
+
+### Tatsächliche Browsermessung
+
+Edge **156.0.4314.50**, unsichtbare Testinstanz, synthetischer 440-Hz-Ton. Die RMS-Messung erfolgt hinter der Clip-Audioausgabe; der Lautsprecherausgang der Messung ist stumm. Verhältnisse beziehen sich auf den gemessenen Pegel bei 100 %.
+
+| Einstellung | Gemessener RMS-Faktor |
+|---|---:|
+| 50 % | 0,499905 |
+| 100 % | 1,000000 |
+| 150 % | 1,499883 |
+| 200 % | 1,999734 |
+| Stumm | 0,000000 |
+| 75 % nach Aufräumen und erneutem Verbinden desselben Elements | 0,749937 |
+
+Zusätzlich wurde `recordSequence` mit einem synthetischen H.264/AAC-Clip tatsächlich ausgeführt und das erzeugte WebM wieder dekodiert: **2 Sekunden Aufnahme, Clip-Ton 200 %, Browser-Hörlautstärke 20 % und stumm**. Der RMS-Faktor im mittleren Aufnahmebereich beträgt **2,002472** gegenüber der dekodierten Quelle (kleine Codec-Abweichung). Keine JavaScript-Seitenfehler. [Messwerte](verification/2026-10-31-audio.json)
+
+Oberfläche im Browser geprüft: [Projektstandard](screenshots/clip-audio-project.png), [gesperrter Clip](screenshots/clip-audio-locked.png). Diese Aufnahmen verwenden die gemockte Testoberfläche, keine produktive Stash-Bibliothek.
+
+### Prüfungen und verbleibende Grenzen
+
+- `npm test -- --no-cache`: **234/234 Tests erfolgreich**. Neue Fälle betreffen Verstärkung, Hörlautstärke/Stumm, getrennten Aufnahmeausgang, Wiederverwendung und Aufräumen von Audioquellen, Browser ohne Audioverstärkung, Sperren, Ergebnisrückmeldung und Generator-/Stapelstandard.
+- `npm run typecheck`: erfolgreich.
+- `npm run i18n:check`: 875 deutsche Einträge, **0 fehlende**, 0 leere; 4 ungenutzte Bestandsschlüssel.
+- `npm run build`: klassisches Stash und Stash UI erfolgreich; lokales `dist/pmv-creator` aktualisiert.
+- `npm run test:backend`: alle Prüfungen erfolgreich, einschließlich B-Frames, NTSC/CFR, Cache, Plugin-Operationen, PC-Helfer mit API-Key-Anfragen, Helper-Streams, TS-Renderplan, Effekten, Split-Screens und exportierten Windows-Skripten. Das aktualisiert die Nachweislage gegenüber dem historischen Hinweis „API-Key nicht getestet“ für diesen Testumfang; es ersetzt keine Prüfung jeder produktiven Anmeldekonfiguration.
+- Unter Windows wurde der tatsächliche Projektpfad verwendet. Das Mischen eines umgeleiteten C:-Pfads mit dem aufgelösten E:-Pfad führte zunächst zu Modul-Ladefehlern in Vitest; im tatsächlichen Ordner liefen Ausgangs- und Änderungsstand erfolgreich.
+- Kein neuer Live-Test mit einer NAS, einer produktiven Bibliothek, Firefox oder macOS. Bei fehlender Web-Audio-Verstärkung bleibt native Wiedergabe mit sichtbarer Begrenzungsanzeige möglich; der Fallback ist automatisiert geprüft.
+- Clip-Pegel sind absolute Werte. Mehrfachauswahl, relative Gruppenänderung, automatisches Ducking und Pegelanzeige/Limiter bleiben gesonderte Produktentscheidungen. Hohe Summenpegel mehrerer Clips plus Musik können übersteuern. Diese Erweiterungen waren keine offene Implementierungszusage aus 0.9.7.
+- Die gemessene Gleichheit betrifft den **Clip-Pegel**. Stream-Ladezeit, Frame-Timing, Übergangsverhalten und die bisherige Musikvorschau bleiben im bestehenden Rahmen; der Backend-Render bleibt die frame-genaue Ausgabe.

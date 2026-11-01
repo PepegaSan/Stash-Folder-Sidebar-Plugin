@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { withStutters } from "../../fx/timeline";
 import { t } from "../../i18n";
 import { colorGrade } from "../../model/look";
@@ -28,6 +28,7 @@ export function PreviewPlayer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<PreviewEngine | null>(null);
   const drawRef = useRef<() => void>(() => undefined);
+  const [audioLimited, setAudioLimited] = useState(false);
 
   // only what the sequence depends on – culling in the sidebar must not re-cue the players
   const { tracks, output, audio, sources, layouts } = project;
@@ -48,7 +49,7 @@ export function PreviewPlayer() {
     const compositor = new Compositor(canvasRef.current!);
     // a paused preview is worked out and drawn again when a picture arrives (a stream opened, a seek through): the clip
     // that was waiting for it takes over from the last picture held meanwhile
-    const engine = new PreviewEngine(videoRefs.current.slice(0, PREVIEW_SLOTS), { listen: () => transport.listenLevel, onPicture: () => (transport.playing ? draw() : update()) });
+    const engine = new PreviewEngine(videoRefs.current.slice(0, PREVIEW_SLOTS), { listen: () => transport.listenLevel, onPicture: () => (transport.playing ? draw() : update()), onAudioLimit: setAudioLimited });
     const draw = () => compositor.draw(engine.view, gradeRef.current, fxRef.current ? { tl: fxRef.current, t: transport.time } : null);
     engineRef.current = engine;
     drawRef.current = draw;
@@ -134,6 +135,7 @@ export function PreviewPlayer() {
         <span className="pmv-mono pmv-dim">{formatBarBeat(time, project.beatGrid)}</span>
         <LocalMediaBadge />
       </div>
+      {audioLimited && <div className="pmv-li-meta" role="status">{t("Audio amplification is unavailable: preview clip audio is limited to 100 %. The render keeps the full level.")}</div>}
     </div>
   );
 }

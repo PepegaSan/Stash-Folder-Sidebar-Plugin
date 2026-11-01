@@ -17,6 +17,7 @@ import { type ResolvedTransition, type Segment, segmentIndexAt, segmentUnits, so
 import { VideoSlot, pickStream } from "../../stash/streams";
 import type { StashScene } from "../../stash/types";
 import { clamp } from "../../timeline/time";
+import { ClipAudioOutput } from "./audio";
 
 export interface PreviewTimeline {
   segs: Segment[];
@@ -142,6 +143,8 @@ export class PreviewEngine {
   /** The slot on screen before that – the clip just over, kept open for a jump back (⏮, the review keys): a seek, not a reload. */
   private recent = -1;
   private lastT = 0;
+  private audio: ClipAudioOutput;
+  private audioLimited = false;
 
   constructor(
     els: HTMLVideoElement[],
@@ -150,8 +153,12 @@ export class PreviewEngine {
       listen?: () => number;
       /** A player got a picture (a stream opened, a seek arrived) – nothing else redraws a paused preview. */
       onPicture?: () => void;
+      /** Quick record sends clip audio to its mix instead of the speakers. */
+      audioDestination?: AudioNode;
+      onAudioLimit?: (limited: boolean) => void;
     } = {},
   ) {
+    this.audio = new ClipAudioOutput(opts.audioDestination);
     this.slots = els.map((el) => new VideoSlot(el));
     this.bound = els.map(() => null);
     this.boundFrame = els.map(() => 0);
@@ -190,11 +197,13 @@ export class PreviewEngine {
       for (const ev of ["loadeddata", "seeked"]) s.el.removeEventListener(ev, this.onPicture);
       s.dispose();
     });
+    this.audio.dispose();
   }
 
   render(t: number, playing: boolean): void {
     const tl = this.tl;
     if (!tl) return;
+    this.audio.limited = false;
     const fps = tl.fps;
     const frame = t * fps;
     const jumped = Math.abs(t - this.lastT) > JUMP;
@@ -357,7 +366,12 @@ export class PreviewEngine {
       const css = looks[k].opacity > 0 || rolling.has(k) ? "0.001" : "0";
       if (s.el.style.opacity !== css) s.el.style.opacity = css;
       if (!driven.has(k) && !rolling.has(k) && !s.el.paused) s.el.pause();
+      if (!driven.has(k)) this.audio.setLevel(s.el, 0, playing);
     });
+    if (this.audioLimited !== this.audio.limited) {
+      this.audioLimited = this.audio.limited;
+      this.opts.onAudioLimit?.(this.audioLimited);
+    }
     this.view = { layers: layers.sort((a, b) => a.z - b.z), wash: { color: overlayColor, alpha: overlayAlpha }, layout: split ? { kind: split.kind, dir: split.dir } : null };
   }
 
@@ -414,9 +428,8 @@ export class PreviewEngine {
     const src = sourceTimeAt(seg, frame, fps);
     const until = this.until(seg);
     this.applyFit(slotIdx, seg);
-    const level = clamp(seg.clip.volume, 0, 1) * (this.opts.listen?.() ?? 1);
-    slot.el.muted = level <= 0;
-    slot.el.volume = level;
+    const level = clamp(seg.clip.volume, 0, 2) * (this.opts.listen?.() ?? 1);
+    this.audio.setLevel(slot.el, level, playing);
     const opened = slot.sceneId === scene.id && !slot.stale;
     if (!playing) {
       if (!slot.el.paused) slot.el.pause();

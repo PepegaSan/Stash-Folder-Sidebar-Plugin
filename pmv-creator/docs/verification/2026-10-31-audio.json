@@ -1,0 +1,44 @@
+{
+  "browser": "156.0.4314.50",
+  "audio": [
+    {
+      "level": 1,
+      "rms": 0.056570080585833814,
+      "ratio": 1
+    },
+    {
+      "level": 0.5,
+      "rms": 0.028279666092803683,
+      "ratio": 0.4999049992494695
+    },
+    {
+      "level": 1.5,
+      "rms": 0.08484848313112534,
+      "ratio": 1.4998826632814264
+    },
+    {
+      "level": 2,
+      "rms": 0.11312510639928833,
+      "ratio": 1.9997338739449653
+    },
+    {
+      "level": 0,
+      "rms": 0,
+      "ratio": 0
+    },
+    {
+      "level": 0.75,
+      "rms": 0.04242398650889695,
+      "ratio": 0.7499368229558558
+    }
+  ],
+  "recording": {
+    "sourceRms": 0.05633610580263453,
+    "recordingRms": 0.11281146551691641,
+    "ratio": 2.0024718412759164,
+    "seconds": 2,
+    "bytes": 49433
+  },
+  "pageErrors": [],
+  "ui": "project and locked clip rendered; locked slider disabled"
+}

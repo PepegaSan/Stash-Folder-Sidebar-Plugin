@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.12 (2026-11-01)
+
+- Generator: **Clip variance** slider (0–100%, default 100%) in both views, saved with runs and presets. High variance tracks complete source ranges throughout the PMV, across tag stages and split-screen fields, including kept clips. It prefers unused material rather than forgetting starts after eight uses, and falls back to fresh scene ranges when the few preview motion spots have been used. Markers stay within their selected ranges; exhausted material can repeat to finish the song. Explicit beginning/continue offsets stay available.
+- Clip audio above 100 % now uses Web Audio gain in the preview and Quick record, up to the same 200 % clip level as FFmpeg. Listening volume still affects only the preview. Captured elements are reused across remounts, recording clip audio goes only to its mix, and routes are disconnected on disposal. Browsers without amplification show the preview limit.
+- Locked clips show a disabled audio slider and an explanation. **Apply to existing clips (N)** counts only unlocked clips, lists skipped locked clips, reports the number actually changed and disables no-op applications; one undo step still restores the levels.
+- New-clip defaults are labelled separately from existing-clip changes. **Use for new clips too** copies a selected clip level to the project default. The generator visibly explains that its new-clip audio setting changes the project immediately, including when closed.
+- Added audio-routing and UI regressions, including batch inheritance; refreshed both READMEs, architecture limits and dated verification reports.
+
 ## 0.9.11 (2026-10-26)
 
 - **Timeline markers can be removed in plain sight.** The ◆ button above the timeline (*Advanced*) is **◆ Timeline marker** now and, as soon as the playhead sits on a marker (a click on its glyph in the ruler puts it there), **◆ Remove marker**; the key **M** toggles the same way. Until now only a precise double-click on the tiny glyph removed one, and its tooltip was the only place that said so. The tooltip also says what these markers are: a note for yourself in the ruler that goes into the OTIO export – not a Stash marker (that is what **↗ Stash** is for).

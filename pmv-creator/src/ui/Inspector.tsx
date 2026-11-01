@@ -15,6 +15,7 @@ import { useAudioAnalysis } from "./hooks";
 import { LayoutInspector } from "./LayoutFields";
 import { useMusic } from "./music";
 import { SongLibraryButton } from "./SongLibrary";
+import { ClipAudioApply } from "./ClipAudioApply";
 
 export function Inspector() {
   const { state } = useEditor();
@@ -96,18 +97,16 @@ function ClipInspector({ loc }: { loc: ClipLocation }) {
         {src && !src.hasAudio ? (
           <span className="pmv-li-meta">{t("This scene has no sound track.")}</span>
         ) : (
-          <VolumeSlider value={clip.volume} onChange={(v) => dispatch({ type: "clip/update", clipId: id, patch: { volume: v } })} title={t("The clip's own sound under the music (100 % = as loud as in the file)")} />
+          <VolumeSlider value={clip.volume} disabled={track.locked} onChange={(v) => dispatch({ type: "clip/update", clipId: id, patch: { volume: v } })} title={t("The clip's own sound under the music (100 % = as loud as in the file)")} />
         )}
         <label />
-        <span>
-          <button
-            className="btn btn-sm btn-secondary"
-            title={t("Gives every clip this clip audio (locked tracks keep theirs). One step – Ctrl+Z undoes it.")}
-            onClick={() => dispatch({ type: "clips/volume", volume: clip.volume })}
-          >
-            ⇉ {t("Clip audio for all clips")}
+        <div>
+          {track.locked && <div className="pmv-li-meta">{t("This track is locked. Unlock it in the timeline to change this clip.")}</div>}
+          <ClipAudioApply value={clip.volume} />
+          <button className="btn btn-sm btn-secondary" disabled={project.clipVolume === clip.volume} title={t("Changes only the level new clips start with. Existing clips keep theirs.")} onClick={() => dispatch({ type: "project/clipVolume", volume: clip.volume })}>
+            {t("Use for new clips too")}
           </button>
-        </span>
+        </div>
         <label>{t("Transition")}</label>
         <select
           className="form-control form-control-sm"
@@ -348,21 +347,13 @@ function AudioSection() {
 function ClipAudioSection() {
   const { state, dispatch } = useEditor();
   const p = state.present;
-  const clips = p.tracks.reduce((n, tr) => n + tr.clips.length, 0);
   return (
     <>
       <div className="pmv-section-head is-static">{t("Clip audio")}</div>
-      <div className="pmv-li-meta">{t("The clips' own sound under the music. New clips start with this level; every clip can have its own in the inspector.")}</div>
+      <div className="pmv-li-meta">{t("Level for new clips. Changing it leaves existing clips as they are.")}</div>
       <div className="pmv-row pmv-wrap">
         <VolumeSlider value={p.clipVolume} onChange={(v) => dispatch({ type: "project/clipVolume", volume: v })} title={t("The clip's own sound under the music (100 % = as loud as in the file)")} />
-        <button
-          className="btn btn-sm btn-secondary"
-          disabled={!clips}
-          title={t("Gives every clip this clip audio (locked tracks keep theirs). One step – Ctrl+Z undoes it.")}
-          onClick={() => dispatch({ type: "clips/volume", volume: p.clipVolume })}
-        >
-          ⇉ {t("Apply to all clips ({n})", { n: clips })}
-        </button>
+        <ClipAudioApply value={p.clipVolume} />
       </div>
     </>
   );

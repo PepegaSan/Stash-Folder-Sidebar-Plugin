@@ -364,6 +364,13 @@
   font-size: 12px;
   white-space: nowrap;
 }
+.pmv-gen-variance {
+  margin: 12px 0;
+}
+.pmv-gen-variance input[type="range"] {
+  width: min(260px, 45vw);
+  accent-color: var(--pmv-accent);
+}
 .pmv-gen .pmv-grid2 {
   grid-template-columns: 110px minmax(0, 1fr);
 }

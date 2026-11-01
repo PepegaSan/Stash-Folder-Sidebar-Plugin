@@ -384,6 +384,9 @@ const de: Record<string, string> = {
   "Skip intro/credits": "Intro/Abspann überspringen",
   Selection: "Auswahl",
   Variety: "Abwechslung",
+  "Clip variance": "Clip-Varianz",
+  "Low: allow repeats. High: prefer unused parts of each video throughout the PMV. 100%: reuse only when no unused part fits. Markers and selected ranges limit the available material.": "Niedrig: Wiederholungen erlauben. Hoch: im gesamten PMV bevorzugt unbenutzte Stellen jedes Videos wählen. 100%: erst wiederverwenden, wenn kein unbenutzter Ausschnitt mehr passt. Marker und ausgewählte Bereiche begrenzen das verfügbare Material.",
+  "Start point is set to beginning. Use random start points for more variance.": "Startpunkt steht auf Anfang. Für mehr Varianz zufällige Startpunkte verwenden.",
   "The same scene not within the last 24 clips, the same performer preferably not within the last 4": "Dieselbe Szene nicht innerhalb der letzten 24 Clips, derselbe Performer möglichst nicht innerhalb der letzten 4",
   "Follow the scenes' timeline": "Dem Verlauf der Szenen folgen",
   "The start of the song uses the beginnings of the scenes, the end their endings (±12 %)": "Der Anfang des Songs nutzt die Anfänge der Szenen, das Ende ihre Enden (±12 %)",
@@ -944,6 +947,19 @@ const de: Record<string, string> = {
   "Tick the songs": "Songs ankreuzen",
   "Add {n} songs": "{n} Songs hinzufügen",
   "Add 1 song": "1 Song hinzufügen",
+  // --- clip audio usability (working tree after 0.9.11)
+  "Audio amplification is unavailable: preview clip audio is limited to 100 %. The render keeps the full level.": "Audioverstärkung ist nicht verfügbar: Die Vorschau begrenzt Clip-Ton auf 100 %. Der Render behält den vollen Pegel.",
+  "Sets the same level on existing clips of unlocked tracks. Ctrl+Z undoes it in one step.": "Setzt denselben Pegel für vorhandene Clips auf entsperrten Spuren. Strg+Z macht es in einem Schritt rückgängig.",
+  "Apply to existing clips ({n})": "Auf vorhandene Clips anwenden ({n})",
+  "Skipped: {n} clips on locked tracks.": "Übersprungen: {n} Clips auf gesperrten Spuren.",
+  "Clip audio applied: {changed} changed, {locked} on locked tracks skipped.": "Clip-Ton angewendet: {changed} geändert, {locked} auf gesperrten Spuren übersprungen.",
+  "Existing clips on unlocked tracks already use this level.": "Vorhandene Clips auf entsperrten Spuren haben bereits diesen Pegel.",
+  "This track is locked. Unlock it in the timeline to change this clip.": "Diese Spur ist gesperrt. Entsperre sie in der Timeline, um diesen Clip zu ändern.",
+  "Changes only the level new clips start with. Existing clips keep theirs.": "Ändert nur den Startpegel neuer Clips. Vorhandene Clips behalten ihren Pegel.",
+  "Use for new clips too": "Auch für neue Clips verwenden",
+  "Level for new clips. Changing it leaves existing clips as they are.": "Pegel für neue Clips. Eine Änderung lässt vorhandene Clips unverändert.",
+  "New clips' audio": "Ton neuer Clips",
+  "Changes the project's level for new clips immediately, even if you close the generator.": "Ändert sofort den Projektpegel für neue Clips, auch wenn du den Generator wieder schließt.",
 };
 
 export default de;

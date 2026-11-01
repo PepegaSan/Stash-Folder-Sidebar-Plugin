@@ -24,6 +24,8 @@ export interface SelectOptions {
   order: PickOrder;
   offset: OffsetMode;
   variety: boolean;
+  /** 0..100: prefer unused source ranges within this PMV (old saved runs default to 100). */
+  variance?: number;
   followTimeline: boolean;
   /** Experimental: clip speed follows the music (speed maps from Stash scene previews). */
   paceMatch: boolean;
@@ -149,7 +151,7 @@ export function defaultSettings(trackId: string): GeneratorSettings {
       ],
       savedFilter: null,
     },
-    select: { order: "shuffle", offset: "random", variety: true, followTimeline: false, paceMatch: false, beatSync: false },
+    select: { order: "shuffle", offset: "random", variety: true, variance: 100, followTimeline: false, paceMatch: false, beatSync: false },
     cut: { mode: "auto", pace: "normal", every: 2, pattern: [4, 2, 2], onGrid: true, minBeats: 0, maxBeats: 0 },
     style: { speed: 1, speedRamps: false, transitionOn: "none", transitionType: "fade", flashDrops: true, fx: moodEffects("classic"), layouts: MOODS.classic.style.layouts, split: "cols", layoutShape: {} },
     target: { range: "song", bars: 16, trackId, replaceTrack: false, addToBin: true },

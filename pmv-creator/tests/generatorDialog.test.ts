@@ -50,6 +50,14 @@ describe("when to cut", () => {
 });
 
 describe("settings saved by older versions", () => {
+  it("defaults older settings to maximum clip variance and preserves a saved slider value", () => {
+    localStorage.setItem("pmv-creator:generator", JSON.stringify({ select: { offset: "random" } }));
+    expect(loadSaved("t1", ["t1"]).select.variance).toBe(100);
+    localStorage.setItem("pmv-creator:generator", JSON.stringify({ select: { variance: 35 } }));
+    expect(loadSaved("t1", ["t1"]).select.variance).toBe(35);
+    expect(withPreset(defaultSettings("t1"), { select: { variance: 65 } } as never).select.variance).toBe(65);
+  });
+
   it("turn their transitions into place and kind, and get their mood's effects", () => {
     localStorage.setItem("pmv-creator:generator", JSON.stringify({ mood: "maximal", style: { speed: 1, speedRamps: true, transitions: "flashBar", flashDrops: true } }));
     // … and their mood's split screens

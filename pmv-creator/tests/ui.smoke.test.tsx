@@ -330,13 +330,78 @@ describe("PMV Creator UI (mocked Stash)", () => {
     expect(whole().title).toContain("Clip audio 80 %");
     const loud = () => $$(".pmv-clip .pmv-badge").filter((b) => b.textContent === "🔊").length;
     expect(loud()).toBe(1);
-    await fire(byText("⇉ Clip audio for all clips")!, new MouseEvent("click", { bubbles: true }));
+    await fire(byText("⇉ Apply to existing clips")!, new MouseEvent("click", { bubbles: true }));
     expect(loud()).toBe(before + 1);
     // three steps back: all clips, the slider, the insert
     for (let i = 0; i < 3; i++) await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
     expect($$(".pmv-clip")).toHaveLength(before);
     expect(loud()).toBe(0);
     await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  it("distinguishes new-clip defaults, reports skipped locked clips and undoes a bulk level in one step", async () => {
+    const key = (key: string) => fire(document.body, new KeyboardEvent("keydown", { key, ctrlKey: key === "z", bubbles: true }));
+    const slider = () => $$('.pmv-inspector input[type="range"]').find((i) => i.getAttribute("max") === "2") as HTMLInputElement;
+    const slide = async (value: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(slider(), value);
+      slider().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const loud = () => $$(".pmv-clip .pmv-badge").filter((b) => b.textContent === "🔊").length;
+    await key("Escape");
+    await slide("1.5");
+    expect(loud()).toBe(0); // changing the default does not change existing clips
+    await key("z");
+    const row = $$(".pmv-tl-row").find((r) => r.querySelector(".pmv-clip"))!;
+    const lockedCount = row.querySelectorAll(".pmv-clip").length;
+    const editableCount = $$(".pmv-clip").length - lockedCount;
+    await fire(row.querySelector(".pmv-clip")!, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await fire(window, new MouseEvent("pointerup", { bubbles: true }));
+    await slide("1.5");
+    await fire(byText("Use for new clips too")!, new MouseEvent("click", { bubbles: true }));
+    expect(byText("Use for new clips too")!.hasAttribute("disabled")).toBe(true);
+    const lock = row.querySelector('button[title="Lock track"]')!;
+    await fire(lock, new MouseEvent("click", { bubbles: true }));
+    expect(slider().disabled).toBe(true);
+    expect($(".pmv-inspector")!.textContent).toContain("This track is locked.");
+    expect(byText("⇉ Apply to existing clips")!.textContent).toContain(`(${editableCount})`);
+    await fire(byText("⇉ Apply to existing clips")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-inspector")!.textContent).toContain(`Clip audio applied: ${editableCount} changed, ${lockedCount} on locked tracks skipped.`);
+    expect(loud()).toBe(editableCount + 1);
+    await key("z");
+    expect(loud()).toBe(1); // bulk application is exactly one undo step
+    expect($(".pmv-inspector")!.textContent).not.toContain("Clip audio applied:");
+    const otherLock = $$('.pmv-tl-row button[title="Lock track"]').find((b) => b !== lock)!;
+    await fire(otherLock, new MouseEvent("click", { bubbles: true }));
+    expect(byText("⇉ Apply to existing clips")!.textContent).toContain("(0)");
+    expect(byText("⇉ Apply to existing clips")!.hasAttribute("disabled")).toBe(true);
+    for (let i = 0; i < 4; i++) await key("z"); // both locks, default, selected clip level
+    await key("Escape");
+    expect(slider().value).toBe("0");
+    expect(loud()).toBe(0);
+  });
+
+  it("makes the generator's immediate new-clip default explicit, including when it is closed", async () => {
+    await fire(byText("⚡ Generate PMV")!, new MouseEvent("click", { bubbles: true }));
+    expect($(".pmv-gen")!.textContent).toContain("even if you close the generator");
+    const variance = $('.pmv-gen input[aria-label="Clip variance"]') as HTMLInputElement;
+    expect(variance.value).toBe("100");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(variance, "65");
+      variance.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(variance.closest("label")!.textContent).toContain("65%");
+    const advanced = $$(".pmv-gen label").find((el) => el.textContent?.includes("Advanced"))!.querySelector("input")!;
+    await fire(advanced, new MouseEvent("click", { bubbles: true }));
+    expect(($('.pmv-gen input[aria-label="Clip variance"]') as HTMLInputElement).value).toBe("65");
+    await fire(advanced, new MouseEvent("click", { bubbles: true }));
+    const slider = $$('.pmv-gen input[type="range"]').find((i) => i.getAttribute("max") === "2") as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(slider, "0.65");
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await fire(byText("Close")!, new MouseEvent("click", { bubbles: true }));
+    expect(($$('.pmv-inspector input[type="range"]').find((i) => i.getAttribute("max") === "2") as HTMLInputElement).value).toBe("0.65");
+    await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
   });
 
   it("draws the clips' sound on demand and shows a scene's waveform in the scene view", async () => {
@@ -613,6 +678,12 @@ describe("PMV Creator UI (mocked Stash)", () => {
   });
 
   it("makes several PMVs at once: one project per song, rendered one after another", async () => {
+    await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    const clipLevel = $$('.pmv-inspector input[type="range"]').find((i) => i.getAttribute("max") === "2") as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(clipLevel, "0.7");
+      clipLevel.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     await fire(byText("Project")!, new MouseEvent("click", { bubbles: true }));
     await fire(byText("📦 Several PMVs at once…")!, new MouseEvent("click", { bubbles: true }));
     await waitFor(() => !!$(".pmv-batch"));
@@ -631,10 +702,13 @@ describe("PMV Creator UI (mocked Stash)", () => {
     expect(made).toBeTruthy();
     expect(made.audio).toMatchObject({ name: "Neon Nights.mp3", path: "/media/neon.mp3" });
     expect(made.tracks.some((tr: any) => tr.clips.length > 0)).toBe(true);
+    expect(made.clipVolume).toBe(0.7);
+    expect(made.tracks.flatMap((tr: any) => tr.clips).every((c: any) => c.volume === 0.7)).toBe(true);
     expect(made.generator.settings.clips.source).toBe("saved");
     await waitFor(() => !!$(".pmv-batch")?.textContent?.includes("✓ rendered"));
     await fire(byText("Close")!, new MouseEvent("click", { bubbles: true }));
     expect($(".pmv-batch")).toBeNull();
+    await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
   });
 
   it("sets the listening volume above the timeline and the music volume at the music lane", async () => {
