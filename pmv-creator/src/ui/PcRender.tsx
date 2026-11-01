@@ -56,15 +56,6 @@ export function olderVersion(a: string | undefined, b: string): boolean {
 /** The URL scheme the helper registers on its PC at every start (Windows): opening it starts the helper without a window. */
 export const HELPER_SCHEME = "pmvhelper";
 
-/** Opens pmvhelper://start without leaving the page (a hidden frame); the browser asks once whether it may. */
-export function launchHelper(): void {
-  const f = document.createElement("iframe");
-  f.style.display = "none";
-  f.src = `${HELPER_SCHEME}://start`;
-  document.body.appendChild(f);
-  window.setTimeout(() => f.remove(), 5000);
-}
-
 /**
  * The helper file with the Stash address (and an API key for a Stash with a login) filled in: a .pyw runs without
  * a window (pythonw); the .py shows a console – for troubleshooting.
@@ -302,19 +293,16 @@ function OutdatedHelper({ version, needs }: { version?: string; needs: HelperNee
 
 function HelperSetup({ known }: { known: RenderHelper[] }) {
   const [started, setStarted] = useState(false);
-  const start = () => {
-    launchHelper();
-    setStarted(true);
-  };
   return (
     <div className="pmv-pc-setup">
       <div className="pmv-li-meta">{t("No PC is connected. The render helper is a small program for your PC: it takes the render from Stash, renders with your PC's FFmpeg and saves the video on the PC.")}</div>
       <div className="pmv-row pmv-wrap">
-        <button className="btn btn-sm btn-primary" onClick={start} title={t("Starts the render helper on this PC without a window – the browser asks once whether it may open it")}>
+        {/* A direct external-protocol link keeps the user gesture and avoids Stash's frame-src restriction. */}
+        <a className="btn btn-sm btn-primary" href={`${HELPER_SCHEME}://start`} target="_self" onClick={() => setStarted(true)} title={t("Starts the render helper on this PC without a window – the browser asks once whether it may open it")}>
           ▶ {t("Start helper on this PC")}
-        </button>
+        </a>
         <span className="pmv-li-meta">
-          {started ? t("Starting – the PC shows up here within a few seconds. Nothing happens? Then the helper is not set up on this PC yet: see below.") : t("Works once the helper was started on this PC one time (see below).")}
+          {started ? t("Start requested. Confirm the browser's prompt to open the helper. If no PC connects, start the downloaded helper file once with a double-click.") : t("Works once the helper was started on this PC one time (see below).")}
         </span>
       </div>
       <More label={t("Not set up on this PC yet?")} defaultOpen={known.length === 0}>

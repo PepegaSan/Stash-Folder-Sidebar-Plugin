@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-01",
+  "change": "Helper start via native external-protocol link",
+  "browser": "156.0.8078.76",
+  "policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'none'",
+  "testScheme": "pmvhelper-csp-test-20261101",
+  "registeredHelperStarted": false,
+  "downloadBehaviorTested": false,
+  "results": [
+    {
+      "mode": "before",
+      "violations": [
+        {
+          "directive": "frame-src",
+          "blockedURI": ""
+        }
+      ],
+      "frames": 1,
+      "pageStayed": true,
+      "messages": [
+        "Framing '' violates the following Content Security Policy directive: \"frame-src 'none'\". The request has been blocked.\n"
+      ]
+    },
+    {
+      "mode": "after",
+      "violations": [],
+      "frames": 0,
+      "pageStayed": true,
+      "messages": [
+        "Failed to launch 'pmvhelper-csp-test-20261101://start' because the scheme does not have a registered handler."
+      ]
+    }
+  ]
+}

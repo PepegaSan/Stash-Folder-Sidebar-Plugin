@@ -197,7 +197,7 @@ const de: Record<string, string> = {
   "To use the new file, quit the connected helper first, wait until it is offline, then start the downloaded file.": "Um die neue Datei zu verwenden, zuerst den verbundenen Helfer beenden, warten, bis er offline ist, und dann die heruntergeladene Datei starten.",
   "Start helper on this PC": "Helfer auf diesem PC starten",
   "Starts the render helper on this PC without a window – the browser asks once whether it may open it": "Startet den Render-Helfer auf diesem PC ohne Fenster – der Browser fragt einmal, ob er ihn öffnen darf",
-  "Starting – the PC shows up here within a few seconds. Nothing happens? Then the helper is not set up on this PC yet: see below.": "Startet – der PC erscheint hier in ein paar Sekunden. Passiert nichts? Dann ist der Helfer auf diesem PC noch nicht eingerichtet: siehe unten.",
+  "Start requested. Confirm the browser's prompt to open the helper. If no PC connects, start the downloaded helper file once with a double-click.": "Start angefordert. Bestätige die Browser-Rückfrage zum Öffnen des Helfers. Verbindet sich kein PC, starte die heruntergeladene Helfer-Datei einmal per Doppelklick.",
   "Works once the helper was started on this PC one time (see below).": "Geht, sobald der Helfer auf diesem PC einmal gestartet wurde (siehe unten).",
   "Not set up on this PC yet?": "Auf diesem PC noch nicht eingerichtet?",
   "with a window (.py, for troubleshooting)": "mit Fenster (.py, zur Fehlersuche)",

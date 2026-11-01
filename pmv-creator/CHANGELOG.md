@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.17 (2026-11-01)
+
+- **Start helper on this PC** uses a normal `pmvhelper://start` link. The previous hidden iframe was blocked by Stash's `frame-src` CSP in Chrome, leaving the helper stopped. The start notice now asks the user to confirm the browser prompt and offers double-clicking the downloaded file if no PC connects.
+- Reproduced the old empty-resource `frame-src` violation in Chrome and verified that the new link reaches external-protocol handling without a frame or CSP changes. The test uses an unregistered protocol, so no installed helper is launched. This fixes helper startup; it does not establish the cause of the separate reported Chrome download failure.
+- Independent GPT Astra review found no functional deployment blockers; 46 targeted tests, typecheck and translations passed. Full suite: 279 tests; both plugin bundles built.
+
 ## 0.9.16 (2026-11-01)
 
 - Render helper downloads remain available with connected or previously known PCs, including when the helper list cannot load. Repeated downloads fetch the current helper template without browser caching. Both the windowless `.pyw` and console `.py` can be downloaded again.

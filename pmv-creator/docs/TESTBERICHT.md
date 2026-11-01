@@ -6,6 +6,18 @@
 
 Die Umgebung lässt sich nachstellen mit [tests/e2e-stash/start-stash.ps1](../tests/e2e-stash/start-stash.ps1) (isolierte Instanz) und [tests/e2e-stash/sync-plugin.ps1](../tests/e2e-stash/sync-plugin.ps1) (Build → Plugin-Ordner → „Plugins neu laden“). Die Oberfläche wurde über Edge mit Remote-Debugging bedient; jeder Schritt wurde per Screenshot und DOM-Abfrage geprüft.
 
+## CSP beim Helferstart 0.9.17
+
+Der Nutzer meldet weiterhin fehlende Chrome-Downloads, auch über den direkten Speicherlink und in Inkognito, während Opera funktioniert. Stash wird über eine HTTP-Adresse im Netzwerk aufgerufen. Im nachgereichten CSP-Screenshot stehen eine Google-Schrift unter `style-src-elem` und ein Eintrag ohne Ressourcenadresse unter `frame-src`. Der zweite Eintrag passt zum bisherigen `pmvhelper://start`-Aufruf im versteckten iframe. Er belegt für sich keinen Fehler des getrennten Blob-Dateidownloads.
+
+Der Startknopf ist jetzt ein nativer Link mit explizitem Ziel `_self`; sein Click-Handler ändert ausschließlich den Hinweistext. Dadurch bleibt die Browser-Navigation zur externen Anwendung erhalten und erzeugt keinen iframe. Die CSP wird nicht erweitert. Der Hinweis sagt „Start angefordert“ und verweist auf die Browser-Rückfrage bzw. den manuellen ersten Start der Datei.
+
+Vorher/Nachher unter Chrome 156.0.8078.76 und `frame-src 'none'`: alter Stand erzeugt genau eine `frame-src`-Verletzung mit leerer `blockedURI`; neuer Stand keine Verletzung und keinen iframe. Die Editor-Seite bleibt geöffnet und Chrome meldet für das eigens unregistrierte Testprotokoll den fehlenden Handler. Damit ist der Weg bis zur externen Protokollbehandlung geprüft, ohne den installierten Helfer zu starten. [Nachweis](verification/2026-11-01-helper-start-csp.json). Die Ursache des konkreten ausbleibenden Dateidownloads bleibt offen; die Google-Schrift ist nicht Teil dieses Patches.
+
+Nachtrag zur Download-Prüfung 0.9.16: Playwright hatte Downloads mit `acceptDownloads: true` ausdrücklich erlaubt. Die vier erfolgreich gespeicherten Dateien belegen Inhalt und Wiederholbarkeit unter diesen Testbedingungen, nicht Chromes normale Downloadregeln beim Nutzer. Weitere isolierte Standardprüfungen waren nicht mit dem Nutzersymptom gleichzusetzen: headless wurde sogar die neutrale Textdatei verworfen; im separaten regulären Chrome-Profil erschien nach längerer Wartezeit eine unbestätigte `.crdownload`-Datei samt Downloadlisteneintrag und HTTP-Warnung. Keine Sicherheitseinstellungen im Nutzerprofil wurden verändert.
+
+**Prüfung vor Deployment:** GPT Astra hat den eng begrenzten Startfix ohne funktionale Deployment-Blocker freigegeben; 46 gezielte Tests, Typprüfung und Übersetzungen unabhängig erfolgreich. Gesamtprüfung: 279 Tests in 29 Dateien erfolgreich, beide Plugin-Bundles gebaut. Der Test prüft die Übergabe an die Protokollbehandlung, keinen vollständigen Helper-Start und keinen behobenen Chrome-Dateidownload.
+
 ## Erneuter Render-Helfer-Download 0.9.16
 
 Der Nutzer bestätigte die Meldung im PMV-Creator. Im bisherigen Code verschwand der Download für verbundene, ausreichend neue Helfer; bei bekannten Offline-PCs lag er in eingeklappten Einrichtungsschritten. Zudem behauptete „Heruntergeladen“ nur aufgrund eines programmgesteuerten Linkklicks, die Datei sei gespeichert. Eine dauerhafte technische Sperre durch diesen Status ließ sich im Code nicht nachweisen.

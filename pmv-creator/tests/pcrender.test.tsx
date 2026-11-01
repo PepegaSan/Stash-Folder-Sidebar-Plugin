@@ -1,25 +1,12 @@
 // @vitest-environment jsdom
-/** Starting the render helper from the editor: pmvhelper://start opens in a hidden frame, the page stays. */
+/** Helper setup: native external-protocol start link and repeatable downloads. */
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HELPER_SCHEME, PcRender, helperFor, launchHelper } from "../src/ui/PcRender";
+import { HELPER_SCHEME, PcRender, helperFor } from "../src/ui/PcRender";
 import type { RenderHelper } from "../src/stash/backend";
 
 afterEach(() => vi.useRealTimers());
-
-describe("start helper from the editor", () => {
-  it("opens pmvhelper://start in a hidden frame and takes the frame away again", () => {
-    vi.useFakeTimers();
-    launchHelper();
-    const f = document.querySelector("iframe")!;
-    expect(f).toBeTruthy();
-    expect(f.getAttribute("src")).toBe(`${HELPER_SCHEME}://start`);
-    expect(f.style.display).toBe("none");
-    vi.advanceTimersByTime(6000);
-    expect(document.querySelector("iframe")).toBeNull();
-  });
-});
 
 describe("render helper download", () => {
   const BrowserURL = URL;
@@ -75,6 +62,27 @@ describe("render helper download", () => {
     container.remove();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("starts through a native protocol link without embedding a frame or claiming a connection", async () => {
+    await mount();
+    const start = container.querySelector<HTMLAnchorElement>(`a[href="${HELPER_SCHEME}://start"]`)!;
+    expect(start).not.toBeNull();
+    expect(start.target).toBe("_self");
+    expect(start.hasAttribute("download")).toBe(false);
+    let preventedBeforeTest = true;
+    const observe = (event: MouseEvent) => {
+      preventedBeforeTest = event.defaultPrevented;
+      event.preventDefault(); // The test observes navigation intent without asking the OS to launch an app.
+    };
+    document.addEventListener("click", observe, { once: true });
+    await act(async () => start.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })));
+    expect(preventedBeforeTest).toBe(false);
+    expect(container.textContent).toContain("Start requested. Confirm the browser's prompt");
+    expect(container.textContent).not.toContain("Starting –");
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(requests.filter((r) => r.url.endsWith(".py"))).toHaveLength(0);
+    expect(downloads).toHaveLength(0);
   });
 
   it("offers another download and a reusable save link without claiming the file was saved", async () => {

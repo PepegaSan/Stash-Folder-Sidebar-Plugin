@@ -4,6 +4,8 @@
   "browser": "156.0.8078.76",
   "harness": "Production PcRender component; simulated connected helper, real packaged helper template, isolated headless Chrome downloads",
   "realUserBrowserTested": false,
+  "acceptDownloads": true,
+  "normalBrowserDownloadPolicyTested": false,
   "templateRequests": 3,
   "results": [
     {
