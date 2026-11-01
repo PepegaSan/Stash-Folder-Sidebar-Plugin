@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.14 (2026-11-01)
+
+- High clip variance now balances twelve temporal sections of each source and prefers jumps away from its last selected neighbourhood (18% of the available span when fresh distant material fits). This makes a small number of cuts from a long video more widely distributed, even before exact source ranges have repeated. Usage is shared across stages and split-screen fields; exclusions, marker/bin limits and timeline-follow windows still apply.
+- Motion matching prefers measured spots in suitable distant sections; clustered preview measurements no longer keep early picks in the same part of a long source. If those sections have no measured spots, unused distant source material takes priority.
+- The simple generator exposes a saved “Prefer markers” restriction with an action to use whole videos. Added two-hour-source distribution and clustered-motion regressions and a browser playback check with a clock-labelled 30-minute source.
+
 ## 0.9.13 (2026-11-01)
 
 - Fix a browser freeze introduced by 0.9.12's clip variance, especially with one source whose unused ranges run out. Source usage now merges occupied intervals and indexes reuse depth; the least-reused fallback sweeps its boundaries once instead of comparing every candidate with every previous clip. Single-item pools skip candidate scoring; scene counts and queue membership are cached.

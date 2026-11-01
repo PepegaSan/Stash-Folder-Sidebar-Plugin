@@ -324,6 +324,10 @@ export function GeneratorDialog() {
             <span>{s.select.variance ?? 100}%</span>
           </label>
           <div className="pmv-li-meta" id="pmv-variance-help">{t("Low: allow repeats. High: prefer unused parts of each video throughout the PMV. 100%: reuse only when no unused part fits. Markers and selected ranges limit the available material.")}</div>
+          <div className="pmv-li-meta">{t("High variance also alternates distant sections of long videos, rather than only avoiding identical clips.")}</div>
+          {c.preferMarkers && c.source !== "bin" && !(c.source === "filter" && c.kind === "markers") && (
+            <button className="btn btn-sm btn-link" disabled={!!busy} onClick={() => setClips({ preferMarkers: false })}>{t("Only marker ranges are used. Use whole videos for more variety.")}</button>
+          )}
           {s.select.offset === "start" && !s.select.followTimeline && !s.select.paceMatch && (
             <button className="btn btn-sm btn-link" onClick={() => setSelect({ offset: "random" })}>{t("Start point is set to beginning. Use random start points for more variance.")}</button>
           )}

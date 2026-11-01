@@ -385,6 +385,8 @@ const de: Record<string, string> = {
   Selection: "Auswahl",
   Variety: "Abwechslung",
   "Clip variance": "Clip-Varianz",
+  "High variance also alternates distant sections of long videos, rather than only avoiding identical clips.": "Hohe Varianz wechselt auch zwischen weit entfernten Teilen langer Videos, statt nur identische Clips zu vermeiden.",
+  "Only marker ranges are used. Use whole videos for more variety.": "Es werden nur Markerbereiche verwendet. Für mehr Abwechslung ganze Videos verwenden.",
   "Cutting to the beat… {percent}%": "Schnitt auf den Beat… {percent}%",
   "Low: allow repeats. High: prefer unused parts of each video throughout the PMV. 100%: reuse only when no unused part fits. Markers and selected ranges limit the available material.": "Niedrig: Wiederholungen erlauben. Hoch: im gesamten PMV bevorzugt unbenutzte Stellen jedes Videos wählen. 100%: erst wiederverwenden, wenn kein unbenutzter Ausschnitt mehr passt. Marker und ausgewählte Bereiche begrenzen das verfügbare Material.",
   "Start point is set to beginning. Use random start points for more variance.": "Startpunkt steht auf Anfang. Für mehr Varianz zufällige Startpunkte verwenden.",

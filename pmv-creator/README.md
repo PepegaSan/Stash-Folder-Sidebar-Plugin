@@ -8,6 +8,8 @@ Architecture, data model and render pipeline: **[docs/KONZEPT.md](docs/KONZEPT.m
 
 **Generator clip variance:** A 0–100% slider is available in both views (default 100%). High values prefer unused source ranges throughout the PMV, including other split-screen fields and kept clips. At 100%, material is reused when no unused range fits the available candidates. Lower values allow more repetition. Markers and bin ranges still restrict the available material; use scenes without “Prefer markers” and random start points to sample the whole video. Following the scenes' timeline still restricts picks to its progress window. Older settings default to 100%; the same seed remains reproducible.
 
+For long sources, high clip variance also balances twelve temporal sections and prefers large jumps between picks. A saved “Prefer markers” restriction is visible in simple mode with an action to use whole videos. This distributes source times; it does not detect different visual motifs.
+
 ## Installation
 
 Requirements: Stash with the plugin UI API (`PluginApi.register.route`, `runPluginOperation`; current versions, tested with 0.31). On the Stash server Python ≥ 3.8 (*Settings → System → Python path*) and FFmpeg ≥ 4.4 – the FFmpeg Stash ships is found automatically. Marker end times are used when the server knows `end_seconds`, otherwise a configurable default length applies.

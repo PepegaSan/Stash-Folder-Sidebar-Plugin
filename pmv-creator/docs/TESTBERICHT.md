@@ -6,6 +6,14 @@
 
 Die Umgebung lässt sich nachstellen mit [tests/e2e-stash/start-stash.ps1](../tests/e2e-stash/start-stash.ps1) (isolierte Instanz) und [tests/e2e-stash/sync-plugin.ps1](../tests/e2e-stash/sync-plugin.ps1) (Build → Plugin-Ordner → „Plugins neu laden“). Die Oberfläche wurde über Edge mit Remote-Debugging bedient; jeder Schritt wurde per Screenshot und DOM-Abfrage geprüft.
 
+## Verteilung langer Quellen 0.9.14
+
+Auf die Rückmeldung „zufällig, bisher nur in der Vorschau geprüft“ wurde die tatsächliche Wiedergabe untersucht. Ein allgemeiner Seek-Fehler ließ sich lokal nicht nachstellen: Die produktive PreviewEngine spielte zwölf weit entfernte Stellen eines neutralen 30-Minuten-Videos mit sichtbarer Quellzeit korrekt, direkt und über neu gestartete FFmpeg-Transcode-Streams. Verglichen wurden per `requestVideoFrameCallback` dekodierte Frames mit den erwarteten Quellzeiten, nicht nur die angeforderten `currentTime`-Werte. Dies ist kein Nachweis für das konkrete Video oder Netzwerk des Nutzers.
+
+Die Auswahl wurde unabhängig davon verstärkt: Hohe Varianz bevorzugt zwölf wenig verwendete Zeitabschnitte und große Abstände zum letzten Pick derselben Quelle. Bei 18 kurzen Picks aus einer zweistündigen Quelle (Seed 7) wurden alle zwölf Abschnitte benutzt; der kleinste Sprung betrug rund 1108 s. Bei der vorherigen Auswahl waren es zehn Abschnitte und rund 145 s. Auch die neu generierten Picks wurden im echten Browser mit der 30-Minuten-Quelle geprüft: alle zwölf Bilder kamen aus den erwarteten Bereichen, direkt und transcodiert. Details: [Nachweis](verification/2026-11-01-long-source-variance.json).
+
+Die Berechnung von 2400 Schnitten aus einem erschöpften 30-s-Bereich dauerte weiterhin nur rund 73 ms im lokalen Node-Test. 251 Tests, Typprüfung, Übersetzungsprüfung und Build erfolgreich; Testinstallation `E:\Stash` aktualisiert. Marker-/Bin-Grenzen, Ausschlüsse und „Dem Verlauf folgen“ bleiben Einschränkungen, auf die die Verteilung Rücksicht nimmt. Unterschiedliche visuelle Motive werden nicht automatisch erkannt.
+
 ## Varianz-Laufzeitkorrektur 0.9.13
 
 Nach der Meldung „Chrome: Seite reagiert nicht“ wurde die erschöpfte Einzelquelle als eigener Lastfall gemessen. In 0.9.12 verglich die Ausweichsuche jeden Kandidaten mit sämtlichen vorherigen Clips. Der neue Intervall-Index und ein einzelner Durchlauf der Grenzen ersetzen diese verschachtelte Suche. Die Oberfläche nutzt zusätzlich die kooperative Berechnung mit etwa 8-ms-Zeitabschnitten und Fortschrittsanzeige.

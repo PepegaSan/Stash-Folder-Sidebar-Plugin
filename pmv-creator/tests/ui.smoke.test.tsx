@@ -404,6 +404,20 @@ describe("PMV Creator UI (mocked Stash)", () => {
     await fire(document.body, new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
   });
 
+  it("exposes a saved marker restriction in the simple generator and can switch to whole videos", async () => {
+    const raw = localStorage.getItem("pmv-creator:generator");
+    const settings = JSON.parse(raw ?? "{}");
+    localStorage.setItem("pmv-creator:generator", JSON.stringify({ ...settings, clips: { ...settings.clips, source: "project", preferMarkers: true } }));
+    await fire(byText("⚡ Generate PMV")!, new MouseEvent("click", { bubbles: true }));
+    const restriction = "Only marker ranges are used. Use whole videos for more variety.";
+    expect(byText(restriction)).not.toBeNull();
+    await fire(byText(restriction)!, new MouseEvent("click", { bubbles: true }));
+    expect(byText(restriction)).toBeNull();
+    await fire(byText("Close")!, new MouseEvent("click", { bubbles: true }));
+    if (raw === null) localStorage.removeItem("pmv-creator:generator");
+    else localStorage.setItem("pmv-creator:generator", raw);
+  });
+
   it("draws the clips' sound on demand and shows a scene's waveform in the scene view", async () => {
     expect($(".pmv-clip-waves")).toBeNull();
     const laneHeight = () => $$(".pmv-lane[data-track-id]")[0].style.height;

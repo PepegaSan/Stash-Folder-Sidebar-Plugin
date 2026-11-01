@@ -27,6 +27,27 @@ const noOverlap = (clips: Clip[]) => {
 };
 
 describe("source variance within one PMV", () => {
+  it("alternates distant sections even with only a handful of cuts from a two-hour source", () => {
+    const cuts = slots(18, 1);
+    const pool = [[item(576, 6624)]];
+    for (const seed of [1, 7, 42, 12345]) {
+      const clips = fillSlots(project(), cuts, cuts.map(() => 0), pool, options({ seed }), noMaps);
+      noOverlap(clips);
+      for (let i = 1; i < clips.length; i++) expect(Math.abs(clips[i].sourceIn - clips[i - 1].sourceIn)).toBeGreaterThanOrEqual((6624 - 576) * 0.18 - 1e-6);
+      const sections = new Set(clips.map((c) => Math.min(11, Math.floor((c.sourceIn - 576) / (6624 - 576) * 12))));
+      expect(sections.size).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  it("does not let clustered preview motion points concentrate the start of a long-source PMV", () => {
+    const cuts = slots(12, 1);
+    const map = [600, 605, 610, 615, 620, 625, 630, 635].map((t) => ({ t, len: 0.75, speed: 10 }));
+    const ctx = { speedMaps: { long: map }, speedPct: makePercentile(Array(8).fill(10)) };
+    const clips = fillSlots(project(), cuts, cuts.map(() => 0), [[item(576, 6624)]], options({ paceMatch: true }), ctx);
+    for (let i = 1; i < clips.length; i++) expect(Math.abs(clips[i].sourceIn - clips[i - 1].sourceIn)).toBeGreaterThanOrEqual((6624 - 576) * 0.18 - 1e-6);
+    expect(Math.max(...clips.map((c) => c.sourceIn))).toBeGreaterThan(5500);
+  });
+
   it("takes different 5/10/20-second ranges throughout a 30-minute video, across seeds", () => {
     const cuts = slots(75);
     cuts.forEach((s, i) => { s.duration = [5, 10, 20][i % 3]; });

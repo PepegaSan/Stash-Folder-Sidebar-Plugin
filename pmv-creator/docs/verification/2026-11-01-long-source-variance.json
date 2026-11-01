@@ -1,0 +1,248 @@
+{
+  "date": "2026-11-01",
+  "release": "0.9.14",
+  "longSource": {
+    "sourceDurationSeconds": 7200,
+    "availableFrom": 576,
+    "availableTo": 6624,
+    "clips": 18,
+    "before": {
+      "sourceStartsSeconds": [
+        6516.539,
+        2595.79,
+        4743.157,
+        1340.255,
+        2135.562,
+        1822.731,
+        5874.403,
+        1254.972,
+        2331.589,
+        4389.651,
+        5683.961,
+        4188.508,
+        3310.986,
+        5817.036,
+        5961.769,
+        4063.005,
+        1987.929,
+        1175.395
+      ],
+      "minimumSuccessiveJumpSeconds": 144.73290566517971,
+      "temporalSectionsVisited": 10
+    },
+    "after": {
+      "sourceStartsSeconds": [
+        6288.065,
+        3663.762,
+        1183.917,
+        5672.722,
+        1901.803,
+        5413.188,
+        3028.87,
+        4898.908,
+        626.24,
+        2331.811,
+        4506.036,
+        3397.961,
+        628.056,
+        3859.278,
+        2313.966,
+        3541.186,
+        6168.019,
+        5057.377
+      ],
+      "minimumSuccessiveJumpSeconds": 1108.0756427310944,
+      "temporalSectionsVisited": 12
+    }
+  },
+  "actualBrowserPlayback": {
+    "engine": "Chromium in-app browser, production PreviewEngine, 30-minute synthetic clock video, 12 generated cuts of 1.5 seconds",
+    "native": {
+      "mode": "native",
+      "samples": [
+        {
+          "clip": 0,
+          "expected": 1572.2008576142052,
+          "observed": 1572.166667,
+          "error": 0.03419061420527214,
+          "busy": false
+        },
+        {
+          "clip": 1,
+          "expected": 916.5426385541596,
+          "observed": 916.5,
+          "error": 0.04263855415956641,
+          "busy": false
+        },
+        {
+          "clip": 2,
+          "expected": 296.5815488559045,
+          "observed": 296.5,
+          "error": 0.08154885590448657,
+          "busy": false
+        },
+        {
+          "clip": 3,
+          "expected": 1418.782713177234,
+          "observed": 1418.833333,
+          "error": 0.050619822766066136,
+          "busy": false
+        },
+        {
+          "clip": 4,
+          "expected": 476.05296519640086,
+          "observed": 476,
+          "error": 0.05296519640086217,
+          "busy": false
+        },
+        {
+          "clip": 5,
+          "expected": 1353.8993213817328,
+          "observed": 1353.833333,
+          "error": 0.0659883817327227,
+          "busy": false
+        },
+        {
+          "clip": 6,
+          "expected": 757.8198963005879,
+          "observed": 757.833333,
+          "error": 0.013436699412181952,
+          "busy": false
+        },
+        {
+          "clip": 7,
+          "expected": 1225.3298528692721,
+          "observed": 1225.333333,
+          "error": 0.003480130727893993,
+          "busy": false
+        },
+        {
+          "clip": 8,
+          "expected": 157.16247577898577,
+          "observed": 157.166667,
+          "error": 0.004191221014224311,
+          "busy": false
+        },
+        {
+          "clip": 9,
+          "expected": 583.5553210768476,
+          "observed": 583.5,
+          "error": 0.05532107684757648,
+          "busy": false
+        },
+        {
+          "clip": 10,
+          "expected": 1127.111621202398,
+          "observed": 1127.166667,
+          "error": 0.05504579760190609,
+          "busy": false
+        },
+        {
+          "clip": 11,
+          "expected": 850.0941105196305,
+          "observed": 850,
+          "error": 0.09411051963047612,
+          "busy": false
+        }
+      ],
+      "badSamples": 0
+    },
+    "transcode": {
+      "mode": "param",
+      "samples": [
+        {
+          "clip": 0,
+          "expected": 1572.2005576141933,
+          "observed": 1572.534333,
+          "error": 0.33377538580680266,
+          "busy": true
+        },
+        {
+          "clip": 1,
+          "expected": 916.5424385541565,
+          "observed": 916.606667,
+          "error": 0.06422844584346876,
+          "busy": false
+        },
+        {
+          "clip": 2,
+          "expected": 296.58124885589257,
+          "observed": 296.645667,
+          "error": 0.06441814410743518,
+          "busy": false
+        },
+        {
+          "clip": 3,
+          "expected": 1418.782513177231,
+          "observed": 1418.846667,
+          "error": 0.06415382276895798,
+          "busy": false
+        },
+        {
+          "clip": 4,
+          "expected": 476.0527651963979,
+          "observed": 476.11766700000004,
+          "error": 0.06490180360214026,
+          "busy": false
+        },
+        {
+          "clip": 5,
+          "expected": 1353.899221381724,
+          "observed": 1353.963667,
+          "error": 0.06444561827606776,
+          "busy": false
+        },
+        {
+          "clip": 6,
+          "expected": 757.81969630057,
+          "observed": 757.883667,
+          "error": 0.06397069943000133,
+          "busy": false
+        },
+        {
+          "clip": 7,
+          "expected": 1225.3313528692722,
+          "observed": 1225.393667,
+          "error": 0.06231413072782743,
+          "busy": false
+        },
+        {
+          "clip": 8,
+          "expected": 157.16237577897684,
+          "observed": 157.226667,
+          "error": 0.06429122102315432,
+          "busy": false
+        },
+        {
+          "clip": 9,
+          "expected": 583.5552210768386,
+          "observed": 583.6196669999999,
+          "error": 0.06444592316131548,
+          "busy": false
+        },
+        {
+          "clip": 10,
+          "expected": 1127.111621202398,
+          "observed": 1127.175667,
+          "error": 0.06404579760192064,
+          "busy": false
+        },
+        {
+          "clip": 11,
+          "expected": 850.0942105196245,
+          "observed": 850.156667,
+          "error": 0.062456480375431056,
+          "busy": false
+        }
+      ],
+      "badSamples": 0
+    }
+  },
+  "exhaustedSourcePerformance": {
+    "clips": 2400,
+    "sourceSeconds": 30,
+    "wallMilliseconds": 72.77
+  },
+  "userSpecificIssueReproduced": false,
+  "note": "No general seek failure reproduced locally. This release strengthens temporal selection; it does not claim to identify different visual motifs or diagnose the user's media transport."
+}

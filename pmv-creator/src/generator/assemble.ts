@@ -9,6 +9,7 @@ import { mulberry32 } from "./random";
 import type { Slot } from "./rhythm";
 import { SourceUsage } from "./usage";
 import { finish } from "./cooperate";
+import { SourceSpread, drawStart } from "./spread";
 
 /** shuffle = seeded mix, interleave = round-robin over scenes, source = order as delivered. */
 export type PickOrder = "shuffle" | "interleave" | "source";
@@ -185,6 +186,8 @@ export function* fillGroupsSteps(p: PmvProject, slots: Slot[], stages: number[],
   const recentScenes: string[] = [];
   const recentPerformers: string[][] = [];
   const usage = new SourceUsage();
+  const spread = new SourceSpread(pools.flat());
+  const seenPins = new Set<string>();
   // Independent of the pool/transition draws; turning up variance stays deterministic.
   const varianceRnd = mulberry32(o.seed ^ 0x6a09e667);
   const variance = clamp(Number.isFinite(o.variance) ? o.variance! : 100, 0, 100) / 100;
@@ -226,6 +229,7 @@ export function* fillGroupsSteps(p: PmvProject, slots: Slot[], stages: number[],
     const mid = slot.start + slot.duration / 2;
     const pin = (pinned[group] ?? []).find((c) => c.start <= mid && c.start + c.duration > mid);
     if (pin) {
+      if (!seenPins.has(pin.id)) { spread.record(pin.sceneId, pin.sourceIn, pin.duration * pin.speed); seenPins.add(pin.id); }
       recentScenes.push(pin.sceneId);
       recentPerformers.push([]);
       showing[group] = { sceneId: pin.sceneId, until: pin.start + pin.duration };
@@ -274,17 +278,20 @@ export function* fillGroupsSteps(p: PmvProject, slots: Slot[], stages: number[],
       if (protect && !fresh(s.sceneId, start, need)) start = usage.free(s.sceneId, s.in, s.out, need)[0]?.[0] ?? usage.pick(s.sceneId, s.in, s.out, need, rnd);
       continued.set(s.id, start - s.in + need);
     } else {
+      const [lo, hi] = windowFor(it, need, slot);
       const spots = o.paceMatch ? mapSpots(it, need, slot) : [];
+      const measured = spots.filter((x) => ctx.speedPct(x.speed) != null && fresh(s.sceneId, x.t, need)).map((x) => x.t);
+      const windows = protect && variesOffset ? spread.windows(s.sceneId, lo, hi, need, usage, rnd, measured) : [];
       const scored = spots
         .map((x) => ({ x, pct: ctx.speedPct(x.speed) }))
         .filter((c) => c.pct != null)
         .filter((c) => !protect || fresh(s.sceneId, c.x.t, need))
+        .filter((c) => !windows.length || windows.some(([a, b]) => c.x.t >= a && c.x.t <= b))
         .map((c) => ({ t: c.x.t, d: Math.abs(c.pct! - slot.energy) + (fresh(s.sceneId, c.x.t, need) ? 0 : 0.5) + rnd() * 0.12 }))
         .sort((a, b) => a.d - b.d);
       if (scored.length) start = scored[0].t;
       else if (protect && variesOffset) {
-        const [lo, hi] = windowFor(it, need, slot);
-        start = usage.pick(s.sceneId, lo, hi, need, rnd);
+        start = windows.length ? drawStart(windows, rnd) : usage.pick(s.sceneId, lo, hi, need, rnd);
       } else if (o.offset === "continue") {
         const off = continued.get(s.id) ?? 0;
         start = s.in + (off + need <= len + EPS ? off : 0);
@@ -301,6 +308,7 @@ export function* fillGroupsSteps(p: PmvProject, slots: Slot[], stages: number[],
     recentScenes.push(s.sceneId);
     recentPerformers.push(it.performers);
     usage.add(s.sceneId, start, need);
+    spread.record(s.sceneId, start, need);
 
     (out[group] ??= []).push({
       id: uid("clip"),

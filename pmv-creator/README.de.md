@@ -90,6 +90,8 @@ Bearbeitungsmodi (Toolbar): **An Nachbarn stoppen** (Standard) · **Ripple** (Fo
 
 **Clip-Varianz im Generator:** Der Regler ist auch im Einfach-Modus sichtbar (0–100 %, Standard 100 %). Hohe Werte bevorzugen unbenutzte Ausschnitte desselben Videos über das gesamte PMV, einschließlich anderer Split-Screen-Felder und beibehaltener Clips. Bei 100 % wird erst wiederverwendet, wenn kein freier Ausschnitt in den verfügbaren Bereichen mehr passt. Niedrige Werte erlauben häufiger Wiederholungen. Marker und Bin-Bereiche begrenzen das Material weiterhin; für Stellen aus dem ganzen Video „Szenen“ ohne „Marker bevorzugen“ und den Startpunkt „zufällig“ verwenden. Mit „Dem Verlauf der Szenen folgen“ gilt weiterhin das jeweilige Zeitfenster. Gespeicherte Einstellungen ohne Reglerwert erhalten 100 %; ein gleicher Seed bleibt reproduzierbar.
 
+Bei langen Quellen verteilt hohe Clip-Varianz die Auswahl zusätzlich über zwölf zeitliche Abschnitte und bevorzugt große Sprünge zwischen den Ausschnitten. Ist „Marker bevorzugen“ gespeichert, zeigt der Generator die Einschränkung auch im Einfach-Modus mit einem Knopf zum Verwenden ganzer Videos. Die Verteilung arbeitet mit Quellzeiten; sie erkennt keine unterschiedlichen visuellen Motive.
+
 ### Maus & Tastatur
 
 | Aktion | Eingabe |
