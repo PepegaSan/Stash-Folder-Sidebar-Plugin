@@ -148,6 +148,10 @@ Create **scene markers** from the scene player with **presets** (e.g. tag `Compi
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
 ![Version](https://img.shields.io/badge/version-1.14.4-informational)
 
+In Stash UI, open **Settings → Plugins → Quick Markers** to create or edit marker presets in the **Presets** section.
+
+**Stash UI auf Deutsch:** Unter **Einstellungen → Plugins → Quick Markers** findest du den Abschnitt **Presets**. Dort kannst du deine Presets bearbeiten oder mit **Neues Preset** eines anlegen.
+
 ## Requirements
 
 - Stash UI plugins enabled
