@@ -2,7 +2,7 @@
 // Stash UI imports /plugin/quickMarkers/assets/stashui.js and calls the default export.
 // Classic Stash never loads this file; quickMarkers.js is the classic-UI side.
 // The preset format and hotkeys match quickMarkers.js — keep both in sync.
-import "./guide.js?v=1.14.2";
+import "./guide.js?v=1.14.3";
 const Guide = globalThis.QuickMarkersGuide;
 
 const PLUGIN_ID = "quickMarkers";
@@ -1154,6 +1154,28 @@ export default function setup(stashui) {
 
   // ---------- Player: a section in the info bar ----------
 
+  function mountVideoGuide(el, signal) {
+    const screen = el.closest(".kb-player")?.querySelector(".kb-screen");
+    if (!screen) return null;
+    const panel = document.createElement("details");
+    panel.className = "qm-x-video-panel";
+    panel.open = stashui.store?.get("videoPanelOpen", true) !== false;
+    panel.innerHTML = `<summary>Quick Markers</summary><div class="qm-x-video-body">
+      <span class="qm-x-video-preset"></span>
+      <button type="button" class="kb-btn is-primary" data-qm="guide" disabled>${esc(t("Loading …"))}</button>
+      <div class="qm-x-video-actions" hidden>
+        <button type="button" class="kb-btn is-ghost" data-qm="pause">${esc(t("Pause"))}</button>
+        <button type="button" class="kb-btn is-ghost" data-qm="discard">${esc(t("Discard"))}</button>
+      </div>
+      <small role="status"></small>
+    </div>`;
+    screen.append(panel);
+    panel.addEventListener("toggle", () => stashui.store?.set("videoPanelOpen", panel.open), { signal });
+    panel.addEventListener("keydown", (e) => { if (e.key === " ") e.stopPropagation(); }, { signal });
+    signal.addEventListener("abort", () => panel.remove(), { once: true });
+    return panel;
+  }
+
   // The host appends extension sections below markers, queue and recommendations.
   // Keep this scene's existing section near the video and reachable with details closed.
   function placePlayerPanel(el, signal) {
@@ -1189,6 +1211,7 @@ export default function setup(stashui) {
       const signal = ctx.signal;
       const sceneId = String(ctx.id);
       placePlayerPanel(el, signal);
+      const videoPanel = mountVideoGuide(el, signal);
       let config = null;
       let status = feedback.get(sceneId) || "";
       let busy = false;
@@ -1364,6 +1387,15 @@ export default function setup(stashui) {
         const armed = start != null;
         const saving = busy || Guide.busy(sceneId);
         const disabled = saving ? "disabled" : "";
+        const primaryLabel = t(saving ? "Saving…" : armed ? "Mark end & save" : "Mark start");
+        if (videoPanel) {
+          videoPanel.querySelector(".qm-x-video-preset").textContent = armed ? preset.label + " · " + formatTime(start) : preset.label;
+          videoPanel.querySelector('[data-qm="guide"]').textContent = primaryLabel;
+          videoPanel.querySelector(".qm-x-video-actions").hidden = !armed;
+          for (const button of videoPanel.querySelectorAll("button")) button.disabled = saving;
+          videoPanel.querySelector('[role="status"]').textContent = guideError || (draft?.persisted === false
+            ? t("Browser storage is unavailable. Keep this page open to keep your start.") : status);
+        }
         el.innerHTML = `
           <div class="qm-x${armed ? " is-armed" : ""}">
             <div class="qm-x-guide">
@@ -1371,7 +1403,7 @@ export default function setup(stashui) {
               <p class="kb-hint">${esc(armed
                 ? t("Start at {time} · {label}. Watch or seek to the end of the moment.", { time: formatTime(start), label: preset.label })
                 : t("Watch or seek to the beginning of a moment. Marker: {label}.", { label: preset.label }))}</p>
-              <button type="button" class="kb-btn is-primary qm-x-guide-primary" data-qm="guide" ${disabled}>${esc(t(saving ? "Saving…" : armed ? "Mark end & save" : "Mark start"))}</button>
+              <button type="button" class="kb-btn is-primary qm-x-guide-primary" data-qm="guide" ${disabled}>${esc(primaryLabel)}</button>
               ${armed ? `<p class="kb-hint">${esc(t(draft.persisted === false ? "Browser storage is unavailable. Keep this page open to keep your start." : "Your start is saved in this browser. You can stop here and return later."))}</p>` : ""}
               ${armed && restored ? `<button type="button" class="kb-btn is-ghost" data-qm="resume" ${disabled}>${esc(t("Jump to saved start"))}</button>` : ""}
               ${guideError ? `<p class="qm-x-guide-error" role="alert">${esc(guideError)}</p>` : ""}
@@ -1406,9 +1438,9 @@ export default function setup(stashui) {
           </div>`;
       }
 
-      el.addEventListener("click", (e) => {
+      function onPanelClick(e) {
         const b = e.target.closest("button");
-        if (!b || !el.contains(b)) return;
+        if (!b || !e.currentTarget.contains(b)) return;
         if (b.dataset.qmPreset != null) return select(Number(b.dataset.qmPreset));
         const action = b.dataset.qm;
         if (action === "adjust") { advanced = !advanced; paint(); }
@@ -1424,7 +1456,9 @@ export default function setup(stashui) {
         else if (action === "paste") openPasteDrawer(sceneId, ctx.reload);
         else if (action === "same") openSameDrawer(sceneId, ctx.reload);
         else if (action === "undo") undoTransfer(ctx.reload, true);
-      }, { signal });
+      }
+      el.addEventListener("click", onPanelClick, { signal });
+      videoPanel?.addEventListener("click", onPanelClick, { signal });
 
       // The clipboard can change in another tab (storage) or another section (CLIPBOARD_EVENT).
       let clip = null;

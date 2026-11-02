@@ -163,7 +163,7 @@ for (const mode of ['classic','stashui']) {
   });
 }
 
-test('Stash UI: Quick Markers stays reachable above a long scene sidebar and after a remount', async () => {
+test('Stash UI: the video guide works with controls hidden and shares its draft across sidebar remounts', async () => {
   const {page, context} = await open('stashui');
   try {
     await page.evaluate(() => {
@@ -171,7 +171,8 @@ test('Stash UI: Quick Markers stays reachable above a long scene sidebar and aft
       const player = document.createElement('div');
       player.className = 'kb-player';
       root.before(player);
-      player.innerHTML = '<div class="kb-topbar"><button data-panel>Details</button></div>' +
+      player.innerHTML = '<div class="kb-screen" style="position:relative;height:250px">' +
+        '<div class="kb-topbar" hidden><button data-panel>Details</button></div></div>' +
         '<aside data-side hidden style="height:250px;overflow:auto"><div style="height:1600px"></div>' +
         '<div><details data-xslot="scene.info" data-plugin="quickMarkers"><summary>Quick Markers</summary></details></div></aside>';
       player.querySelector('details').append(root);
@@ -180,12 +181,24 @@ test('Stash UI: Quick Markers stays reachable above a long scene sidebar and aft
       };
       mountStashUI('scene-a');
     });
-    await page.getByRole('button', {name:'Quick Markers',exact:true}).click();
+    const video = page.locator('.kb-screen > .qm-x-video-panel');
+    await video.getByRole('button',{name:'Anfang markieren',exact:true}).click();
+    await video.getByRole('button',{name:'Ende markieren & speichern',exact:true}).click();
+    assert.match(await video.getByRole('status').innerText(),/Anfang/);
+    await video.getByRole('button',{name:'Verwerfen',exact:true}).click();
+    assert.equal(await page.evaluate(()=>QuickMarkersGuide.draft('scene-a')),null);
+    await video.getByRole('button',{name:'Anfang markieren',exact:true}).click();
+    await page.locator('.kb-topbar').evaluate(el=>{el.hidden=false;});
+    await page.getByRole('button',{name:'Quick Markers',exact:true}).click();
     const panel = page.locator('[data-side] > details:first-child');
-    await panel.getByRole('button', {name:'Anfang markieren',exact:true}).click();
+    await panel.getByRole('button',{name:'Ende markieren & speichern',exact:true}).waitFor();
     await mount(page,'stashui','scene-a');
     assert.equal(await page.locator('.qm-x-open').count(),1);
-    await panel.getByRole('button',{name:'Ende markieren & speichern',exact:true}).waitFor();
+    assert.equal(await video.count(),1);
+    await position(page,24);
+    await video.getByRole('button',{name:'Ende markieren & speichern',exact:true}).click();
+    await panel.getByRole('button',{name:'Anfang markieren',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>testState.markers.length),1);
   } finally { await context.close(); }
 });
 

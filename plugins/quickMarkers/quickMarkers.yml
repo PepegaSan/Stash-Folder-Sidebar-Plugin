@@ -1,6 +1,6 @@
 name: Quick Markers
 description: Guided scene markers with saved in points, presets and hotkeys; marker transfer and sync — classic Stash and Stash UI
-version: 1.14.2
+version: 1.14.3
 url: https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin
 ui:
   javascript:
