@@ -2,7 +2,7 @@
 // Stash UI imports /plugin/quickMarkers/assets/stashui.js and calls the default export.
 // Classic Stash never loads this file; quickMarkers.js is the classic-UI side.
 // The preset format and hotkeys match quickMarkers.js — keep both in sync.
-import "./guide.js?v=1.14.1";
+import "./guide.js?v=1.14.2";
 const Guide = globalThis.QuickMarkersGuide;
 
 const PLUGIN_ID = "quickMarkers";
@@ -27,6 +27,7 @@ const DEFAULT_PRESETS_CONFIG = {
 };
 
 const STRINGS_DE = {
+  "Manage presets": "Presets verwalten",
   "1 of 2 · Choose the start": "1 von 2 · Anfang wählen",
   "2 of 2 · Choose the end": "2 von 2 · Ende wählen",
   "Mark start": "Anfang markieren",
@@ -1153,6 +1154,33 @@ export default function setup(stashui) {
 
   // ---------- Player: a section in the info bar ----------
 
+  // The host appends extension sections below markers, queue and recommendations.
+  // Keep this scene's existing section near the video and reachable with details closed.
+  function placePlayerPanel(el, signal) {
+    const section = el.closest('details[data-xslot="scene.info"][data-plugin="quickMarkers"]');
+    const side = section?.closest("[data-side]");
+    if (!side) return;
+    side.prepend(section);
+    const player = side.closest(".kb-player");
+    const toggle = player?.querySelector(".kb-topbar [data-panel]");
+    if (!toggle) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "kb-btn is-ghost qm-x-open";
+    button.textContent = "Quick Markers";
+    toggle.before(button);
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (player.matches(":fullscreen, .is-full")) player.classList.add("is-peek");
+      else if (!player.classList.contains("has-panel")) toggle.click();
+      section.open = true;
+      const action = el.querySelector('[data-qm="guide"]');
+      (action || section).scrollIntoView({ block: "center" });
+      action?.focus({ preventScroll: true });
+    }, { signal });
+    signal.addEventListener("abort", () => button.remove(), { once: true });
+  }
+
   stashui.addSlot("scene.info", {
     id: "panel",
     title: "Quick Markers",
@@ -1160,6 +1188,7 @@ export default function setup(stashui) {
     mount(el, ctx) {
       const signal = ctx.signal;
       const sceneId = String(ctx.id);
+      placePlayerPanel(el, signal);
       let config = null;
       let status = feedback.get(sceneId) || "";
       let busy = false;
@@ -1350,6 +1379,7 @@ export default function setup(stashui) {
               <div class="qm-x-guide-footer">
                 ${armed ? `<button type="button" class="kb-btn is-ghost" data-qm="pause" ${disabled}>${esc(t("Pause"))}</button><button type="button" class="kb-btn is-ghost" data-qm="discard" ${disabled}>${esc(t("Discard"))}</button>` : ""}
                 <button type="button" class="kb-btn is-ghost" data-qm="adjust" aria-expanded="${advanced}" aria-label="${esc(t(advanced ? "Show simple view" : "Adjust · presets & tools"))}">${esc(t(advanced ? "Show simple view" : "Adjust"))}</button>
+                ${stashui.has("slot:settings.section") ? `<a class="kb-btn is-ghost" href="#/settings/x:${PLUGIN_ID}:settings">${esc(t("Manage presets"))}</a>` : ""}
               </div>
             </div>
             <div class="qm-x-advanced" ${advanced ? "" : "hidden"}>

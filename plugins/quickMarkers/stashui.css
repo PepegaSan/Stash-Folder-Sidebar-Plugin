@@ -4,6 +4,11 @@
 
 /* ── Player info bar ── */
 
+.kb-side > details[data-plugin="quickMarkers"] {
+  flex: none;
+  margin: 12px 16px;
+}
+
 .qm-x {
   display: grid;
   gap: 10px;

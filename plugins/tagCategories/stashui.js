@@ -22,6 +22,7 @@ const STRINGS_DE = {
   "No categories configured yet.": "Noch keine Kategorien angelegt.",
   "Add some in the settings of Tag Categories.": "Anlegen in den Einstellungen von Tag Categories.",
   "Open settings": "Einstellungen öffnen",
+  "Manage categories": "Kategorien verwalten",
   "Tags:": "Tags:",
   "Performers:": "Performer:",
   Tags: "Tags",
@@ -383,13 +384,15 @@ export default function setup(stashui) {
       el.innerHTML = `<p class="kb-hint">${t("Loading …")}</p>`;
       const categories = await loadCategories();
       if (signal.aborted) return;
+      const settingsHref = stashui.has("slot:settings.section") ? `#/settings/x:${PLUGIN_ID}:settings` : `#/plugins?focus=${PLUGIN_ID}`;
       if (!categories.length) {
-        el.innerHTML = `<div class="kb-empty"><b>${t("No categories configured yet.")}</b><p>${t("Add some in the settings of Tag Categories.")}</p><a class="kb-btn" href="${stashui.has("slot:settings.section") ? `#/settings/x:${PLUGIN_ID}:settings` : `#/plugins?focus=${PLUGIN_ID}`}">${t("Open settings")}</a></div>`;
+        el.innerHTML = `<div class="kb-empty"><b>${t("No categories configured yet.")}</b><p>${t("Add some in the settings of Tag Categories.")}</p><a class="kb-btn" href="${settingsHref}">${t("Manage categories")}</a></div>`;
         return;
       }
       const category = categories.find((c) => c.id === rest) || categories[0];
       el.innerHTML = `<div class="tcx-page">
-          <nav class="tcx-nav" aria-label="${esc(t("Categories"))}">${categories
+          <nav class="tcx-nav" aria-label="${esc(t("Categories"))}">
+            <a class="kb-btn is-ghost" href="${settingsHref}">${esc(t("Manage categories"))}</a>${categories
             .map(
               (c) => `<a class="tcx-cat${c.id === category.id ? " is-on" : ""}" href="#/p/${PLUGIN_ID}/${encodeURIComponent(c.id)}" title="${esc(categoryLine(c))}">
                 <span class="tcx-cat-name"><span>${esc(c.name)}</span><small data-catcount="${esc(c.id)}"></small></span>

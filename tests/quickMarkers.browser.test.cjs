@@ -163,6 +163,32 @@ for (const mode of ['classic','stashui']) {
   });
 }
 
+test('Stash UI: Quick Markers stays reachable above a long scene sidebar and after a remount', async () => {
+  const {page, context} = await open('stashui');
+  try {
+    await page.evaluate(() => {
+      const root = document.getElementById('root');
+      const player = document.createElement('div');
+      player.className = 'kb-player';
+      root.before(player);
+      player.innerHTML = '<div class="kb-topbar"><button data-panel>Details</button></div>' +
+        '<aside data-side hidden style="height:250px;overflow:auto"><div style="height:1600px"></div>' +
+        '<div><details data-xslot="scene.info" data-plugin="quickMarkers"><summary>Quick Markers</summary></details></div></aside>';
+      player.querySelector('details').append(root);
+      player.querySelector('[data-panel]').onclick = () => {
+        player.querySelector('aside').hidden = !player.classList.toggle('has-panel');
+      };
+      mountStashUI('scene-a');
+    });
+    await page.getByRole('button', {name:'Quick Markers',exact:true}).click();
+    const panel = page.locator('[data-side] > details:first-child');
+    await panel.getByRole('button', {name:'Anfang markieren',exact:true}).click();
+    await mount(page,'stashui','scene-a');
+    assert.equal(await page.locator('.qm-x-open').count(),1);
+    await panel.getByRole('button',{name:'Ende markieren & speichern',exact:true}).waitFor();
+  } finally { await context.close(); }
+});
+
 test('Stash UI: missing-tag retry retains the chosen times and re-enables the guide', async () => {
   const {page,context,errors} = await open('stashui');
   try {
@@ -220,8 +246,23 @@ test('classic: configured collapsed panel still offers the next action and opens
   } finally {await context.close();}
 });
 
+test('classic: mounting a forced touch bar on a mouse desktop keeps the floating panel usable', async () => {
+  const context = await browser.newContext({viewport:{width:1280,height:800},locale:'de-DE'});
+  try {
+    const page = await context.newPage();
+    await page.goto(origin+'/tests/fixtures/quickMarkers.html?mode=classic&touch=1');
+    const panel = page.locator('.quick-markers-panel');
+    const bar = page.locator('.quick-markers-touch-bar');
+    await bar.waitFor();
+    await panel.getByRole('button',{name:'Anfang markieren',exact:true}).click();
+    await bar.getByRole('button',{name:'Ende markieren & speichern',exact:true}).waitFor();
+    await panel.getByRole('button',{name:'Verwerfen',exact:true}).click();
+    assert.equal(await page.evaluate(()=>QuickMarkersGuide.draft('scene-a')),null);
+  } finally { await context.close(); }
+});
+
 test('classic: touch bar has one guide, with a visible discard action in landscape', async () => {
-  const context=await browser.newContext({viewport:{width:844,height:390},locale:'de-DE'});
+  const context=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true,locale:'de-DE'});
   const page=await context.newPage(),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   try {

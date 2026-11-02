@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.14.1";
+  const PLUGIN_VERSION = "1.14.2";
   const Guide = window.QuickMarkersGuide;
   const guideText = (en, de) => browserLang() === "de" ? de : en;
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
@@ -1731,7 +1731,7 @@
     }
 
     var floatingPanel =
-      panelPosition !== "hidden" && !(touchEnabled && touchHost && createPortal)
+      panelPosition !== "hidden" && !(touchEnabled && touchHost && createPortal && window.matchMedia("(pointer: coarse)").matches)
         ? React.createElement(
             "div",
             {

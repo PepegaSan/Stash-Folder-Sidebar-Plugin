@@ -146,7 +146,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.14.1-informational)
+![Version](https://img.shields.io/badge/version-1.14.2-informational)
 
 ## Requirements
 
@@ -155,6 +155,8 @@ Create **scene markers** from the scene player with **presets** (e.g. tag `Compi
 - Copy `presets.json.example` → `presets.json` in the plugin folder, or configure under **Settings → Plugins → Quick Markers**
 
 ## Simple view (default)
+
+On a mouse desktop, the floating panel stays in its configured corner even when the touch bar is enabled. In Stash UI, Quick Markers sits at the top of the player details. The **Quick Markers** button in the player opens it, and **Manage presets** opens the preset editor.
 
 The player guides you through one small action at a time:
 
@@ -290,8 +292,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.14.1`.
-6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.14.1** next to Quick Markers.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.14.2`.
+6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.14.2** next to Quick Markers.
 
 If an old version number appears, the old plugin files are still active.
 
@@ -466,7 +468,7 @@ Named **categories**, each with a list of Stash **tags** and optionally **perfor
 The same tag can appear in multiple categories; categories do not block or claim tags from each other.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.10.1-informational)
+![Version](https://img.shields.io/badge/version-1.10.2-informational)
 
 ## Features
 
@@ -578,7 +580,7 @@ With the [Stash UI](https://github.com/AffordObedienceUntamed/stash-pmv-plugins)
 - A click on a scene opens the **Stash UI player**; **Open in classic Stash** shows the same selection as a regular scene list (paging, bulk edit)
 - **Next / previous** in the player (and the next video when one ends) follow the category's list — same tag chips, search and sort, all scenes, not only the ones loaded so far. Needs a Stash UI with `stashui.play` (Pepega fork); otherwise the player goes on as usual
 - Each category has its own address (`#/p/tagCategories/<id>`), so Back and bookmarks work
-- Same categories (`categoriesJson`) as in classic Stash; edit them under **Settings → Plugins → Tag Categories** — the same settings page as in classic Stash, in Stash UI's look
+- Same categories (`categoriesJson`) as in classic Stash; open **Manage categories** on the categories page or go to **Settings → Plugins → Tag Categories** to edit them — the same settings page as in classic Stash, in Stash UI's look
 - Follows Stash UI's colour presets, liquid glass and interface language (English / German)
 
 ## Manual install
@@ -588,7 +590,7 @@ git clone https://github.com/PepegaSan/Stash-Folder-Sidebar-Plugin.git
 cp -r Stash-Folder-Sidebar-Plugin/plugins/tagCategories ~/.stash/plugins/tagCategories
 ```
 
-Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.10.1`.
+Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.10.2`.
 
 ---
 
