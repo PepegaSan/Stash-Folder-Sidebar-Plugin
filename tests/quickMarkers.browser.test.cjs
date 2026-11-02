@@ -187,6 +187,43 @@ test('Stash UI: the video guide works with controls hidden and shares its draft 
   } finally { await context.close(); }
 });
 
+test('Stash UI: a player with an ineffective reload shows only confirmed markers and keeps equal start times distinct', async () => {
+  const { page, context, errors } = await open('stashui', '&player=1&staleReload=1');
+  try {
+    const panel = page.locator('.qm-x-video-panel');
+    const mark = panel.locator('[data-qm="guide"]');
+    const rows = page.locator('[data-markers] [data-mkid]');
+    const pins = page.locator('[data-mks] [data-mk="12"]');
+    await mark.click(); await position(page,24);
+    await page.evaluate(()=>{testState.hold=true;});
+    await mark.click(); await page.waitForFunction(()=>!!window.releaseSave);
+    assert.equal(await pins.count(),0);
+    await mount(page,'stashui','scene-a'); // the old slot receives the reply, the new one must show it
+    await page.evaluate(()=>{testState.hold=false;releaseSave();});
+    await rows.first().waitFor({state:'attached'});
+    assert.equal(await pins.count(),1);
+    assert.equal(await page.locator('.kb-tl-range').evaluate(b=>b.style.width),'10%');
+    assert.equal(await page.evaluate(()=>testVideo.currentTime),24);
+    await position(page,12); await page.locator('h1').click(); await page.keyboard.press('Shift+M');
+    await rows.nth(1).waitFor({state:'attached'});
+    assert.equal(await pins.count(),2);
+    assert.equal(await page.locator('.kb-tl-range').count(),1);
+    assert.deepEqual(await page.evaluate(()=>testPlayerItem.scene_markers.map(m=>m.id)),['1','2']);
+    assert.equal(await page.locator('[data-markers] .kb-upsec-n').textContent(),'2');
+    await page.evaluate(()=>{testState.fail=true;});
+    await page.keyboard.press('Shift+M');
+    await page.waitForFunction(()=>document.querySelector('.qm-x-video-panel [role=status]').textContent.includes('fehlgeschlagen'));
+    assert.equal(await rows.count(),2); assert.equal(await pins.count(),2);
+    await page.evaluate(()=>{testState.hold=true;window.releaseSave=null;});
+    await page.keyboard.press('Shift+M'); await page.waitForFunction(()=>!!window.releaseSave);
+    await mount(page,'stashui','scene-b'); await page.evaluate(()=>releaseSave());
+    await page.waitForFunction(()=>testState.markers.length===3 && !QuickMarkersGuide.busy('scene-a'));
+    assert.deepEqual(await page.evaluate(()=>testPlayerItem.scene_markers),[]);
+    assert.equal(await rows.count(),2);
+    assert.deepEqual(errors,[]);
+  } finally { await context.close(); }
+});
+
 test('Stash UI: the title moves without folding, remembers the drop across scenes and reloads, and resets', async () => {
   const {page, context, errors} = await open('stashui', '&player=1');
   try {

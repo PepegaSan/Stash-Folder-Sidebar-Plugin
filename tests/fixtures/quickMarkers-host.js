@@ -14,7 +14,10 @@ window.testGql = async (query,vars) => {
   if(query.includes('sceneMarkerCreate')) {
     if(testState.hold) await new Promise(resolve=>window.releaseSave=resolve);
     if(testState.fail) {testState.fail=false;throw Error('Test: Speichern fehlgeschlagen');}
-    testState.markers.push(vars.input);return {sceneMarkerCreate:{id:String(testState.markers.length)}};
+    const input = vars.input;
+    testState.markers.push(input);
+    return {sceneMarkerCreate:{id:String(testState.markers.length),title:input.title,seconds:input.seconds,end_seconds:input.end_seconds??null,
+      primary_tag:{id:input.primary_tag_id,name:input.primary_tag_id},tags:[]}};
   }
   throw Error('Unexpected mock query: '+query);
 };
@@ -24,10 +27,10 @@ if (new URLSearchParams(location.search).has('player')) {
   player.classList.add('kb-player');
   const screen = player.querySelector('.video-wrapper'), side = player.querySelector('aside');
   screen.classList.add('kb-screen'); screen.style.position = 'relative';
-  screen.insertAdjacentHTML('beforeend','<div class="kb-topbar" hidden><button data-panel>Details</button></div>');
+  screen.insertAdjacentHTML('beforeend','<div data-mks></div><div class="kb-topbar" hidden><button data-panel>Details</button></div>');
   side.hidden = true; side.setAttribute('data-side',''); side.style.cssText = 'height:250px;overflow:auto';
-  side.insertAdjacentHTML('beforeend','<div style="height:1600px"></div><div><details data-xslot="scene.info" data-plugin="quickMarkers"><summary>Quick Markers</summary></details></div>');
-  side.querySelector('details').append(root);
+  side.insertAdjacentHTML('beforeend','<div style="height:1600px"></div><div data-markers><details data-sec="markers"><summary>Markers <small class="kb-upsec-n"></small></summary><div class="kb-mkadds"></div></details></div><div><details data-xslot="scene.info" data-plugin="quickMarkers"><summary>Quick Markers</summary></details></div>');
+  side.querySelector('details[data-xslot]').append(root);
   screen.querySelector('[data-panel]').onclick = () => { side.hidden = !player.classList.toggle('has-panel'); };
 }
 const dictionaries={};let sceneSlot;let currentController;
@@ -37,4 +40,9 @@ window.testStashUI={ has:x=>x==='slot:scene.info', ui:{esc,icon:()=>'',toast:(te
   t:(text,vars)=>{let s=dictionaries.de?.[text]||text;for(const [k,v] of Object.entries(vars||{}))s=s.replaceAll('{'+k+'}',v);return s;},
   addStrings:(lang,strings)=>{dictionaries[lang]=strings;},on:()=>{},gql:testGql,addSlot:(name,slot)=>{sceneSlot=slot;}
 };
-window.mountStashUI=id=>{currentController?.abort();currentController=new AbortController();sceneSlot.mount(document.getElementById('root'),{id,kind:'scene',signal:currentController.signal,video:testVideo,time:()=>testVideo.currentTime,reload:()=>{testState.reloads++;mountStashUI(id);}});};
+window.mountStashUI=id=>{
+  currentController?.abort();currentController=new AbortController();
+  const item = window.testPlayerItem = {id,scene_markers:[],files:[{duration:120}]};
+  sceneSlot.mount(document.getElementById('root'),{id,kind:'scene',item,signal:currentController.signal,video:testVideo,time:()=>testVideo.currentTime,
+    reload:()=>{testState.reloads++;if(!new URLSearchParams(location.search).has('staleReload')) mountStashUI(id);}});
+};

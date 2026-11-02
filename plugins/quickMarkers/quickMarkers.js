@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.14.4";
+  const PLUGIN_VERSION = "1.14.5";
   const Guide = window.QuickMarkersGuide;
   const guideText = (en, de) => browserLang() === "de" ? de : en;
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";

@@ -2,7 +2,7 @@
 // Stash UI imports /plugin/quickMarkers/assets/stashui.js and calls the default export.
 // Classic Stash never loads this file; quickMarkers.js is the classic-UI side.
 // The preset format and hotkeys match quickMarkers.js — keep both in sync.
-import "./guide.js?v=1.14.4";
+import "./guide.js?v=1.14.5";
 const Guide = globalThis.QuickMarkersGuide;
 
 const PLUGIN_ID = "quickMarkers";
@@ -62,6 +62,7 @@ const STRINGS_DE = {
   "In point: {time}": "In-Punkt: {time}",
   "Set In first ({key})": "Zuerst In setzen ({key})",
   "Marker: {label} ({range})": "Marker: {label} ({range})",
+  "Marker was not saved.": "Marker wurde nicht gespeichert.",
   "Last: {text}": "Zuletzt: {text}",
   'Tag "{name}" not found': "Tag „{name}“ nicht gefunden",
   "Create tag": "Tag anlegen",
@@ -369,6 +370,7 @@ export default function setup(stashui) {
   loadStyles();
 
   const tagIdCache = new Map();
+  const markerSaves = new EventTarget();
   const feedback = new Map(); // Keep the last save visible when Stash UI reloads the info bar.
   let configPromise = null;
   let configSource = "settings";
@@ -1156,6 +1158,65 @@ export default function setup(stashui) {
 
   // ---------- Player: a section in the info bar ----------
 
+  // Stash UI 3.137 exposes ctx.reload(), but its player doesn't forward that call.
+  // Add the committed marker to the live scene and native controls if the host didn't repaint.
+  function showSavedMarker(el, ctx, marker) {
+    const player = el.closest(".kb-player");
+    const pins = player?.querySelector("[data-mks]");
+    const list = player?.querySelector('[data-markers] [data-sec="markers"]');
+    const actions = list?.querySelector(":scope > .kb-mkadds");
+    const item = ctx.item;
+    if (!pins || !actions || !Array.isArray(item?.scene_markers) || !marker?.id || !Number.isFinite(marker.seconds)) return;
+
+    const rows = [...list.querySelectorAll(":scope > [data-mkid]")];
+    if (!item.scene_markers.some(m => String(m.id) === String(marker.id))) item.scene_markers = [...item.scene_markers, marker];
+    if (rows.some(row => row.dataset.mkid === String(marker.id))) return;
+
+    const start = marker.seconds, end = marker.end_seconds;
+    const name = marker.title || marker.primary_tag?.name || t("Marker");
+    const time = formatTime(start);
+    const colorKey = marker.primary_tag?.name || name;
+    let hue = 0;
+    for (let i = 0; i < colorKey.length; i++) hue = (hue * 31 + colorKey.charCodeAt(i)) % 360;
+    const color = `hsl(${(hue * 47) % 360} 78% 58%)`;
+    const duration = ctx.video?.duration || item.files?.[0]?.duration;
+    if (Number.isFinite(duration) && duration > 0) {
+      if (end > start) {
+        const bar = document.createElement("i");
+        bar.className = "kb-tl-range";
+        bar.style.left = start / duration * 100 + "%";
+        bar.style.width = Math.max(0, Math.min(end, duration) - start) / duration * 100 + "%";
+        bar.style.setProperty("--mk", color);
+        const ranges = item.scene_markers.filter(m => m.end_seconds > m.seconds).sort((a, b) => a.seconds - b.seconds);
+        const index = ranges.findIndex(m => String(m.id) === String(marker.id));
+        pins.insertBefore(bar, pins.querySelectorAll(".kb-tl-range")[index] || pins.querySelector("[data-mk]"));
+        pins.querySelectorAll(".kb-tl-range").forEach((range, i) => range.classList.toggle("is-alt", i % 2 === 1));
+      }
+      const pin = document.createElement("button");
+      pin.type = "button";
+      pin.className = "kb-tl-mk";
+      pin.dataset.mk = start;
+      pin.title = name + " · " + time;
+      pin.style.left = start / duration * 100 + "%";
+      pin.style.setProperty("--mk", color);
+      pins.append(pin);
+    }
+    const row = document.createElement("div");
+    row.className = "kb-mkrow";
+    row.dataset.mkid = marker.id;
+    row.style.setProperty("--mk", color);
+    const tags = (marker.title && marker.primary_tag ? [marker.primary_tag] : [])
+      .concat((marker.tags || []).filter(tag => tag.id !== marker.primary_tag?.id));
+    const chips = tags.length ? `<em class="kb-mktags">${tags.map(tag => `<i>${esc(tag.name)}</i>`).join("")}</em>` : "";
+    row.innerHTML = `<button type="button" class="kb-mkgo" data-mkgo="${start}"><b>${time}${end > start ? "–" + formatTime(end) : ""}</b><span>${esc(name)}${chips}</span></button>
+      <button type="button" class="kb-btn is-icon is-ghost" data-mkren="${esc(marker.id)}" title="${esc(t("Edit the part (name, start, end, tags)"))}">${ui.icon("edit")}</button>
+      <button type="button" class="kb-btn is-icon is-ghost kb-qdel" data-mkdel="${esc(marker.id)}" title="${esc(t("Delete marker"))}">${ui.icon("close")}</button>`;
+    const next = rows.find(r => Number(r.querySelector("[data-mkgo]")?.dataset.mkgo) > start);
+    list.insertBefore(row, next || actions);
+    const count = list.querySelector(".kb-upsec-n");
+    if (count) count.textContent = item.scene_markers.length;
+  }
+
   function makeVideoPanelMovable(panel, screen, signal) {
     const title = panel.querySelector("summary");
     const key = "videoPanelPosition";
@@ -1280,6 +1341,12 @@ export default function setup(stashui) {
       const sceneId = String(ctx.id);
       placePlayerPanel(el, signal);
       const videoPanel = mountVideoGuide(el, signal);
+      // If a save finishes after a remount, notify the current view of the matching scene.
+      markerSaves.addEventListener("saved", async ({ detail }) => {
+        if (detail.sceneId !== sceneId) return;
+        try { await ctx.reload?.(); } catch { /* the compatibility update can still display it */ }
+        if (!signal.aborted && el.isConnected) showSavedMarker(el, ctx, detail.marker);
+      }, { signal });
       let config = null;
       let status = feedback.get(sceneId) || "";
       let busy = false;
@@ -1331,14 +1398,16 @@ export default function setup(stashui) {
             tag_ids: extra,
           };
           if (to != null) input.end_seconds = Math.round(to * 1000) / 1000;
-          await stashui.gql("mutation($input: SceneMarkerCreateInput!) { sceneMarkerCreate(input: $input) { id } }", { input });
+          const { sceneMarkerCreate: marker } = await stashui.gql(`mutation($input: SceneMarkerCreateInput!) {
+            sceneMarkerCreate(input: $input) { id title seconds end_seconds stream preview screenshot primary_tag { id name } tags { id name } }
+          }`, { input });
+          if (!marker?.id) throw Error(t("Marker was not saved."));
           if (clearsIn) Guide.clear(sceneId, expectedId);
           const range = to != null ? formatTime(from) + " – " + formatTime(to) : formatTime(from);
           status = preset.label + " @ " + range;
           feedback.set(sceneId, status);
           ui.toast(t("Marker: {label} ({range})", { label: preset.label, range }), "ok");
-          // Redraws the info bar (markers list + timeline pins); this section mounts again with the same state.
-          if (ctx.reload) ctx.reload();
+          markerSaves.dispatchEvent(new CustomEvent("saved", { detail: { sceneId, marker } }));
         } catch (e) {
           guideError = e.message || String(e);
           ui.errorToast(e, "Quick Markers");

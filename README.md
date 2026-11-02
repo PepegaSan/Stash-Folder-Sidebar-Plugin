@@ -146,7 +146,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.14.4-informational)
+![Version](https://img.shields.io/badge/version-1.14.5-informational)
 
 In Stash UI, open **Settings → Plugins → Quick Markers** to create or edit marker presets in the **Presets** section.
 
@@ -227,7 +227,7 @@ For videos that exist more than once (re-encodes, renamed copies) — in the exp
 
 With the [Stash UI](https://github.com/AffordObedienceUntamed/stash-pmv-plugins) plugin (alternative interface, extension API v2), Quick Markers loads `stashui.js` from this plugin automatically — nothing to configure:
 
-- **Player info bar → Quick Markers** — In / Out / Instant buttons, preset chips, live range while recording (`0:12 → 0:30`); the markers list and timeline pins refresh after each marker
+- **Player info bar → Quick Markers** — In / Out / Instant buttons, preset chips and a live range while recording (`0:12 → 0:30`). Saving adds a pin to the timeline and an entry to the marker list immediately. A range also shows a coloured bar from start to end.
 - **Same hotkeys** as in classic Stash. They are caught before the Stash UI player, so `Shift+I` / `Shift+O` / `Shift+M` no longer also fold the info bar, add an O or mute. Plain `I` / `O` / `M` keep their player function. Shift+1–9 works on any keyboard layout
 - **Missing tag** — the error message has a **Create tag** button and then saves the marker
 - **Settings → Plugins → Quick Markers** — the same settings page as in classic Stash (see [Configuration](#configuration)), in Stash UI's look; same storage (`presetsJson`)
@@ -296,8 +296,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.14.4`.
-6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.14.4** next to Quick Markers.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.14.5`.
+6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.14.5** next to Quick Markers.
 
 If an old version number appears, the old plugin files are still active.
 
