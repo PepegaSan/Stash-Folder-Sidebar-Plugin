@@ -7,8 +7,10 @@
 .kb-screen > .qm-x-video-panel {
   position: absolute;
   z-index: 3;
-  top: 3.75rem;
-  left: max(.75rem, env(safe-area-inset-left));
+  top: var(--qm-video-y, 3.75rem);
+  left: var(--qm-video-x, max(.75rem, env(safe-area-inset-left)));
+  /* Insets use the screen size, translation uses the panel size: 100% keeps the far edge in view. */
+  transform: translate(calc(0% - var(--qm-video-x, 0%)), calc(0% - var(--qm-video-y, 0%)));
   box-sizing: border-box;
   width: max-content;
   max-width: min(17rem, calc(100% - 1.5rem));
@@ -22,7 +24,9 @@
   cursor: auto;
 }
 
-.qm-x-video-panel summary { padding: .4rem .65rem; font-weight: 600; cursor: pointer; }
+.qm-x-video-panel summary { padding: .4rem .65rem; font-weight: 600; cursor: grab; touch-action: none; user-select: none; }
+.qm-x-video-panel.qm-x-dragging summary { cursor: grabbing; }
+.qm-x-video-grip { display: inline-block; padding-inline: .25rem; opacity: .7; }
 .qm-x-video-body { display: grid; gap: .3rem; padding: 0 .65rem .55rem; }
 .qm-x-video-preset, .qm-x-video-body small { font-size: .8rem; overflow-wrap: anywhere; }
 .qm-x-video-body small:empty, .qm-x-video-actions[hidden] { display: none; }

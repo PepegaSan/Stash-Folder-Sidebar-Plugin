@@ -2,7 +2,7 @@
 // Stash UI imports /plugin/quickMarkers/assets/stashui.js and calls the default export.
 // Classic Stash never loads this file; quickMarkers.js is the classic-UI side.
 // The preset format and hotkeys match quickMarkers.js — keep both in sync.
-import "./guide.js?v=1.14.3";
+import "./guide.js?v=1.14.4";
 const Guide = globalThis.QuickMarkersGuide;
 
 const PLUGIN_ID = "quickMarkers";
@@ -48,6 +48,8 @@ const STRINGS_DE = {
   "Pause": "Pause",
   "Discard": "Verwerfen",
   "Quick Markers": "Quick Markers",
+  "Drag the title to move the panel": "Ziehe die Titelzeile, um das Panel zu verschieben",
+  "Double-click to reset the position": "Doppelklick setzt die Position zurück",
   In: "In",
   Out: "Out",
   Instant: "Sofort",
@@ -1154,13 +1156,78 @@ export default function setup(stashui) {
 
   // ---------- Player: a section in the info bar ----------
 
+  function makeVideoPanelMovable(panel, screen, signal) {
+    const title = panel.querySelector("summary");
+    const key = "videoPanelPosition";
+    let saved = stashui.store?.get(key, null);
+    const valid = (v) => Number.isFinite(v) && v >= 0 && v <= 1;
+    if (!valid(saved?.x) || !valid(saved?.y)) saved = null;
+    const place = (pos) => {
+      for (const axis of ["x", "y"]) {
+        const prop = "--qm-video-" + axis;
+        if (pos) panel.style.setProperty(prop, pos[axis] * 100 + "%");
+        else panel.style.removeProperty(prop);
+      }
+    };
+    place(saved);
+
+    let drag = null;
+    let skipClick = false;
+    const opts = { signal };
+    title.addEventListener("pointerdown", (e) => {
+      if (!e.isPrimary || e.button !== 0 || drag) return;
+      const box = panel.getBoundingClientRect();
+      skipClick = false;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: e.clientX - box.left, dy: e.clientY - box.top };
+      e.target.setPointerCapture(e.pointerId);
+    }, opts);
+    const move = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag.pos && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return;
+      const area = screen.getBoundingClientRect(), box = panel.getBoundingClientRect();
+      const fraction = (px, room) => room > 0 ? Math.max(0, Math.min(1, px / room)) : 0;
+      drag.pos = {
+        x: fraction(e.clientX - drag.dx - area.left - screen.clientLeft, screen.clientWidth - box.width),
+        y: fraction(e.clientY - drag.dy - area.top - screen.clientTop, screen.clientHeight - box.height),
+      };
+      panel.classList.add("qm-x-dragging");
+      place(drag.pos);
+    };
+    title.addEventListener("pointermove", move, opts);
+    const finish = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (e.type === "pointerup") move(e);
+      if (drag.pos) {
+        skipClick = true;
+        if (e.type === "pointerup") {
+          saved = drag.pos;
+          stashui.store?.set(key, saved);
+        } else place(saved);
+      }
+      drag = null;
+      panel.classList.remove("qm-x-dragging");
+    };
+    for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) title.addEventListener(ev, finish, opts);
+    title.addEventListener("click", (e) => {
+      // Only a click on the title toggles <details>; dropping or clicking the grip leaves it open/closed.
+      if ((skipClick && e.detail !== 0) || e.target.closest(".qm-x-video-grip")) e.preventDefault();
+      skipClick = false;
+    }, opts);
+    title.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      saved = null;
+      place(null);
+      stashui.store?.set(key, null);
+    }, opts);
+  }
+
   function mountVideoGuide(el, signal) {
     const screen = el.closest(".kb-player")?.querySelector(".kb-screen");
     if (!screen) return null;
     const panel = document.createElement("details");
     panel.className = "qm-x-video-panel";
     panel.open = stashui.store?.get("videoPanelOpen", true) !== false;
-    panel.innerHTML = `<summary>Quick Markers</summary><div class="qm-x-video-body">
+    panel.innerHTML = `<summary title="${esc(t("Drag the title to move the panel"))}">Quick Markers <span class="qm-x-video-grip" aria-hidden="true" title="${esc(t("Double-click to reset the position"))}">⠿</span></summary><div class="qm-x-video-body">
       <span class="qm-x-video-preset"></span>
       <button type="button" class="kb-btn is-primary" data-qm="guide" disabled>${esc(t("Loading …"))}</button>
       <div class="qm-x-video-actions" hidden>
@@ -1170,6 +1237,7 @@ export default function setup(stashui) {
       <small role="status"></small>
     </div>`;
     screen.append(panel);
+    makeVideoPanelMovable(panel, screen, signal);
     panel.addEventListener("toggle", () => stashui.store?.set("videoPanelOpen", panel.open), { signal });
     panel.addEventListener("keydown", (e) => { if (e.key === " ") e.stopPropagation(); }, { signal });
     signal.addEventListener("abort", () => panel.remove(), { once: true });

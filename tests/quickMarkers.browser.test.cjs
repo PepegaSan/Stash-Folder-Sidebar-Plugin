@@ -23,12 +23,12 @@ before(async () => {
 });
 after(async () => { await browser?.close(); await new Promise(resolve => server?.close(resolve)); });
 
-async function open(mode) {
+async function open(mode, extra = '') {
   const context = await browser.newContext({ viewport:{width:1180,height:800}, locale:'de-DE' });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto(origin + '/tests/fixtures/quickMarkers.html?mode=' + mode);
+  await page.goto(origin + '/tests/fixtures/quickMarkers.html?mode=' + mode + extra);
   await page.getByRole('button', { name:'Anfang markieren', exact:true }).waitFor();
   return {page, context, errors};
 }
@@ -164,23 +164,8 @@ for (const mode of ['classic','stashui']) {
 }
 
 test('Stash UI: the video guide works with controls hidden and shares its draft across sidebar remounts', async () => {
-  const {page, context} = await open('stashui');
+  const {page, context} = await open('stashui', '&player=1');
   try {
-    await page.evaluate(() => {
-      const root = document.getElementById('root');
-      const player = document.createElement('div');
-      player.className = 'kb-player';
-      root.before(player);
-      player.innerHTML = '<div class="kb-screen" style="position:relative;height:250px">' +
-        '<div class="kb-topbar" hidden><button data-panel>Details</button></div></div>' +
-        '<aside data-side hidden style="height:250px;overflow:auto"><div style="height:1600px"></div>' +
-        '<div><details data-xslot="scene.info" data-plugin="quickMarkers"><summary>Quick Markers</summary></details></div></aside>';
-      player.querySelector('details').append(root);
-      player.querySelector('[data-panel]').onclick = () => {
-        player.querySelector('aside').hidden = !player.classList.toggle('has-panel');
-      };
-      mountStashUI('scene-a');
-    });
     const video = page.locator('.kb-screen > .qm-x-video-panel');
     await video.getByRole('button',{name:'Anfang markieren',exact:true}).click();
     await video.getByRole('button',{name:'Ende markieren & speichern',exact:true}).click();
@@ -199,6 +184,46 @@ test('Stash UI: the video guide works with controls hidden and shares its draft 
     await video.getByRole('button',{name:'Ende markieren & speichern',exact:true}).click();
     await panel.getByRole('button',{name:'Anfang markieren',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>testState.markers.length),1);
+  } finally { await context.close(); }
+});
+
+test('Stash UI: the title moves without folding, remembers the drop across scenes and reloads, and resets', async () => {
+  const {page, context, errors} = await open('stashui', '&player=1');
+  try {
+    const panel = page.locator('.qm-x-video-panel'), title = panel.locator('summary');
+    const action = panel.getByRole('button',{name:'Anfang markieren',exact:true});
+    const box = () => panel.boundingBox();
+    const near = (a,b) => assert(Math.abs(a.x-b.x)<1 && Math.abs(a.y-b.y)<1, JSON.stringify({actual:a,expected:b}));
+    async function drag(dx,dy) {
+      const b = await title.boundingBox(), x = b.x+b.width/2, y = b.y+b.height/2;
+      await page.mouse.move(x,y); await page.mouse.down();
+      await page.mouse.move(x+dx,y+dy,{steps:5}); await page.mouse.up();
+    }
+    const original = await box();
+    await drag(170,65);
+    const dropped = await box();
+    near(dropped,{x:original.x+170,y:original.y+65});
+    assert(await action.isVisible());
+    assert.equal(await page.evaluate(()=>QuickMarkersGuide.draft('scene-a')),null);
+    await mount(page,'stashui','scene-b'); await action.waitFor(); near(await box(),dropped);
+    await page.reload(); await action.waitFor(); near(await box(),dropped);
+    await title.click();
+    assert.equal(await action.isVisible(),false);
+    await drag(4000,4000); // pointer capture continues past the edge; a closed panel stays closed.
+    assert.equal(await action.isVisible(),false);
+    await page.setViewportSize({width:570,height:600});
+    const frame = await page.locator('.kb-screen').boundingBox();
+    const edge = await box();
+    assert(Math.abs(edge.x+edge.width-(frame.x+frame.width-1))<1);
+    assert(Math.abs(edge.y+edge.height-(frame.y+frame.height-1))<1);
+    await panel.locator('.qm-x-video-grip').dblclick();
+    assert.equal(await action.isVisible(),false);
+    await page.setViewportSize({width:1180,height:800});
+    await page.reload(); await title.waitFor();
+    assert.equal(await action.isVisible(),false);
+    await title.focus(); await page.keyboard.press('Enter'); await action.waitFor();
+    near(await box(),original);
+    assert.deepEqual(errors,[]);
   } finally { await context.close(); }
 });
 

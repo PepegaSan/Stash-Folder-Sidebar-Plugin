@@ -18,9 +18,22 @@ window.testGql = async (query,vars) => {
   }
   throw Error('Unexpected mock query: '+query);
 };
+// Opt into the player's real DOM shape for tests of its on-video panel.
+if (new URLSearchParams(location.search).has('player')) {
+  const player = document.querySelector('main'), root = document.getElementById('root');
+  player.classList.add('kb-player');
+  const screen = player.querySelector('.video-wrapper'), side = player.querySelector('aside');
+  screen.classList.add('kb-screen'); screen.style.position = 'relative';
+  screen.insertAdjacentHTML('beforeend','<div class="kb-topbar" hidden><button data-panel>Details</button></div>');
+  side.hidden = true; side.setAttribute('data-side',''); side.style.cssText = 'height:250px;overflow:auto';
+  side.insertAdjacentHTML('beforeend','<div style="height:1600px"></div><div><details data-xslot="scene.info" data-plugin="quickMarkers"><summary>Quick Markers</summary></details></div>');
+  side.querySelector('details').append(root);
+  screen.querySelector('[data-panel]').onclick = () => { side.hidden = !player.classList.toggle('has-panel'); };
+}
 const dictionaries={};let sceneSlot;let currentController;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 window.testStashUI={ has:x=>x==='slot:scene.info', ui:{esc,icon:()=>'',toast:(text,type,action)=>{testState.toasts.push(text);testState.action=action;},errorToast:e=>testState.toasts.push(e.message)},
+  store:{get:(key,fallback)=>JSON.parse(localStorage.getItem('test.stashui.'+key))??fallback,set:(key,value)=>localStorage.setItem('test.stashui.'+key,JSON.stringify(value))},
   t:(text,vars)=>{let s=dictionaries.de?.[text]||text;for(const [k,v] of Object.entries(vars||{}))s=s.replaceAll('{'+k+'}',v);return s;},
   addStrings:(lang,strings)=>{dictionaries[lang]=strings;},on:()=>{},gql:testGql,addSlot:(name,slot)=>{sceneSlot=slot;}
 };

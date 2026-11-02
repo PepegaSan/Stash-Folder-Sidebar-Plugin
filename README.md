@@ -146,7 +146,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.14.3-informational)
+![Version](https://img.shields.io/badge/version-1.14.4-informational)
 
 ## Requirements
 
@@ -156,7 +156,7 @@ Create **scene markers** from the scene player with **presets** (e.g. tag `Compi
 
 ## Simple view (default)
 
-On a mouse desktop, the floating panel stays in its configured corner even when the touch bar is enabled. In Stash UI, the small Quick Markers panel at the top left of the video lets you mark the start, finish or discard a range even with the player controls hidden or in fullscreen. Click its title to fold or unfold it. The full guide is also available in the player details. The **Quick Markers** button in the player opens it, and **Manage presets** opens the preset editor.
+On a mouse desktop, the floating panel remains available even when the touch bar is enabled. In Stash UI, the Quick Markers panel on the video lets you start, finish or discard a range even with the player controls hidden or in fullscreen. Drag its title to place it anywhere in the picture. This browser remembers the position across scenes and reloads. Click the title to fold or unfold it. Double-click the dotted grip to put it back at the top left. The full guide is also available in the player details. The **Quick Markers** button in the player opens it, and **Manage presets** opens the preset editor.
 
 The player guides you through one small action at a time:
 
@@ -292,8 +292,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.14.3`.
-6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.14.3** next to Quick Markers.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.14.4`.
+6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.14.4** next to Quick Markers.
 
 If an old version number appears, the old plugin files are still active.
 
