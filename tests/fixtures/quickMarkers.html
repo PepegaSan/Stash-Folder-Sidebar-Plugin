@@ -1,0 +1,19 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>Quick Markers · isolierter Oberflächentest</title>
+<link rel="stylesheet" href="/plugins/quickMarkers/quickMarkers.css"><link rel="stylesheet" href="/plugins/quickMarkers/stashui.css">
+<style>
+:root { --bg-2:#252932;--text:#f4f5f7;--pink:#f1ae53;--ink:#171a21;--line:#424853;--ok:#5ac88d;--danger:#ef7979;--f-label:system-ui; }
+*{box-sizing:border-box}body{background:#171a21;color:var(--text);font:15px system-ui;margin:0;padding:28px}main{display:grid;grid-template-columns:1fr 360px;gap:28px;max-width:1100px;margin:auto}.video-wrapper{background:#101216;border:1px solid var(--line);border-radius:12px;aspect-ratio:16/9;display:grid;place-items:center}aside{background:#252932;padding:20px;border-radius:12px}h1{font-size:22px}h2{font-size:17px}button{font:inherit;color:inherit;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.kb-btn,.kb-chip{border:1px solid var(--line);border-radius:8px;background:#303641;padding:7px 12px}.kb-btn.is-primary{background:var(--pink);color:var(--ink);font-weight:650}.kb-btn.is-ghost{background:transparent}.kb-hint{font-size:13px;line-height:1.5;color:#b7bdc8}.kb-chip.is-on{border-color:var(--pink)}.qm-x-guide strong{line-height:1.4}.qm-x-status{color:var(--ok)}.text-danger{color:var(--danger)}.quick-markers-guide{width:320px}.quick-markers-panel{top:100px;left:calc(50% - 190px)}@media(max-width:650px){body{padding:14px}main{display:block}aside{margin-top:16px}.quick-markers-panel{left:12px;top:85px}.quick-markers-guide{width:auto}}
+</style>
+<h1>Quick Markers · Testvideo</h1><main><section class="VideoPlayer"><div class="video-wrapper"><span>Isolierter Test · keine Bibliotheksdaten</span></div><p>Testposition: <input aria-label="Testposition" id="position" type="number" value="12" step="0.1"> Sekunden</p></section><aside><h2>Quick Markers</h2><div id="root"></div></aside></main>
+<script src="/tests/fixtures/quickMarkers-host.js"></script><script src="/plugins/quickMarkers/guide.js"></script>
+<script type="module">
+if(new URLSearchParams(location.search).get('mode')==='classic') {
+  await import('/tests/fixtures/quickMarkers-react.js');
+  await import('/plugins/quickMarkers/quickMarkers.js');
+  window.mountClassic('scene-a');
+} else {
+  const {default:setup}=await import('/plugins/quickMarkers/stashui.js');
+  setup(window.testStashUI);
+  window.mountStashUI('scene-a');
+}
+</script></html>

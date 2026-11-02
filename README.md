@@ -146,13 +146,39 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.13.1-informational)
+![Version](https://img.shields.io/badge/version-1.14.1-informational)
 
 ## Requirements
 
 - Stash UI plugins enabled
 - **Tags must exist** in Stash before use (e.g. create tag `Compilation` under **Tags**)
 - Copy `presets.json.example` → `presets.json` in the plugin folder, or configure under **Settings → Plugins → Quick Markers**
+
+## Simple view (default)
+
+The player guides you through one small action at a time:
+
+1. Watch or seek to the beginning of a moment, then **Mark start**.
+2. Watch or seek to its end, then **Mark end & save**.
+
+The chosen preset is shown beside the instruction. **Adjust**
+reveals the preset choices, separate In/Out/Instant buttons, hotkeys and transfer
+tools; **Show simple view** hides them again. Existing hotkeys work in either view.
+The German interface uses **Anfang markieren**, **Ende markieren & speichern**
+and **Anpassen**.
+
+An unfinished start and its preset are saved **per scene in this browser**, including
+after changing scenes or reloading. **Pause** stops playback without losing the
+start. On returning, **Jump to saved start** takes you back to it; **Discard** clears
+only that unfinished start. The browser warns if it cannot store a draft permanently.
+The last selected preset is remembered. Saving failures leave the start available
+for retry, and repeated clicks while saving do not send duplicate requests.
+
+The simple flow requires an end after the start, instead of silently creating an
+instant marker. The separate advanced controls and hotkeys keep their existing
+instant/range behavior. A saved marker is a natural stopping point; there is no
+next item to process automatically. This view is available in classic Stash, the
+touch bar and Stash UI.
 
 ## Hotkeys (defaults)
 
@@ -172,7 +198,7 @@ Create **scene markers** from the scene player with **presets** (e.g. tag `Compi
 2. Press **Shift+3** (etc.) to select the preset assigned to that slot, **or** click it in the panel.
 3. Use **Shift+I** at start, **Shift+O** at end → range marker with that preset’s tag.
 4. Or press **Shift+M** for an instant marker at the current time (active preset).
-5. Optional: floating **Quick Markers** panel (corner in settings; collapsed by default) — **In / Out / + Instant** buttons, preset chips with their `⇧1–9` slot, and a red recording badge with the in time (also when collapsed; **×** discards the in point). **Drag the header** to move it, double-click header to reset; `Shift+[` / `Shift+]` also cycle presets.
+5. Optional: floating **Quick Markers** panel (corner in settings; simple view open by default) — **In / Out / + Instant** buttons, preset chips with their `⇧1–9` slot, and a red recording badge with the in time (also when collapsed; **×** discards the in point). **Drag the header** to move it, double-click header to reset; `Shift+[` / `Shift+]` also cycle presets.
 6. **Android / tablet:** touch bar (**IN** / **OUT** / **INSTANT** + presets) directly under the video, part of the page — never on top of the player, so the seek bar and player settings stay reachable; the video gets a little smaller instead. One compact row on low screens (phone in landscape), **×** discards the in point. Use **Hide** / **▲ Quick Markers** to collapse or expand; remembered across scenes. Auto-enabled on touch devices; override in settings.
 
 Markers are saved via GraphQL; open the **Markers** tab or refresh if the list does not update immediately.
@@ -211,7 +237,7 @@ One page for classic Stash and Stash UI (`settings.js`), in English or German:
 
 - **General** (classic Stash only) — **panel position** (corner or hidden, drag the panel header to place it freely), **start collapsed**, **touch controls** (auto / on / off)
 - **Presets** — every preset with its select key, tags as chips (primary tag highlighted) and its In / Out / Instant keys
-  - **★** marks the **default preset** (active when a scene opens) — click another star to change it
+  - **★** marks the **default preset** (used until you select another preset) — click another star to change it
   - Tags missing in Stash are red; the **+** on such a chip creates the tag (**Create all** in the warning above the list)
   - **Duplicate** a preset to use it as a template (the copy opens right away, without a select key)
   - **Drag the handle** (or ↑ / ↓ on it) to change the order — it is the order of the preset chips on the scene page; at the top or bottom edge the page scrolls along
@@ -225,7 +251,7 @@ JSON example:
 {
   "defaultPresetIndex": 0,
   "panelPosition": "top-left",
-  "panelCollapsed": true,
+  "panelCollapsed": false,
   "touchControls": "auto",
   "presets": [
     {
@@ -264,8 +290,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.13.1`.
-6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.13.1** next to Quick Markers.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.14.1`.
+6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.14.1** next to Quick Markers.
 
 If an old version number appears, the old plugin files are still active.
 
@@ -568,13 +594,15 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.10.1`.
 
 # PMV Creator
 
+The optional **Super simple** mode guides you through choosing a song, creating a suggestion and finishing the video. **Save & pause** keeps a checkpoint, including a browser fallback if the server save fails.
+
 Deterministic PMV (music video) editor inside Stash: pick scenes and markers, arrange them on a beat grid, fine-tune every
 clip and render frame-exactly with FFmpeg (or record the preview in the browser), or hand the cut to DaVinci Resolve & Co.
 as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the timeline by criteria; everything stays editable.
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.11-informational)
+![Version](https://img.shields.io/badge/version-0.9.19-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 

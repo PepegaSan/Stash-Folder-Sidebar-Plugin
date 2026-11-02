@@ -2,7 +2,9 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.13.1";
+  const PLUGIN_VERSION = "1.14.1";
+  const Guide = window.QuickMarkersGuide;
+  const guideText = (en, de) => browserLang() === "de" ? de : en;
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
   const PANEL_POS_STORAGE_KEY = "quickMarkers.panelPos";
   const TOUCH_BAR_OPEN_STORAGE_KEY = "quickMarkers.touchBarOpen";
@@ -87,7 +89,7 @@
   const DEFAULT_PRESETS_CONFIG = {
     defaultPresetIndex: 0,
     panelPosition: "top-left",
-    panelCollapsed: true,
+    panelCollapsed: false,
     touchControls: "auto",
     presets: [
       {
@@ -251,7 +253,6 @@
   }
 
   const tagIdCache = new Map();
-  const inPointByScene = new Map();
 
   function getPlayerTime() {
     try {
@@ -389,7 +390,7 @@
     const panelPosition = normalizePanelPosition(parsed.panelPosition);
     const panelCollapsed =
       parsed.panelCollapsed === undefined || parsed.panelCollapsed === null
-        ? true
+        ? false
         : !!parsed.panelCollapsed;
     const touchControls = normalizeTouchControls(parsed.touchControls);
     return {
@@ -423,8 +424,8 @@
     if (config.panelPosition && config.panelPosition !== "top-left") {
       root.panelPosition = config.panelPosition;
     }
-    if (config.panelCollapsed === false) {
-      root.panelCollapsed = false;
+    if (typeof config.panelCollapsed === "boolean") {
+      root.panelCollapsed = config.panelCollapsed;
     }
     if (config.touchControls && config.touchControls !== "auto") {
       root.touchControls = config.touchControls;
@@ -448,9 +449,11 @@
   function usePresetsConfig() {
     const [config, setConfig] = React.useState(getDefaultPresetsConfig);
     const [error, setError] = React.useState(null);
-    const { data } = GQL.useConfigurationQuery({ fetchPolicy: "cache-first" });
+    const [ready, setReady] = React.useState(false);
+    const { data, loading } = GQL.useConfigurationQuery({ fetchPolicy: "cache-first" });
 
     React.useEffect(function () {
+      if (loading) return;
       let cancelled = false;
       async function load() {
         setError(null);
@@ -460,11 +463,12 @@
           let cfg = getPresetsFromSettings(plugins);
           if (!cfg) cfg = await loadPresetsFromFile();
           if (!cfg) cfg = getDefaultPresetsConfig();
-          if (!cancelled) setConfig(cfg);
+          if (!cancelled) { setConfig(cfg); setReady(true); }
         } catch (e) {
           if (!cancelled) {
             setError(e.message || String(e));
             setConfig(getDefaultPresetsConfig());
+            setReady(true);
           }
         }
       }
@@ -472,9 +476,9 @@
       return function () {
         cancelled = true;
       };
-    }, [data]);
+    }, [data, loading]);
 
-    return { config, error };
+    return { config, error, ready };
   }
 
   /**
@@ -1188,12 +1192,18 @@
   function QuickMarkersSceneHook(props) {
     const scene = props.scene;
     const Toast = useSafeToast();
-    const { config, error: configError } = usePresetsConfig();
+    const { config, error: configError, ready: configReady } = usePresetsConfig();
     const resolveTagId = useResolveTagId();
     const [activeIndex, setActiveIndex] = React.useState(0);
     const [inPoint, setInPoint] = React.useState(null);
     const [status, setStatus] = React.useState("");
-    const [panelOpen, setPanelOpen] = React.useState(false);
+    const [panelOpen, setPanelOpen] = React.useState(true);
+    const [advanced, setAdvanced] = React.useState(false);
+    const [saving, setSaving] = React.useState(false);
+    const [guideError, setGuideError] = React.useState("");
+    const [restored, setRestored] = React.useState(false);
+    const currentScene = React.useRef(scene.id);
+    currentScene.current = scene.id;
     const [touchBarOpen, setTouchBarOpen] = React.useState(function () {
       return readStoredTouchBarOpen(true);
     });
@@ -1218,12 +1228,12 @@
 
     React.useEffect(
       function () {
-        if (!config || panelInitRef.current) return;
+        if (!configReady || !config || panelInitRef.current) return;
         panelInitRef.current = true;
-        const defaultOpen = config.panelCollapsed === false;
+        const defaultOpen = config.panelCollapsed !== true;
         setPanelOpen(readStoredPanelOpen(defaultOpen));
       },
-      [config]
+      [config, configReady]
     );
 
     const touchEnabled =
@@ -1274,7 +1284,7 @@
 
     function onPanelDragStart(e) {
       if (e.button != null && e.button !== 0) return;
-      if (e.target && e.target.closest && e.target.closest(".quick-markers-toggle")) {
+      if (e.target && e.target.closest && e.target.closest("button")) {
         return;
       }
       const el = panelRef.current;
@@ -1326,22 +1336,42 @@
       storePanelPos(null);
     }
 
-      const [createMarker] = useCreateMarkerHook();
+    const [createMarker] = useCreateMarkerHook();
 
     React.useEffect(
       function () {
-        if (config) setActiveIndex(config.defaultPresetIndex);
+        if (config) setActiveIndex(Guide.selected(config, scene.id));
       },
-      [config]
+      [config, scene.id]
     );
 
     React.useEffect(
       function () {
-        setInPoint(null);
-        inPointByScene.delete(scene.id);
+        const draft = Guide.draft(scene.id);
+        setInPoint(draft ? draft.start : null);
+        setRestored(!!draft);
+        setStatus("");
+        setGuideError("");
+        setAdvanced(false);
+        setSaving(Guide.busy(scene.id));
       },
       [scene.id]
     );
+
+    React.useEffect(function () {
+      return Guide.subscribe(function (id, external) {
+        if (id != null && id !== String(scene.id)) return;
+        const draft = Guide.draft(scene.id);
+        setInPoint(draft ? draft.start : null);
+        setSaving(Guide.busy(scene.id));
+        if (external) {
+          if (config) setActiveIndex(Guide.selected(config, scene.id));
+          setRestored(!!draft);
+          setStatus("");
+          setGuideError("");
+        }
+      });
+    }, [scene.id, config]);
 
     const activePreset =
       config && config.presets.length
@@ -1350,43 +1380,62 @@
           ]
         : null;
 
+    function selectPreset(update) {
+      if (Guide.busy(scene.id)) return;
+      const next = typeof update === "function" ? update(activeIndex) : update;
+      if (!config || !config.presets[next]) return;
+      Guide.choose(config.presets[next], scene.id);
+      setActiveIndex(next);
+    }
+
     const createAt = React.useCallback(
       async function (preset, startSeconds, endSeconds) {
-        const tagId = await resolveTagId(preset.primaryTag);
-        const extraTagIds = [];
-        const extraTags = preset.tags || [];
-        for (let i = 0; i < extraTags.length; i++) {
-          const extraId = await resolveTagId(extraTags[i]);
-          if (extraId !== tagId && extraTagIds.indexOf(extraId) < 0) {
-            extraTagIds.push(extraId);
+        if (!Guide.lock(scene.id)) return false;
+        setSaving(true);
+        setGuideError("");
+        try {
+          const tagId = await resolveTagId(preset.primaryTag);
+          const extraTagIds = [];
+          const extraTags = preset.tags || [];
+          for (let i = 0; i < extraTags.length; i++) {
+            const extraId = await resolveTagId(extraTags[i]);
+            if (extraId !== tagId && extraTagIds.indexOf(extraId) < 0) {
+              extraTagIds.push(extraId);
+            }
           }
+          const from = Math.min(startSeconds, endSeconds ?? startSeconds);
+          const to =
+            typeof endSeconds === "number" && endSeconds > from + 0.05
+              ? Math.max(startSeconds, endSeconds)
+              : null;
+
+          const markerVars = {
+            scene_id: scene.id,
+            title: preset.title,
+            seconds: from,
+            end_seconds: to,
+            primary_tag_id: tagId,
+            tag_ids: extraTagIds,
+          };
+          await createMarker({
+            variables: useFlatMarkerCreateVars
+              ? markerVars
+              : { input: markerVars },
+          });
+
+          const rangeMsg =
+            to != null
+              ? formatTime(from) + " – " + formatTime(to)
+              : formatTime(from);
+          if (currentScene.current === scene.id) setStatus(preset.label + " @ " + rangeMsg);
+          Toast.success("Marker: " + preset.label + " (" + rangeMsg + ")");
+          return true;
+        } catch (err) {
+          if (currentScene.current === scene.id) setGuideError(formatError(err));
+          throw err;
+        } finally {
+          Guide.unlock(scene.id);
         }
-        const from = Math.min(startSeconds, endSeconds ?? startSeconds);
-        const to =
-          typeof endSeconds === "number" && endSeconds > from + 0.05
-            ? Math.max(startSeconds, endSeconds)
-            : null;
-
-        const markerVars = {
-          scene_id: scene.id,
-          title: preset.title,
-          seconds: from,
-          end_seconds: to,
-          primary_tag_id: tagId,
-          tag_ids: extraTagIds,
-        };
-        await createMarker({
-          variables: useFlatMarkerCreateVars
-            ? markerVars
-            : { input: markerVars },
-        });
-
-        const rangeMsg =
-          to != null
-            ? formatTime(from) + " – " + formatTime(to)
-            : formatTime(from);
-        setStatus(preset.label + " @ " + rangeMsg);
-        Toast.success("Marker: " + preset.label + " (" + rangeMsg + ")");
       },
       [createMarker, resolveTagId, scene.id, Toast]
     );
@@ -1409,13 +1458,16 @@
 
     const onRangeIn = React.useCallback(
       function (preset) {
+        if (Guide.busy(scene.id)) return;
         const t = getPlayerTime();
         if (t == null) {
           Toast.error("No video player active.");
           return;
         }
-        inPointByScene.set(scene.id, t);
+        Guide.begin(scene.id, preset, t);
         setInPoint(t);
+        setRestored(false);
+        setGuideError("");
         setStatus("In @ " + formatTime(t) + " (" + preset.label + ")");
         Toast.success("In point: " + formatTime(t));
       },
@@ -1429,7 +1481,8 @@
           Toast.error("No video player active.");
           return;
         }
-        const start = inPointByScene.get(scene.id);
+        const draft = Guide.draft(scene.id);
+        const start = draft ? draft.start : null;
         if (start == null) {
           Toast.error("Set In first (default preset: " + preset.rangeInKey + ")");
           return;
@@ -1438,9 +1491,9 @@
         const from = Math.min(start, end);
         const to = Math.max(start, end);
         try {
-          await createAt(preset, from, to);
-          inPointByScene.delete(scene.id);
-          setInPoint(null);
+          await Guide.withDraft(scene.id, draft.id, async () => {
+            if (await createAt(draft.preset, from, to)) Guide.clear(scene.id, draft.id);
+          });
         } catch (e) {
           Toast.error(formatError(e));
         }
@@ -1450,9 +1503,12 @@
 
     const onClearIn = React.useCallback(
       function () {
-        inPointByScene.delete(scene.id);
+        if (Guide.busy(scene.id)) return;
+        Guide.clear(scene.id);
         setInPoint(null);
         setStatus("");
+        setGuideError("");
+        setRestored(false);
       },
       [scene.id]
     );
@@ -1510,7 +1566,7 @@
 
     React.useEffect(
       function () {
-        if (!config || !scene) return;
+        if (!configReady || !config || !scene) return;
 
         const keysToUnbind = [];
 
@@ -1566,7 +1622,7 @@
             if (presetIndex == null) return;
             bind("shift+" + slot, function (e) {
               if (e && e.preventDefault) e.preventDefault();
-              setActiveIndex(presetIndex);
+              selectPreset(presetIndex);
             });
           })(n);
         }
@@ -1590,13 +1646,13 @@
 
         bind("shift+]", function (e) {
           if (e && e.preventDefault) e.preventDefault();
-          setActiveIndex(function (i) {
+          selectPreset(function (i) {
             return (i + 1) % config.presets.length;
           });
         });
         bind("shift+[", function (e) {
           if (e && e.preventDefault) e.preventDefault();
-          setActiveIndex(function (i) {
+          selectPreset(function (i) {
             return (i - 1 + config.presets.length) % config.presets.length;
           });
         });
@@ -1608,10 +1664,10 @@
           });
         };
       },
-      [config, scene, activePreset, onInstant, onRangeIn, onRangeOut]
+      [config, configReady, scene, activePreset, onInstant, onRangeIn, onRangeOut]
     );
 
-    if (!config || !activePreset) return null;
+    if (!configReady || !config || !activePreset) return null;
 
     const panelPosition = normalizePanelPosition(
       config.panelPosition || "top-left"
@@ -1625,8 +1681,57 @@
         }
       : undefined;
 
+    function guidedAction() {
+      if (Guide.busy(scene.id)) return;
+      setPanelOpen(true);
+      storePanelOpen(true);
+      const draft = Guide.draft(scene.id);
+      if (!draft) { onRangeIn(activePreset); return; }
+      if (!Guide.canFinish(draft.start, getPlayerTime())) {
+        setGuideError(guideText("Move to an end after the marked start. Your start stays saved.", "Gehe zu einem Ende nach dem markierten Anfang. Dein Anfang bleibt erhalten."));
+        return;
+      }
+      onRangeOut(draft.preset);
+    }
+
+    function pauseDraft() {
+      const player = utils.InteractiveUtils && utils.InteractiveUtils.getPlayer();
+      if (player && typeof player.pause === "function") player.pause();
+      setStatus(guideText("Paused. Your start stays here for later.", "Pause. Dein Anfang bleibt für später erhalten."));
+    }
+
+    function renderGuide() {
+      const draft = Guide.draft(scene.id);
+      const pendingPreset = draft ? draft.preset : activePreset;
+      return React.createElement("div", { className: "quick-markers-guide" },
+        React.createElement("strong", null, draft
+          ? guideText("2 of 2 · Choose the end", "2 von 2 · Ende wählen")
+          : guideText("1 of 2 · Choose the start", "1 von 2 · Anfang wählen")),
+        React.createElement("p", { className: "quick-markers-hint quick-markers-guide-instruction" }, draft
+          ? guideText("Start at ", "Anfang bei ") + formatTime(draft.start) + " · " + pendingPreset.label + ". " + guideText("Watch or seek to the end of the moment.", "Spiele oder spule bis zum Ende des Moments.")
+          : guideText("Watch or seek to the beginning of a moment. Marker: ", "Spiele oder spule zum Anfang eines Moments. Marker: ") + pendingPreset.label + "."),
+        React.createElement("button", { type: "button", className: "quick-markers-action quick-markers-guide-primary", disabled: saving,
+          onClick: guidedAction }, saving ? guideText("Saving…", "Wird gespeichert …") : draft
+            ? guideText("Mark end & save", "Ende markieren & speichern") : guideText("Mark start", "Anfang markieren")),
+        draft ? React.createElement("p", { className: "quick-markers-hint quick-markers-guide-storage" + (draft.persisted === false ? " storage-error" : "") }, draft.persisted === false
+          ? guideText("Browser storage is unavailable. Keep this page open to keep your start.", "Der Browser kann den Anfang nicht dauerhaft speichern. Lass diese Seite dafür offen.")
+          : guideText("Your start is saved in this browser. You can stop here and return later.", "Dein Anfang ist in diesem Browser gespeichert. Du kannst hier aufhören und später weitermachen.")) : null,
+        restored && draft ? React.createElement("button", { type: "button", className: "quick-markers-tool", disabled: saving,
+          onClick: function () { const p = utils.InteractiveUtils && utils.InteractiveUtils.getPlayer(); if (p && typeof p.currentTime === "function") p.currentTime(draft.start); } },
+          guideText("Jump to saved start", "Zum gespeicherten Anfang")) : null,
+        (guideError || configError) ? React.createElement("p", { className: "text-danger", role: "alert" }, guideError || configError) : null,
+        status ? React.createElement("p", { className: "quick-markers-status", role: "status" }, status,
+          !draft ? " · " + guideText("Saved. You can stop here.", "Gespeichert. Du kannst hier aufhören.") : "") : null,
+        React.createElement("div", { className: "quick-markers-guide-footer" },
+          draft ? React.createElement("button", { type: "button", className: "quick-markers-tool", disabled: saving, onClick: pauseDraft }, guideText("Pause", "Pause")) : null,
+          draft ? React.createElement("button", { type: "button", className: "quick-markers-tool", disabled: saving, onClick: onClearIn }, guideText("Discard", "Verwerfen")) : null,
+          React.createElement("button", { type: "button", className: "quick-markers-tool", "aria-expanded": advanced,
+            "aria-label": advanced ? guideText("Show simple view", "Einfach anzeigen") : guideText("Adjust · presets & tools", "Anpassen · Presets & Werkzeuge"),
+            onClick: function () { setAdvanced(!advanced); } }, advanced ? guideText("Show simple view", "Einfach anzeigen") : guideText("Adjust", "Anpassen"))));
+    }
+
     var floatingPanel =
-      panelPosition !== "hidden"
+      panelPosition !== "hidden" && !(touchEnabled && touchHost && createPortal)
         ? React.createElement(
             "div",
             {
@@ -1669,6 +1774,8 @@
                 { className: "quick-markers-title" },
                 "Quick Markers"
               ),
+              !panelOpen ? React.createElement("button", { type: "button", className: "quick-markers-action", disabled: saving, onClick: guidedAction },
+                inPoint != null ? guideText("End & save", "Ende & speichern") : guideText("Mark start", "Anfang markieren")) : null,
               React.createElement(
                 "span",
                 { className: "quick-markers-active" },
@@ -1686,7 +1793,8 @@
                 : null
             ),
             panelOpen
-              ? React.createElement(
+              ? React.createElement(React.Fragment, null, renderGuide(),
+                advanced ? React.createElement(
                   React.Fragment,
                   null,
                   React.createElement(
@@ -1771,7 +1879,7 @@
                               " = select. Double-click = instant marker"
                             : "Click = select for In/Out. Double-click = instant marker",
                           onClick: function () {
-                            setActiveIndex(index);
+                            selectPreset(index);
                           },
                           onDoubleClick: function () {
                             if (preset.instantKey) onInstant(preset);
@@ -1879,7 +1987,7 @@
                         configError
                       )
                     : null
-                )
+                ) : null)
               : null
           )
         : null;
@@ -1923,7 +2031,8 @@
                   )
             ),
             touchBarOpen
-              ? React.createElement(
+              ? React.createElement(React.Fragment, null, renderGuide(),
+                advanced ? React.createElement(
                   React.Fragment,
                   null,
                   React.createElement(
@@ -1995,14 +2104,14 @@
                             "quick-markers-touch-preset" +
                             (isActive ? " active" : ""),
                           onClick: function () {
-                            setActiveIndex(index);
+                            selectPreset(index);
                           },
                         },
                         preset.label
                       );
                     })
                   )
-                )
+                ) : null)
               : null
           ), touchHost)
         : null;

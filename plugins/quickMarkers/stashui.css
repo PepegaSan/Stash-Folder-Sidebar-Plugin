@@ -9,6 +9,15 @@
   gap: 10px;
 }
 
+.qm-x-guide { display: grid; gap: 10px; }
+.qm-x-guide .kb-hint { margin: 0; }
+.qm-x-guide-primary.kb-btn { min-height: 44px; height: auto; white-space: normal; padding: 10px 14px; }
+.qm-x-guide-footer { display: flex; flex-wrap: wrap; gap: 6px; }
+.qm-x-guide-footer .kb-btn { min-height: 36px; }
+.qm-x-guide-error { color: var(--danger, #db3737); overflow-wrap: anywhere; margin: 0; }
+.qm-x-advanced { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.qm-x-advanced[hidden] { display: none; }
+
 .qm-x-actions {
   display: flex;
   flex-wrap: wrap;

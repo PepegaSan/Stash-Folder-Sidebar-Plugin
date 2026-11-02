@@ -24,6 +24,45 @@
 
 /* ── Floating scene panel ── */
 
+.quick-markers-guide {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 22rem;
+  margin-top: 0.65rem;
+}
+
+.quick-markers-guide p { margin: 0; }
+.quick-markers-guide .quick-markers-guide-primary {
+  min-height: 44px;
+  width: 100%;
+  white-space: normal;
+  color: var(--qm-on-accent);
+  background: var(--qm-accent);
+}
+.quick-markers-guide-footer { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.quick-markers-guide-footer button { min-height: 36px; }
+.quick-markers-guide [role="alert"] { overflow-wrap: anywhere; }
+.quick-markers-touch-bar .quick-markers-guide { max-width: none; }
+.quick-markers-touch-bar .quick-markers-guide-primary { min-height: 46px; }
+.quick-markers-panel:has(.quick-markers-guide) {
+  max-height: calc(100vh - 6rem);
+  overflow-y: auto;
+}
+
+@media (max-height: 520px) {
+  .quick-markers-touch-bar .quick-markers-guide {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.6rem;
+    margin-top: 0;
+  }
+  .quick-markers-touch-bar .quick-markers-guide > strong,
+  .quick-markers-touch-bar .quick-markers-guide-footer { flex-basis: 100%; }
+  .quick-markers-touch-bar .quick-markers-guide-instruction,
+  .quick-markers-touch-bar .quick-markers-guide-storage:not(.storage-error) { display: none; }
+}
+
 .quick-markers-panel {
   position: fixed;
   z-index: 1025;
@@ -1045,6 +1084,12 @@
     padding: 0.35rem 0.5rem;
     overflow-x: auto;
     scrollbar-width: none;
+  }
+
+  .quick-markers-touch-bar:has(.quick-markers-guide) {
+    display: block;
+    max-height: 45vh;
+    overflow: auto;
   }
 
   .quick-markers-touch-bar:not(.quick-markers-touch-bar-collapsed) .quick-markers-touch-bar-header,

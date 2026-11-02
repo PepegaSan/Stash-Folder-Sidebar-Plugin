@@ -2,6 +2,8 @@
 // Stash UI imports /plugin/quickMarkers/assets/stashui.js and calls the default export.
 // Classic Stash never loads this file; quickMarkers.js is the classic-UI side.
 // The preset format and hotkeys match quickMarkers.js — keep both in sync.
+import "./guide.js?v=1.14.1";
+const Guide = globalThis.QuickMarkersGuide;
 
 const PLUGIN_ID = "quickMarkers";
 const ASSETS_PRESETS = "/plugin/" + PLUGIN_ID + "/assets/presets.json";
@@ -25,6 +27,25 @@ const DEFAULT_PRESETS_CONFIG = {
 };
 
 const STRINGS_DE = {
+  "1 of 2 · Choose the start": "1 von 2 · Anfang wählen",
+  "2 of 2 · Choose the end": "2 von 2 · Ende wählen",
+  "Mark start": "Anfang markieren",
+  "Mark end & save": "Ende markieren & speichern",
+  "Saving…": "Wird gespeichert …",
+  "Watch or seek to the beginning of a moment. Marker: {label}.": "Spiele oder spule zum Anfang eines Moments. Marker: {label}.",
+  "Start at {time} · {label}. Watch or seek to the end of the moment.": "Anfang bei {time} · {label}. Spiele oder spule bis zum Ende des Moments.",
+  "Your start is saved in this browser. You can stop here and return later.": "Dein Anfang ist in diesem Browser gespeichert. Du kannst hier aufhören und später weitermachen.",
+  "Browser storage is unavailable. Keep this page open to keep your start.": "Der Browser kann den Anfang nicht dauerhaft speichern. Lass diese Seite dafür offen.",
+  "Move to an end after the marked start. Your start stays saved.": "Gehe zu einem Ende nach dem markierten Anfang. Dein Anfang bleibt erhalten.",
+  "Jump to saved start": "Zum gespeicherten Anfang",
+  "Paused. Your start stays here for later.": "Pause. Dein Anfang bleibt für später erhalten.",
+  "Saved. You can stop here.": "Gespeichert. Du kannst hier aufhören.",
+  "Adjust · presets & tools": "Anpassen · Presets & Werkzeuge",
+  "Adjust": "Anpassen",
+  "Show simple view": "Einfach anzeigen",
+  "No video player active.": "Kein Videoplayer aktiv.",
+  "Pause": "Pause",
+  "Discard": "Verwerfen",
   "Quick Markers": "Quick Markers",
   In: "In",
   Out: "Out",
@@ -262,7 +283,7 @@ function presetsToJson(config) {
     }),
   };
   if (config.panelPosition && config.panelPosition !== "top-left") root.panelPosition = config.panelPosition;
-  if (config.panelCollapsed === false) root.panelCollapsed = false;
+  if (typeof config.panelCollapsed === "boolean") root.panelCollapsed = config.panelCollapsed;
   if (config.touchControls && config.touchControls !== "auto") root.touchControls = config.touchControls;
   return JSON.stringify(root, null, 2);
 }
@@ -345,10 +366,9 @@ export default function setup(stashui) {
   loadStyles();
 
   const tagIdCache = new Map();
-  const inPoints = new Map(); // scene id → seconds (survives the info bar being redrawn)
+  const feedback = new Map(); // Keep the last save visible when Stash UI reloads the info bar.
   let configPromise = null;
   let configSource = "settings";
-  let activeId = null; // the preset picked while watching, kept across scenes
 
   stashui.on("plugins-changed", () => {
     configPromise = null;
@@ -1141,8 +1161,11 @@ export default function setup(stashui) {
       const signal = ctx.signal;
       const sceneId = String(ctx.id);
       let config = null;
-      let status = "";
+      let status = feedback.get(sceneId) || "";
       let busy = false;
+      let advanced = false;
+      let guideError = "";
+      let restored = !!Guide.draft(sceneId);
 
       const now = () => {
         const v = typeof ctx.time === "function" ? ctx.time() : ctx.video && ctx.video.currentTime;
@@ -1150,22 +1173,27 @@ export default function setup(stashui) {
       };
       const presets = () => (config ? config.presets : []);
       const activeIndex = () => {
-        const i = presets().findIndex((p) => p.id === activeId);
-        return i >= 0 ? i : Math.min(config ? config.defaultPresetIndex : 0, Math.max(0, presets().length - 1));
+        return config ? Guide.selected(config, sceneId) : 0;
       };
-      const active = () => presets()[activeIndex()] || null;
+      const active = () => Guide.draft(sceneId)?.preset || presets()[activeIndex()] || null;
       const select = (index) => {
         const p = presets()[index];
-        if (!p) return;
-        activeId = p.id;
+        if (!p || Guide.busy(sceneId)) return;
+        Guide.choose(p, sceneId);
         paint();
       };
 
       // clearsIn: the marker closes the range started with In (also when retried after "Create tag").
-      async function create(preset, from, to, clearsIn) {
-        if (busy) return;
+      function create(preset, from, to, clearsIn, expectedId = Guide.draft(sceneId)?.id) {
+        const save = () => saveMarker(preset, from, to, clearsIn, expectedId);
+        return clearsIn ? Guide.withDraft(sceneId, expectedId, save) : save();
+      }
+      async function saveMarker(preset, from, to, clearsIn, expectedId) {
+        if (busy || !Guide.lock(sceneId)) return;
         busy = true;
-        const retry = () => create(preset, from, to, clearsIn);
+        guideError = "";
+        paint();
+        const retry = () => create(preset, from, to, clearsIn, expectedId);
         try {
           const tagId = await resolveTagId(preset.primaryTag, retry);
           if (!tagId) return;
@@ -1184,25 +1212,32 @@ export default function setup(stashui) {
           };
           if (to != null) input.end_seconds = Math.round(to * 1000) / 1000;
           await stashui.gql("mutation($input: SceneMarkerCreateInput!) { sceneMarkerCreate(input: $input) { id } }", { input });
-          if (clearsIn) inPoints.delete(sceneId);
+          if (clearsIn) Guide.clear(sceneId, expectedId);
           const range = to != null ? formatTime(from) + " – " + formatTime(to) : formatTime(from);
           status = preset.label + " @ " + range;
+          feedback.set(sceneId, status);
           ui.toast(t("Marker: {label} ({range})", { label: preset.label, range }), "ok");
           // Redraws the info bar (markers list + timeline pins); this section mounts again with the same state.
           if (ctx.reload) ctx.reload();
         } catch (e) {
+          guideError = e.message || String(e);
           ui.errorToast(e, "Quick Markers");
         } finally {
+          Guide.unlock(sceneId);
           busy = false;
           if (!signal.aborted) paint();
         }
       }
 
       function onIn() {
+        if (Guide.busy(sceneId)) return;
         const at = now();
-        if (at == null) return;
-        inPoints.set(sceneId, at);
+        if (at == null) { guideError = t("No video player active."); paint(); return; }
+        Guide.begin(sceneId, active(), at);
+        restored = false;
+        guideError = "";
         status = "";
+        feedback.delete(sceneId);
         ui.toast(t("In point: {time}", { time: formatTime(at) }), "ok");
         paint();
       }
@@ -1211,7 +1246,7 @@ export default function setup(stashui) {
         const preset = active();
         const at = now();
         if (!preset || at == null) return;
-        const start = inPoints.get(sceneId);
+        const start = Guide.draft(sceneId)?.start;
         if (start == null) {
           ui.toast(t("Set In first ({key})", { key: prettyKey(preset.rangeInKey) }), "error");
           return;
@@ -1228,8 +1263,24 @@ export default function setup(stashui) {
       }
 
       function discardIn() {
-        inPoints.delete(sceneId);
+        if (Guide.busy(sceneId)) return;
+        Guide.clear(sceneId);
+        guideError = "";
+        status = "";
+        feedback.delete(sceneId);
         paint();
+      }
+
+      function guidedAction() {
+        if (Guide.busy(sceneId)) return;
+        const draft = Guide.draft(sceneId);
+        if (!draft) return onIn();
+        if (!Guide.canFinish(draft.start, now())) {
+          guideError = t("Move to an end after the marked start. Your start stays saved.");
+          paint();
+          return;
+        }
+        onOut();
       }
 
       // Runs before the player's own keys (capture on window), so Shift+I/O/M
@@ -1266,7 +1317,7 @@ export default function setup(stashui) {
       // While recording, the In button shows the running length of the range.
       function onTime() {
         const span = el.querySelector("[data-qm-elapsed]");
-        const start = inPoints.get(sceneId);
+        const start = Guide.draft(sceneId)?.start;
         const at = now();
         if (span && start != null && at != null) span.textContent = formatTime(start) + " → " + formatTime(at);
       }
@@ -1279,10 +1330,29 @@ export default function setup(stashui) {
           return;
         }
         const preset = active();
-        const start = inPoints.get(sceneId);
+        const draft = Guide.draft(sceneId);
+        const start = draft?.start;
         const armed = start != null;
+        const saving = busy || Guide.busy(sceneId);
+        const disabled = saving ? "disabled" : "";
         el.innerHTML = `
           <div class="qm-x${armed ? " is-armed" : ""}">
+            <div class="qm-x-guide">
+              <strong>${esc(t(armed ? "2 of 2 · Choose the end" : "1 of 2 · Choose the start"))}</strong>
+              <p class="kb-hint">${esc(armed
+                ? t("Start at {time} · {label}. Watch or seek to the end of the moment.", { time: formatTime(start), label: preset.label })
+                : t("Watch or seek to the beginning of a moment. Marker: {label}.", { label: preset.label }))}</p>
+              <button type="button" class="kb-btn is-primary qm-x-guide-primary" data-qm="guide" ${disabled}>${esc(t(saving ? "Saving…" : armed ? "Mark end & save" : "Mark start"))}</button>
+              ${armed ? `<p class="kb-hint">${esc(t(draft.persisted === false ? "Browser storage is unavailable. Keep this page open to keep your start." : "Your start is saved in this browser. You can stop here and return later."))}</p>` : ""}
+              ${armed && restored ? `<button type="button" class="kb-btn is-ghost" data-qm="resume" ${disabled}>${esc(t("Jump to saved start"))}</button>` : ""}
+              ${guideError ? `<p class="qm-x-guide-error" role="alert">${esc(guideError)}</p>` : ""}
+              ${status ? `<p class="kb-hint qm-x-status" role="status">${esc(status)}${!armed ? " · " + esc(t("Saved. You can stop here.")) : ""}</p>` : ""}
+              <div class="qm-x-guide-footer">
+                ${armed ? `<button type="button" class="kb-btn is-ghost" data-qm="pause" ${disabled}>${esc(t("Pause"))}</button><button type="button" class="kb-btn is-ghost" data-qm="discard" ${disabled}>${esc(t("Discard"))}</button>` : ""}
+                <button type="button" class="kb-btn is-ghost" data-qm="adjust" aria-expanded="${advanced}" aria-label="${esc(t(advanced ? "Show simple view" : "Adjust · presets & tools"))}">${esc(t(advanced ? "Show simple view" : "Adjust"))}</button>
+              </div>
+            </div>
+            <div class="qm-x-advanced" ${advanced ? "" : "hidden"}>
             <div class="qm-x-actions">
               <button type="button" class="kb-btn qm-x-in" data-qm="in" title="${esc(t("Set the in point (start of the range)"))} · ${esc(prettyKey(preset && preset.rangeInKey))}">
                 <i class="qm-x-dot" aria-hidden="true"></i>${armed ? `<span data-qm-elapsed>${esc(formatTime(start))}</span>` : esc(t("In"))}
@@ -1293,15 +1363,15 @@ export default function setup(stashui) {
             </div>
             <div class="qm-x-presets" role="listbox" aria-label="${esc(t("Presets"))}">
               ${presets()
-                .map((p, i) => `<button type="button" role="option" aria-selected="${p === preset}" class="kb-chip qm-x-chip${p === preset ? " is-on" : ""}" data-qm-preset="${i}" title="${esc(t("Active preset — click to select"))}">${esc(p.label)}${p.selectSlot ? `<kbd>⇧${p.selectSlot}</kbd>` : ""}</button>`)
+                .map((p, i) => `<button type="button" role="option" aria-selected="${p.id === preset.id}" class="kb-chip qm-x-chip${p.id === preset.id ? " is-on" : ""}" data-qm-preset="${i}" title="${esc(t("Active preset — click to select"))}">${esc(p.label)}${p.selectSlot ? `<kbd>⇧${p.selectSlot}</kbd>` : ""}</button>`)
                 .join("")}
             </div>
-            ${status ? `<p class="kb-hint qm-x-status">${ui.icon("check")}${esc(t("Last: {text}", { text: status }))}</p>` : ""}
             <div class="qm-x-tools">
               <button type="button" class="kb-btn is-ghost" data-qm="copy" title="${esc(t("Copy all markers of this scene (times, titles, tags)"))}">${ui.icon("copies")}${esc(t("Copy"))}</button>
               <button type="button" class="kb-btn is-ghost" data-qm="paste"${clip ? "" : " disabled"} title="${esc(clip ? t("Paste {n} markers from {title}", { n: clip.markers.length, title: clip.sceneTitle }) : t("Copy the markers of another scene first"))}">${ui.icon("download")}${esc(t("Paste"))}${clip ? `<small>${clip.markers.length}</small>` : ""}</button>
               <button type="button" class="kb-btn is-ghost" data-qm="same" title="${esc(t("Copy markers to scenes with the same video"))}">${ui.icon("layers")}${esc(t("Same videos"))}</button>
               ${undo ? `<button type="button" class="kb-btn is-ghost" data-qm="undo" title="${esc(t("Remove the markers of the last transfer"))}">${ui.icon("undo")}${esc(t("Undo"))}<small>${undo.ids.length + undo.restore.length}</small></button>` : ""}
+            </div>
             </div>
           </div>`;
       }
@@ -1311,7 +1381,12 @@ export default function setup(stashui) {
         if (!b || !el.contains(b)) return;
         if (b.dataset.qmPreset != null) return select(Number(b.dataset.qmPreset));
         const action = b.dataset.qm;
-        if (action === "in") onIn();
+        if (action === "adjust") { advanced = !advanced; paint(); }
+        else if (Guide.busy(sceneId)) return;
+        else if (action === "guide") guidedAction();
+        else if (action === "pause") { if (ctx.video?.pause) ctx.video.pause(); status = t("Paused. Your start stays here for later."); paint(); }
+        else if (action === "resume") { if (ctx.video && Guide.draft(sceneId)) ctx.video.currentTime = Guide.draft(sceneId).start; }
+        else if (action === "in") onIn();
         else if (action === "out") onOut();
         else if (action === "instant") onInstant(active());
         else if (action === "discard") discardIn();
@@ -1336,6 +1411,17 @@ export default function setup(stashui) {
       window.addEventListener("storage", readClip, { signal });
       window.addEventListener("quickMarkers:clipboard", readClip, { signal });
       readClip();
+
+      const unsubscribe = Guide.subscribe((id, external) => {
+        if ((id != null && id !== sceneId) || signal.aborted) return;
+        if (external) {
+          restored = !!Guide.draft(sceneId);
+          status = guideError = "";
+          feedback.delete(sceneId);
+        }
+        paint();
+      });
+      signal.addEventListener("abort", unsubscribe, { once: true });
 
       paint();
       loadConfig()

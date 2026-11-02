@@ -786,7 +786,7 @@ export function mountSettings(el, env) {
     return `<section class="qms-card qms-general" aria-label="${esc(t("General"))}">
         <div class="qms-field"><label class="qms-label" for="qms-pos">${esc(t("Panel position"))}</label>
           <select id="qms-pos" class="${C.field}" data-set="panelPosition" data-focus="set:pos">${POSITIONS.map(([v, l]) => `<option value="${v}"${v === pos ? " selected" : ""}>${esc(t(l))}</option>`).join("")}</select>
-          <label class="qms-check"><input type="checkbox" data-set="panelCollapsed" data-focus="set:collapsed"${c.panelCollapsed !== false ? " checked" : ""}> ${esc(t("Start collapsed"))}</label>
+          <label class="qms-check"><input type="checkbox" data-set="panelCollapsed" data-focus="set:collapsed"${c.panelCollapsed === true ? " checked" : ""}> ${esc(t("Start collapsed"))}</label>
           <small class="qms-hint">${esc(t("Drag the panel header to move it; double-click resets it."))}</small></div>
         <div class="qms-field"><span class="qms-label">${esc(t("Touch controls"))}</span>
           <div class="qms-seg" role="group" aria-label="${esc(t("Touch controls"))}">${TOUCH.map(([v, l]) => `<button type="button" data-touch="${v}" data-focus="touch:${v}" class="${v === touch ? "is-on" : ""}" aria-pressed="${v === touch}">${esc(t(l))}</button>`).join("")}</div>
