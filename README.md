@@ -600,7 +600,9 @@ Reload plugins in Stash. Console should show `[Tag Categories] loaded v1.10.2`.
 
 # PMV Creator
 
-The optional **Super simple** mode guides you through choosing a song, creating a suggestion and finishing the video. **Save & pause** keeps a checkpoint, including a browser fallback if the server save fails.
+Use **View** at the top to switch between **Super simple**, **Simple** and **Advanced**. The guide opens at step 1: start a new PMV, or choose **Continue existing project** to resume your song or preview your existing cut. **Save & pause** keeps a checkpoint, including a browser fallback if the server save fails.
+
+**Clear timeline** above the timeline (or under **I want to adjust something** in the guided preview) removes the video clips, split screens and timeline markers. Your song, project scenes and **My clips** stay. Undo restores the cut in one step.
 
 Deterministic PMV (music video) editor inside Stash: pick scenes and markers, arrange them on a beat grid, fine-tune every
 clip and render frame-exactly with FFmpeg (or record the preview in the browser), or hand the cut to DaVinci Resolve & Co.
