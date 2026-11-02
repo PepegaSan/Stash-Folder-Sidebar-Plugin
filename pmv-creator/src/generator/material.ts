@@ -47,6 +47,8 @@ export interface ClipOptions {
   markerSubTags: boolean;
   /** Max scenes / markers fetched (random order with the seed). */
   limit: number;
+  /** Project scenes normally use the entire project. An explicit cap also applies to this source. */
+  limitProjectScenes?: boolean;
   /** Scenes: use their markers as clips where they have some. */
   preferMarkers: boolean;
   /** Scenes: skip this share at the start and end (intros, credits), percent. */

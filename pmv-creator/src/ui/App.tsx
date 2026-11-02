@@ -22,6 +22,7 @@ import { reviewCut } from "./review";
 import { Sidebar } from "./sidebar/Sidebar";
 import { Timeline } from "./timeline/Timeline";
 import { Toolbar } from "./Toolbar";
+import { SuperSimple } from "./SuperSimple";
 
 /** Stash's interface language, e.g. "de-DE"; null when Stash can't be asked. */
 async function interfaceLanguage(): Promise<string | null> {
@@ -74,6 +75,7 @@ function Workspace() {
     resumeRenders();
     resumeLabels();
   }, []);
+  if (state.ui.superSimple) return <SuperSimple key={state.present.id} />;
   return (
     <SourceHostContext.Provider value={sourceHost}>
       {state.ui.generator && <GeneratorDialog />}
@@ -151,6 +153,13 @@ function useShortcuts() {
       // AltGr (Ctrl+Alt on Windows) types [ and ] on German keyboards – it is no modifier here
       const mod = (e.ctrlKey || e.metaKey) && !e.getModifierState?.("AltGraph");
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if (ui.superSimple) {
+        if (document.querySelector(".pmv-modal, .pmv-menu-pop")) return;
+        if (!mod && key === " " && !target?.closest("button") && document.querySelector(".pmv-super-preview")) {
+          transport.toggle(); e.preventDefault(); e.stopPropagation();
+        }
+        return;
+      }
       let handled = true;
       if (!mod && sourceKeys.handle?.(key, e)) {
         // the scene in the main player took the key

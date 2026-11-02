@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.9.21 (2026-11-02)
+
+- Step 2 of Super simple now offers two optional questions: choose candidate videos
+  and clip variance, then choose full screen or two-way splits and transitions.
+  Leaving them closed keeps the original generator settings.
+
+## 0.9.20 (2026-11-02)
+
+- The guide opens at step 1. Start a separate PMV or explicitly resume an existing song or cut.
+- The same View selector is available in all three modes.
+- Clear timeline removes the video cut in one undoable edit while preserving the song and project material.
+
+## 0.9.19 (2026-11-02)
+
+- Reopening a project recovers a newer browser checkpoint after a failed server
+  save. Pending autosaves and Save & pause now write to the server in order.
+- Super simple keeps playback paused on the pause screen and remembers edits to
+  tag or performer filters when switching views.
+
+## 0.9.18 (2026-11-02)
+
+- Added an optional **Super simple** view: one current task for choosing music,
+  creating a prepared suggestion, previewing and finishing the video. Existing
+  projects enter at the appropriate step; switching views preserves their edits.
+- **Save & pause** checkpoints immediately, reports browser-only fallback and
+  prevents a pending generator result from replacing the project after pausing.
+  Material choices and the chosen view are remembered in this browser.
+- The guided render dialog hides technical options behind **Adjust output** and
+  offers a clear stopping point on completion. Render startup rejects repeated
+  clicks while the request is pending.
+- Added regression coverage for prepared material settings, view switching,
+  generation, checkpoint/reopen, pausing a pending run and storage failures.
+
 ## 0.9.17 (2026-11-01)
 
 - **Start helper on this PC** uses a normal `pmvhelper://start` link. The previous hidden iframe was blocked by Stash's `frame-src` CSP in Chrome, leaving the helper stopped. The start notice now asks the user to confirm the browser prompt and offers double-clicking the downloaded file if no PC connects.

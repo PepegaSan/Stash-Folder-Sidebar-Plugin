@@ -10,6 +10,39 @@ Architecture, data model and render pipeline: **[docs/KONZEPT.md](docs/KONZEPT.m
 
 For long sources, high variance balances twelve temporal sections and prefers large jumps between picks. This distributes source times; it does not detect different visual motifs.
 
+## Super simple
+
+**View** in the toolbar switches directly between **Super simple**, **Simple** and
+**Advanced**. The guide has three steps: **choose a song →
+create a PMV suggestion → preview and finish**. It shows one current step, without
+the sidebar, inspector or editing timeline. If a project already has music or
+clips, step 1 offers **Start a new PMV** or **Continue existing project**.
+Continuing opens material selection for a song or the preview for an existing cut.
+Starting a new PMV keeps the previous project saved.
+
+**Clear timeline** above the timeline (in the guide: preview → **I want to adjust
+something**) removes the video clips, split screens and timeline markers while
+keeping your song, project scenes and **My clips**. Use **↶** (Ctrl+Z) or
+**Restore previous cut** in the guide to undo it.
+
+Suggestions use project scenes when present, otherwise the library, full-video
+material, the whole song, automatic cuts and a light zoom. Step 2 has two optional
+questions. **Which videos should be considered?** lets you filter the library by tags
+and performers, cap candidate videos (1–500) and adjust clip variance. Defaults:
+up to 40 library videos or all project scenes, 100% variance. The song still determines
+how many cuts you get. **How should the cut look?** offers full screen, two videos
+side by side, or a mix. Between full-screen clips you can use hard cuts (default),
+crossfades, fades through black or mixed transitions; split screens use hard cuts.
+Answers are remembered per project in this browser. You can keep both questions closed.
+
+**Save & pause** checkpoints immediately and pauses playback. A pending suggestion
+is discarded when its result arrives after pausing; existing project work remains.
+Server failure falls back to a confirmed browser copy. If both fail, the project
+stays open with a download option. Music upload/preparation finishes before the
+pause button becomes available. Material choices are remembered per project in
+this browser. The render dialog starts with prepared settings; **Adjust output**
+reveals the existing options and retains the user's chosen PC helper.
+
 ## Installation
 
 Requirements: Stash with the plugin UI API (`PluginApi.register.route`, `runPluginOperation`; current versions, tested with 0.31). On the Stash server Python ≥ 3.8 (*Settings → System → Python path*) and FFmpeg ≥ 4.4 – the FFmpeg Stash ships is found automatically. Marker end times are used when the server knows `end_seconds`, otherwise a configurable default length applies.

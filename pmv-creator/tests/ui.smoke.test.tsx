@@ -42,6 +42,12 @@ const saved: unknown[] = [];
 const tagged: unknown[] = [];
 const tasks: Array<{ id: string; args: Record<string, unknown> }> = [];
 const jobPolls: Record<string, number> = {};
+let holdNextSceneQuery = false;
+let releaseSceneQuery: (() => void) | null = null;
+let failProjectSave = false;
+let holdNextProjectSave = false;
+let releaseProjectSave: (() => void) | null = null;
+let TestPage: React.ComponentType;
 let lastSceneFilter: unknown = null;
 const RENDER_DESC = "Running plugin task: Render PMV";
 
@@ -51,14 +57,17 @@ function graphql(body: { query: string; variables?: Record<string, any> }) {
     const args = body.variables?.args ?? {};
     const out: Record<string, unknown> = {
       ping: { version: "test", ffmpeg: "ffmpeg", ffprobe: "ffprobe", python: "3" },
-      load_project: fixtureProject(),
+      load_project: [...saved].reverse().find((p: any) => p.id === args.id) ?? fixtureProject(),
       list_projects: [],
       list_presets: [{ name: "Hypno Mia", settings: { mood: "hypno", clips: { source: "project" } } }],
       list_media: [{ name: "Neon Nights.mp3", path: "/media/neon.mp3", url: "/plugin/pmv-creator/assets/media/neon.mp3", size: 4000000, mtime: 1792000000 }],
       render_result: { status: "done", file: "/renders/Smoke.mp4", scanned: false, pieces: 3, cached: 0, seconds: 1.5 },
       audio_peaks: { pps: 50, peaks: btoa(String.fromCharCode(...Array.from({ length: 6000 }, (_, i) => (i % 50) * 5))), duration: 120, hasAudio: true },
     };
-    if (args.op === "save_project") saved.push(args.project);
+    if (args.op === "save_project") {
+      if (failProjectSave) throw new Error("Test server unavailable");
+      saved.push(args.project);
+    }
     return { runPluginOperation: out[args.op] ?? { path: "/x" } };
   }
   if (q.includes("runPluginTask")) {
@@ -83,6 +92,7 @@ function graphql(body: { query: string; variables?: Record<string, any> }) {
     return { findScenes: { count: scenes.length, scenes } };
   }
   if (q.includes("findTags")) return { findTags: { tags: [] } };
+  if (q.includes("query PmvTag(")) return { findTag: { id: "9", name: "Linked tag" } };
   if (q.includes("tagCreate")) return { tagCreate: { id: "77" } };
   if (q.includes("bulkSceneUpdate")) {
     tagged.push(body.variables?.input);
@@ -116,6 +126,14 @@ async function fire(el: Element | Window, ev: Event) {
   });
 }
 
+async function chooseView(value: "super" | "simple" | "advanced") {
+  const control = $(".pmv-view-mode select") as HTMLSelectElement;
+  expect(Array.from(control.options, (o) => o.value)).toEqual(["super", "simple", "advanced"]);
+  control.value = value;
+  await fire(control, new Event("change", { bubbles: true }));
+  expect(($(".pmv-view-mode select") as HTMLSelectElement).value).toBe(value);
+}
+
 beforeAll(async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   (globalThis as any).ResizeObserver = class {
@@ -144,6 +162,14 @@ beforeAll(async () => {
   globalThis.fetch = vi.fn(async (url: any, init?: any) => {
     if (String(url).includes("/assets/media/")) return new Response(new ArrayBuffer(16));
     const body = JSON.parse(init?.body ?? "{}");
+    if (holdNextProjectSave && body.variables?.args?.op === "save_project") {
+      holdNextProjectSave = false;
+      await new Promise<void>((resolve) => { releaseProjectSave = resolve; });
+    }
+    if (holdNextSceneQuery && body.query?.includes("findScenes") && !body.variables?.ids) {
+      holdNextSceneQuery = false;
+      await new Promise<void>((resolve) => { releaseSceneQuery = resolve; });
+    }
     return new Response(JSON.stringify({ data: graphql(body) }), { headers: { "Content-Type": "application/json" } });
   }) as any;
   localStorage.setItem("pmv-creator:last-project", "pmv_smoke");
@@ -161,6 +187,7 @@ beforeAll(async () => {
   document.body.appendChild(container);
   root = createRoot(container);
   const Page = page!;
+  TestPage = Page;
   await act(async () => root.render(<Page />));
 });
 
@@ -271,10 +298,8 @@ describe("PMV Creator UI (mocked Stash)", () => {
 
   it("sets a timeline marker with the ◆ button and removes it with the same button or M", async () => {
     await fire(document.body, new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    const advanced = $$(".pmv-adv input[type=checkbox]")[0] as HTMLInputElement;
-    expect(advanced).toBeTruthy();
-    const wasAdvanced = advanced.checked;
-    if (!wasAdvanced) await fire(advanced, new MouseEvent("click", { bubbles: true }));
+    const wasAdvanced = ($(".pmv-view-mode select") as HTMLSelectElement).value === "advanced";
+    if (!wasAdvanced) await chooseView("advanced");
     const marks = () => $$(".pmv-ruler-marker").length;
     const before = marks();
     const add = byText("◆ Timeline marker")!;
@@ -290,7 +315,7 @@ describe("PMV Creator UI (mocked Stash)", () => {
     expect(marks()).toBe(before + 1);
     await fire(document.body, new KeyboardEvent("keydown", { key: "m", bubbles: true }));
     expect(marks()).toBe(before);
-    if (!wasAdvanced) await fire(advanced, new MouseEvent("click", { bubbles: true }));
+    if (!wasAdvanced) await chooseView("simple");
   });
 
   it("drills into a scene and picks a marker", async () => {
@@ -766,6 +791,203 @@ describe("PMV Creator UI (mocked Stash)", () => {
     await waitFor(() => (saved[saved.length - 1] as { audio?: { gainDb: number } }).audio?.gainDb === -6, 4000);
     await fire($(".pmv-tl-head-audio input[type=range]")!, new MouseEvent("dblclick", { bubbles: true }));
     expect(level()).toBe("100%");
+  });
+
+  it("enters Super simple with the same project, shows a reduced render dialog and returns to Simple", async () => {
+    const clipsBefore = $$(".pmv-clip").length;
+    const name = ($(".pmv-name") as HTMLInputElement).value;
+    await chooseView("advanced");
+    await chooseView("super");
+    expect($(".pmv-super")).not.toBeNull();
+    expect($(".pmv-sidebar")).toBeNull();
+    expect(container.textContent).toContain("Step 1 of 3");
+    expect(byText("Finish this video")).toBeNull();
+    await fire(byText("Continue existing project")!, new MouseEvent("click", { bubbles: true }));
+    expect(container.textContent).toContain("Watch your suggestion");
+    expect(localStorage.getItem("pmv-creator:super-simple")).toBe("1");
+    await fire(byText("Finish this video")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!byText("Adjust output"));
+    expect($(".pmv-modal")!.textContent).not.toContain("Quick recording");
+    expect($(".pmv-modal")!.textContent).not.toContain("CRF");
+    await fire($$(".pmv-modal button").find((b) => b.textContent?.trim() === "✕")!, new MouseEvent("click", { bubbles: true }));
+    await chooseView("simple");
+    await waitFor(() => !!$(".pmv-sidebar"));
+    expect($$(".pmv-clip")).toHaveLength(clipsBefore);
+    expect(($(".pmv-name") as HTMLInputElement).value).toBe(name);
+    expect(localStorage.getItem("pmv-creator:super-simple")).toBe("0");
+  });
+
+  async function freshSuperMaterial() {
+    // Return from the guide if the preceding test left it open.
+    await chooseView("simple");
+    await fire(byText("Project")!, new MouseEvent("click", { bubbles: true }));
+    await fire($$(".pmv-menu-item").find((b) => b.textContent?.trim() === "New")!, new MouseEvent("click", { bubbles: true }));
+    await chooseView("super");
+    expect(container.textContent).toContain("Choose one song");
+    await selectLibrarySong();
+  }
+
+  async function selectLibrarySong() {
+    await fire($$(".pmv-more-head").find((b) => b.textContent?.includes("Use a previously uploaded song"))!, new MouseEvent("click", { bubbles: true }));
+    await fire(byText("🎵 From the library…")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!$(".pmv-songs")?.textContent?.includes("Neon Nights.mp3"));
+    await fire($$(".pmv-songs li").find((li) => li.textContent?.includes("Neon Nights.mp3"))!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!byText("Continue with this song"));
+    await fire(byText("Continue with this song")!, new MouseEvent("click", { bubbles: true }));
+    expect(container.textContent).toContain("Let the music guide the cut");
+  }
+
+  it("runs the real generator from the guide, checkpoints it and reopens the same suggestion", async () => {
+    await freshSuperMaterial();
+    await fire(byText("Create my PMV suggestion")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!byText("Finish this video"), 5000);
+    expect($(".pmv-sidebar")).toBeNull();
+    expect($(".pmv-view-mode select")).not.toBeNull();
+    await fire(byText("Save & pause")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!byText("Continue here"));
+    const last = saved[saved.length - 1] as ReturnType<typeof fixtureProject>;
+    expect(last.audio?.name).toBe("Neon Nights.mp3");
+    expect(last.tracks.some((track) => track.clips.length)).toBe(true);
+    const browser = JSON.parse(localStorage.getItem(`pmv-creator:project:${last.id}`)!);
+    expect(browser.tracks).toEqual(last.tracks);
+    await act(async () => root.render(<TestPage key="super-reopened" />));
+    await waitFor(() => !!byText("Continue existing project"));
+    expect(container.textContent).toContain("Step 1 of 3");
+    await fire(byText("Continue existing project")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!byText("Finish this video"));
+    expect(container.textContent).toContain("Watch your suggestion");
+    expect(container.textContent).toContain("Neon Nights");
+  });
+
+  it("clears a suggestion in the guide, restores it, then starts a separate PMV without changing the saved cut", async () => {
+    const click = (label: string) => fire(byText(label)!, new MouseEvent("click", { bubbles: true }));
+    const previous = saved[saved.length - 1] as ReturnType<typeof fixtureProject>;
+    await fire($$(".pmv-more-head").find((b) => b.textContent?.includes("I want to adjust something"))!, new MouseEvent("click", { bubbles: true }));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    try {
+      await click("Clear timeline");
+      expect(container.textContent).toContain("Step 3 of 3");
+      await click("Clear timeline");
+      expect(container.textContent).toContain("Step 2 of 3");
+      expect($(".pmv-super-summary")!.textContent).toContain(previous.audio!.name);
+      await click("Restore previous cut");
+      expect(container.textContent).toContain("Step 3 of 3");
+    } finally { confirm.mockRestore(); }
+    failProjectSave = true;
+    try {
+      await click("Start a new PMV");
+      await waitFor(() => !!$(".pmv-super-error"));
+      expect(byText("Finish this video")).not.toBeNull();
+    } finally { failProjectSave = false; }
+    await click("Start a new PMV");
+    await waitFor(() => !!byText("Choose song…"));
+    expect(container.textContent).toContain("Step 1 of 3");
+    expect(byText("Continue existing project")).toBeNull();
+    await click("Save & pause");
+    await waitFor(() => !!byText("Continue here"));
+    const fresh = saved[saved.length - 1] as typeof previous;
+    expect(fresh.id).not.toBe(previous.id);
+    expect(fresh.audio).toBeNull();
+    expect(fresh.tracks.every((tr) => !tr.clips.length)).toBe(true);
+    expect(JSON.parse(localStorage.getItem(`pmv-creator:project:${previous.id}`)!).tracks).toEqual(previous.tracks);
+  });
+
+  it("pauses an in-flight suggestion and never applies its late result", async () => {
+    await freshSuperMaterial();
+    holdNextSceneQuery = true;
+    releaseSceneQuery = null;
+    await fire(byText("Create my PMV suggestion")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!releaseSceneQuery);
+    await fire(byText("Save & pause")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!byText("Stopping…"));
+    const paused = saved[saved.length - 1] as ReturnType<typeof fixtureProject>;
+    expect(paused.tracks.every((track) => !track.clips.length)).toBe(true);
+    await act(async () => { releaseSceneQuery!(); await new Promise((resolve) => setTimeout(resolve, 50)); });
+    await waitFor(() => !!byText("Continue here"));
+    await fire(byText("Continue here")!, new MouseEvent("click", { bubbles: true }));
+    expect(container.textContent).toContain("Let the music guide the cut");
+    expect(byText("Finish this video")).toBeNull();
+  });
+
+  it("uses a browser checkpoint if the server fails and reports if neither copy can be saved", async () => {
+    failProjectSave = true;
+    try {
+      await fire(byText("Save & pause")!, new MouseEvent("click", { bubbles: true }));
+      await waitFor(() => !!byText("Continue here"));
+      expect(container.textContent).toContain("Saved in this browser.");
+      await fire(byText("Continue here")!, new MouseEvent("click", { bubbles: true }));
+      const quota = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+      try {
+        await fire(byText("Save & pause")!, new MouseEvent("click", { bubbles: true }));
+        await waitFor(() => !!$(".pmv-super-error"));
+        expect(container.textContent).toContain("Saving failed. Keep this page open or download the project.");
+        expect(byText("Download project")).not.toBeNull();
+        expect(byText("Continue here")).toBeNull();
+      } finally { quota.mockRestore(); }
+    } finally { failProjectSave = false; }
+  });
+
+  it("reopens the browser checkpoint when the server still has the earlier empty timeline", async () => {
+    await freshSuperMaterial();
+    await fire(byText("Save & pause")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!byText("Continue here"));
+    await fire(byText("Continue here")!, new MouseEvent("click", { bubbles: true }));
+    failProjectSave = true;
+    try {
+      await fire(byText("Create my PMV suggestion")!, new MouseEvent("click", { bubbles: true }));
+      await waitFor(() => !!byText("Finish this video"));
+      await fire(byText("Save & pause")!, new MouseEvent("click", { bubbles: true }));
+      await waitFor(() => !!byText("Continue here"));
+      expect(container.textContent).toContain("Saved in this browser.");
+      await act(async () => root.render(<TestPage key="reopen-local-checkpoint" />));
+      await waitFor(() => !!$(".pmv-super-card"));
+      await fire(byText("Continue existing project")!, new MouseEvent("click", { bubbles: true }));
+      expect(byText("Finish this video")).not.toBeNull();
+    } finally { failProjectSave = false; }
+  });
+
+  it("keeps a delayed autosave from overwriting the subsequent pause checkpoint", async () => {
+    await freshSuperMaterial();
+    releaseProjectSave = null;
+    holdNextProjectSave = true;
+    await waitFor(() => !!releaseProjectSave, 3500);
+    await fire(byText("Create my PMV suggestion")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!byText("Finish this video"));
+    await fire(byText("Save & pause")!, new MouseEvent("click", { bubbles: true }));
+    try {
+      expect(byText("Continue here")).toBeNull();
+      expect(byText("Finish this video")).toBeNull();
+    } finally { await act(async () => { releaseProjectSave!(); }); }
+    await waitFor(() => !!byText("Continue here"));
+    const last = saved[saved.length - 1] as ReturnType<typeof fixtureProject>;
+    expect(last.tracks.some((track) => track.clips.length)).toBe(true);
+  });
+
+  it("keeps the preview shortcut inactive on the pause screen", async () => {
+    await freshSuperMaterial();
+    await fire(byText("Create my PMV suggestion")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!byText("Finish this video"));
+    await fire(byText("Save & pause")!, new MouseEvent("click", { bubbles: true }));
+    await waitFor(() => !!byText("Continue here"));
+    const shortcut = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+    await fire(document.body, shortcut);
+    expect(shortcut.defaultPrevented).toBe(false);
+  });
+
+  it("keeps the user's material choice after removing a deep-linked tag and switching views", async () => {
+    window.history.replaceState(null, "", "?tag=9");
+    await act(async () => root.render(<TestPage key="from-tag" />));
+    await waitFor(() => !!$(".pmv-super-name")?.textContent?.includes("Linked tag"));
+    await selectLibrarySong();
+    expect($(".pmv-super-summary")?.textContent).toContain("Linked tag");
+    await fire(byText("Which videos should be considered?", "summary")!, new MouseEvent("click", { bubbles: true }));
+    await fire($(".pmv-chip button")!, new MouseEvent("click", { bubbles: true }));
+    const view = $(".pmv-view-mode select") as HTMLSelectElement;
+    await act(async () => { view.value = "simple"; view.dispatchEvent(new Event("change", { bubbles: true })); });
+    await chooseView("super");
+    await fire(byText("Continue existing project")!, new MouseEvent("click", { bubbles: true }));
+    expect(container.textContent).toContain("Step 2 of 3");
+    expect($(".pmv-super-summary")?.textContent).not.toContain("Linked tag");
   });
 
   it("logged no React errors", () => {

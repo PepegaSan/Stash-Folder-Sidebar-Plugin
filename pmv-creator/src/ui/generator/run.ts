@@ -5,6 +5,7 @@ import { type ClipOptions, type MaterialItem, type MaterialMode, buildMarkerFilt
 import { DEFAULT_PREVIEW_CONFIG, type Rhythm, type SpeedSpot, decodeGrayFrames, makePercentile, motionCurve, rhythmOf, speedMapFromPreview, toFrames } from "../../generator/motion";
 import { peaksEnergy } from "../../generator/rhythm";
 import { t } from "../../i18n";
+import { mulberry32 } from "../../generator/random";
 import type { Clip, PmvProject, SourceMedia } from "../../model/project";
 import { grayFrames } from "../../stash/backend";
 import { PMV_TAG, SKIP_TAG, cachedTagId } from "../../stash/library";
@@ -43,7 +44,25 @@ async function collectOne(o: ClipOptions, p: PmvProject, seed: number, favId: st
     return { items: scenes.flatMap((s) => sceneItems(s, o)), sources: sourcesOf(scenes) };
   }
   if (o.source === "project") {
-    const scenes = (await fetchScenes(Object.keys(p.sources))).filter(ok);
+    const ids = Object.keys(p.sources);
+    let scenes;
+    if (o.limitProjectScenes && ids.length > find.per_page) {
+      // Sample without replacement. Refill past skipped/missing videos, without loading a large project for a small request.
+      const rnd = mulberry32(seed);
+      for (let i = ids.length - 1; i > 0; --i) {
+        const j = Math.floor(rnd() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]];
+      }
+      scenes = [] as Awaited<ReturnType<typeof fetchScenes>>;
+      let offset = 0;
+      while (offset < ids.length && scenes.length < find.per_page) {
+        const n = Math.max(offset ? 32 : 1, find.per_page - scenes.length);
+        const batch = await fetchScenes(ids.slice(offset, offset + n));
+        scenes.push(...batch.filter((s) => ok(s) && (s.files[0]?.duration ?? 0) > 0).slice(0, find.per_page - scenes.length));
+        offset += n;
+      }
+    } else {
+      scenes = (await fetchScenes(ids)).filter(ok);
+    }
     primeScenes(scenes);
     return { items: scenes.flatMap((s) => sceneItems(s, o)), sources: sourcesOf(scenes) };
   }

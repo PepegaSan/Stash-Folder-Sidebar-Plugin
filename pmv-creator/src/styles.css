@@ -1,4 +1,42 @@
 /* PMV Creator – everything is scoped below .pmv-root (plus the modal/menu helpers it renders). */
+.pmv-super { min-height: 0; flex: 1; display: flex; flex-direction: column; }
+.pmv-super, .pmv-super-main, .pmv-super-card, .pmv-super-error { box-sizing: border-box; min-width: 0; }
+.pmv-super-card > * { min-width: 0; }
+.pmv-super .pmv-modal-body { box-sizing: border-box; max-width: calc(100vw - 24px); }
+.pmv-super-main { flex: 1; min-height: 0; overflow: auto; padding: 32px 20px; }
+.pmv-super-card, .pmv-super-error { width: 100%; max-width: 820px; margin: 0 auto; padding: 28px; border: 1px solid var(--pmv-border); border-radius: 14px; background: var(--pmv-panel); }
+.pmv-super-card { display: grid; gap: 18px; font-size: 15px; line-height: 1.5; }
+.pmv-super-card h2, .pmv-super-card p { margin: 0; }
+.pmv-super-card h2 { font-size: 24px; }
+.pmv-super-questions { display: grid; gap: 8px; }
+.pmv-super-questions details { min-width: 0; border: 1px solid var(--pmv-border); border-radius: 8px; }
+.pmv-super-questions summary { padding: 9px 14px; cursor: pointer; font-weight: 600; }
+.pmv-super-questions small { display: block; font-size: 13px; font-weight: normal; color: var(--pmv-muted); }
+.pmv-super-questions summary small { margin-left: 1em; }
+.pmv-super-fields { display: grid; gap: 16px; padding: 6px 14px 16px; }
+.pmv-super-fields label, .pmv-super-fields > div { display: grid; min-width: 0; gap: 5px; margin: 0; }
+.pmv-super-fields input[type="range"] { width: 100%; max-width: 28rem; accent-color: var(--pmv-accent); }
+.pmv-super-fields input[type="number"] { width: 100%; max-width: 16rem; }
+.pmv-super-fields .form-control { min-height: 32px; }
+.pmv-super-step, .pmv-super-save { color: var(--pmv-muted); font-size: 13px; }
+.pmv-super .pmv-super-primary { min-height: 48px; padding: 12px 18px; font-size: 16px; white-space: normal; }
+.pmv-super-summary { display: grid; gap: 6px; padding: 16px; border-radius: 8px; background: var(--pmv-panel-2); }
+.pmv-super-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 25vw; }
+.pmv-view-mode { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.pmv-view-mode select { width: auto; }
+.pmv-super-preview { min-height: 220px; height: min(48vh, 460px); display: flex; }
+.pmv-super-preview .pmv-preview { min-width: 0; flex: 1; }
+.pmv-super-seek { flex: 1; min-width: 40px; accent-color: var(--pmv-accent); }
+.pmv-super-error { margin-top: 16px; color: var(--pmv-bad); }
+@media (max-width: 600px) {
+  .pmv-super-main { padding: 14px 10px; }
+  .pmv-super-card, .pmv-super-error { padding: 18px; }
+  .pmv-super-card h2 { font-size: 21px; }
+  .pmv-super-toolbar { flex-wrap: wrap; }
+  .pmv-super-name { max-width: 45vw; }
+  .pmv-super .pmv-transport { flex-wrap: wrap; }
+  .pmv-super-preview { min-height: 180px; height: 35vh; }
+}
 .pmv-root {
   --pmv-bg: #182026;
   --pmv-panel: #1f2a32;

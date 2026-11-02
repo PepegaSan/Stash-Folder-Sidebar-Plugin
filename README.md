@@ -604,6 +604,8 @@ Use **View** at the top to switch between **Super simple**, **Simple** and **Adv
 
 **Clear timeline** above the timeline (or under **I want to adjust something** in the guided preview) removes the video clips, split screens and timeline markers. Your song, project scenes and **My clips** stay. Undo restores the cut in one step.
 
+In step 2, two optional questions let you set tags, performers, a limit on candidate videos and clip variance, then choose full screen, a two-way split or both and the transitions between full-screen clips. Leave both closed for the original defaults: up to 40 library videos (or all project scenes), 100% clip variance, full screen and hard cuts.
+
 Deterministic PMV (music video) editor inside Stash: pick scenes and markers, arrange them on a beat grid, fine-tune every
 clip and render frame-exactly with FFmpeg (or record the preview in the browser), or hand the cut to DaVinci Resolve & Co.
 as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the timeline by criteria; everything stays editable.

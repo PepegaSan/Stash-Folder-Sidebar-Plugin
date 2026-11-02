@@ -8,7 +8,7 @@ import { uid } from "../model/ids";
 import { type PmvProject, createProject, migrateProject } from "../model/project";
 import { type ProjectSummary, type RecordingResult, deleteProject, ffmpegScript, listProjects, saveRecording, startRender, stopJob, uploadFile } from "../stash/backend";
 import { useScenes } from "../stash/sceneCache";
-import { rememberAdvanced } from "../state/prefs";
+import { ViewModeSwitch } from "./ViewModeSwitch";
 import { openProject, useEditor } from "../state/store";
 import { formatTime } from "../timeline/time";
 import type { EditMode } from "../timeline/ops";
@@ -61,6 +61,7 @@ export function Toolbar() {
   return (
     <div className="pmv-toolbar">
       <strong className="pmv-brand">PMV Creator</strong>
+      <ViewModeSwitch />
       <input
         className="form-control form-control-sm pmv-name"
         value={p.name}
@@ -215,17 +216,6 @@ export function Toolbar() {
         {t("Render")}
       </button>
       <RenderTray />
-      <label className="pmv-check pmv-adv" title={t("Show all settings and tools")}>
-        <input
-          type="checkbox"
-          checked={ui.advanced}
-          onChange={(e) => {
-            rememberAdvanced(e.target.checked);
-            dispatch({ type: "ui", patch: { advanced: e.target.checked } });
-          }}
-        />{" "}
-        {t("Advanced")}
-      </label>
       <button className="btn btn-sm btn-secondary" title={t("Help: controls and shortcuts")} onClick={() => setHelpOpen(true)}>
         ?
       </button>
@@ -465,7 +455,7 @@ export function AfterRender({ label, onLabel, notify, onNotify }: { label: boole
   );
 }
 
-function RenderDialog({ onClose }: { onClose: () => void }) {
+export function RenderDialog({ onClose, guided = false }: { onClose: () => void; guided?: boolean }) {
   const { state } = useEditor();
   // with effects the music's loudness is needed first (drops) – usually it is decoded already
   const [built, setBuilt] = useState(() => (anyEffect(state.present.effects) ? null : buildRenderPlan(state.present)));
@@ -491,10 +481,10 @@ function RenderDialog({ onClose }: { onClose: () => void }) {
       </div>
     );
   }
-  return <RenderDialogBody plan={built.plan} warnings={built.warnings} onClose={onClose} />;
+  return <RenderDialogBody plan={built.plan} warnings={built.warnings} onClose={onClose} guided={guided} />;
 }
 
-function RenderDialogBody({ plan, warnings, onClose }: { plan: RenderPlan; warnings: string[]; onClose: () => void }) {
+function RenderDialogBody({ plan, warnings, onClose, guided = false }: { plan: RenderPlan; warnings: string[]; onClose: () => void; guided?: boolean }) {
   const { state, backend, ffmpegAvailable } = useEditor();
   const [label, setLabel] = useState(labelingOn);
   const [notify, setNotify] = useState(notifyOn);
@@ -510,9 +500,15 @@ function RenderDialogBody({ plan, warnings, onClose }: { plan: RenderPlan; warni
   const r = useRenders().find((x) => x.renderId === renderId) ?? null;
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
+  const [details, setDetails] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const startLock = useRef(false);
   const fps = plan.output.fps;
 
   const start = async () => {
+    if (startLock.current) return;
+    startLock.current = true;
+    setStarting(true);
     setError(null);
     primeSignal();
     try {
@@ -522,6 +518,9 @@ function RenderDialogBody({ plan, warnings, onClose }: { plan: RenderPlan; warni
       setRenderId(job.renderId);
     } catch (e) {
       setError(String(e));
+    } finally {
+      startLock.current = false;
+      setStarting(false);
     }
   };
   const active = !!r && isActive(r);
@@ -531,20 +530,21 @@ function RenderDialogBody({ plan, warnings, onClose }: { plan: RenderPlan; warni
   const yes = (b: boolean) => (b ? t("yes") : t("no"));
 
   return (
-    <div className="pmv-modal" onClick={() => !recording && onClose()}>
+    <div className="pmv-modal" onClick={() => !recording && !starting && onClose()}>
       <div className="pmv-modal-body" onClick={(e) => e.stopPropagation()}>
         <div className="pmv-section-head is-static">
           {t("Render")} <span className="pmv-spacer" />
-          <button className="btn btn-sm btn-link" onClick={onClose}>
+          <button className="btn btn-sm btn-link" disabled={starting || recording} onClick={onClose}>
             ✕
           </button>
         </div>
-        <div className="pmv-li-meta">
+        {guided && <p>{t("The output settings are ready. Start rendering, then you can close this window.")}</p>}
+        {(!guided || details) && <div className="pmv-li-meta">
           {plan.output.width}×{plan.output.height} @ {fps} fps · {plan.output.videoCodec} CRF {plan.output.crf} · {(plan.totalFrames / fps).toFixed(2)} s ({tn(plan.totalFrames, "{n} frames", "1 frame")})
           <br />
           {t("{n} segments ({clips} clips, {xfades} transitions, {black} black)", { n: plan.pieces.length, clips: counts.clip ?? 0, xfades: counts.xfade ?? 0, black: counts.black ?? 0 })}
           {counts.layout ? ` · ${tn(counts.layout, "{n} of them split screen", "1 of them split screen")}` : ""} · {t("music")}: {yes(!!plan.audio)} · {t("clip audio")}: {yes(plan.clipAudio)}
-        </div>
+        </div>}
         {warnings.length > 0 && (
           <ul className="pmv-warnings">
             {warnings.map((w) => (
@@ -552,18 +552,18 @@ function RenderDialogBody({ plan, warnings, onClose }: { plan: RenderPlan; warni
             ))}
           </ul>
         )}
-        <div className="pmv-row pmv-wrap">
+        {(!guided || details) ? <div className="pmv-row pmv-wrap">
           <span className="pmv-gen-label">{t("Render on")}</span>
-          <RenderTargetSeg value={target} disabled={active || recording} onChange={setTarget} />
-        </div>
+          <RenderTargetSeg value={target} disabled={active || recording || starting} onChange={setTarget} />
+        </div> : <p className="pmv-li-meta">{t("Render on")}: {pc ? t("My PC") : "Stash"}</p>}
         {pc && backend === "online" && (
           <PcRender
-            disabled={active || recording}
+            disabled={active || recording || starting}
             needs={helperFor({ split: plan.pieces.some((x) => x.kind === "layout"), looks: !!plan.grade || plan.pieces.some((x) => x.fx) })}
             onHelper={(id, name) => setHelper(id && name ? { id, name } : null)}
           />
         )}
-        <AfterRender label={label} onLabel={setLabel} notify={notify} onNotify={setNotify} />
+        {(!guided || details) && <AfterRender label={label} onLabel={setLabel} notify={notify} onNotify={setNotify} />}
         {backend !== "online" && <div className="pmv-error">{t("Backend unreachable. Export the render plan and render with the CLI (see README).")}</div>}
         {!pc && backend === "online" && !ffmpegAvailable && <div className="pmv-error">{t("FFmpeg was not found on the server – set its path in the plugin settings.")}</div>}
         {r && active && (
@@ -579,7 +579,7 @@ function RenderDialogBody({ plan, warnings, onClose }: { plan: RenderPlan; warni
           <div className="pmv-success">
             {result.helper ? t("Done on {pc}:", { pc: r?.pc ?? result.helper }) : t("Done:")} <code>{result.file}</code>
             <br />
-            {t("{pieces} segments, {cached} from the cache, {seconds} s", { pieces: result.pieces ?? 0, cached: result.cached ?? 0, seconds: result.seconds?.toFixed(1) ?? "?" })}
+            {guided ? t("Finished. You can stop here.") : t("{pieces} segments, {cached} from the cache, {seconds} s", { pieces: result.pieces ?? 0, cached: result.cached ?? 0, seconds: result.seconds?.toFixed(1) ?? "?" })}
           </div>
         )}
         {result?.status === "done" && result.warning && (
@@ -592,18 +592,19 @@ function RenderDialogBody({ plan, warnings, onClose }: { plan: RenderPlan; warni
         {r?.state === "cancelled" && <div className="pmv-error">{t("Cancelled.")}</div>}
         {error && <div className="pmv-error">{error}</div>}
         <div className="pmv-row">
-          {!active ? (
-            <button className="btn btn-sm btn-primary" disabled={backend !== "online" || !plan.pieces.length || (pc && !helper) || recording} onClick={() => void start()}>
-              {pc && helper ? t("Render on {pc}", { pc: helper.name }) : r ? t("Render again") : t("Start render")}
+          {guided && result?.status === "done" && !details ? <button className="btn btn-sm btn-primary" onClick={onClose}>{t("Done")}</button> : !active ? (
+            <button className="btn btn-sm btn-primary" disabled={starting || backend !== "online" || !plan.pieces.length || (pc && !helper) || (!pc && !ffmpegAvailable) || recording} onClick={() => void start()}>
+              {starting ? t("Starting…") : pc && helper ? t("Render on {pc}", { pc: helper.name }) : r ? t("Render again") : t("Start render")}
             </button>
           ) : (
             <button className="btn btn-sm btn-danger" onClick={() => r && void stopJob(r.jobId)}>
               {t("Cancel")}
             </button>
           )}
-          <span className="pmv-li-meta">{t("Runs as a Stash task (also visible under Settings → Tasks).")}</span>
+          {!guided && <span className="pmv-li-meta">{t("Runs as a Stash task (also visible under Settings → Tasks).")}</span>}
         </div>
-        <QuickRecord disabled={active || !plan.pieces.length} onBusy={setRecording} />
+        {guided && <button className="btn btn-sm btn-link" aria-expanded={details} onClick={() => setDetails(!details)}>{details ? t("Show fewer options") : t("Adjust output")}</button>}
+        {(!guided || details) && <QuickRecord disabled={active || starting || !plan.pieces.length} onBusy={setRecording} />}
       </div>
     </div>
   );

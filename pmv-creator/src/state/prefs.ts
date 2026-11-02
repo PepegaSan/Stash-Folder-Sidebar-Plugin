@@ -1,6 +1,17 @@
 /** Per-browser preferences that are not part of a project. */
 const KEY_ADVANCED = "pmv-creator:advanced";
 
+const KEY_SUPER_SIMPLE = "pmv-creator:super-simple";
+
+/** Extra guided view; existing simple/advanced preferences keep their meaning. */
+export function readSuperSimple(): boolean {
+  try { return localStorage.getItem(KEY_SUPER_SIMPLE) === "1"; } catch { return false; }
+}
+
+export function rememberSuperSimple(on: boolean): void {
+  try { localStorage.setItem(KEY_SUPER_SIMPLE, on ? "1" : "0"); } catch { /* private mode */ }
+}
+
 /** Simple mode is the default: the editor shows what a PMV needs, the rest sits behind "Advanced". */
 export function readAdvanced(): boolean {
   try {

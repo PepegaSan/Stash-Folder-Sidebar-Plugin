@@ -18,7 +18,7 @@ import { PREVIEW_SLOTS, PreviewEngine } from "./engine";
 /** The canvas is drawn at screen resolution, at most at the PMV's own. */
 const MAX_DPR = 2;
 
-export function PreviewPlayer() {
+export function PreviewPlayer({ simple = false }: { simple?: boolean }) {
   const { state, transport } = useEditor();
   const project = state.present;
   const playing = useTransportPlaying(transport);
@@ -114,26 +114,26 @@ export function PreviewPlayer() {
         )}
       </div>
       <div className="pmv-transport">
-        <button className="btn btn-sm btn-secondary" title={t("Previous cut")} onClick={() => jump(-1)}>
+        {!simple && <><button className="btn btn-sm btn-secondary" title={t("Previous cut")} onClick={() => jump(-1)}>
           ⏮
         </button>
         <button className="btn btn-sm btn-secondary" title={t("1 frame back (←)")} onClick={() => step(-1)}>
           ‹
-        </button>
+        </button></>}
         <button className="btn btn-sm btn-primary pmv-play" title={t("Play/pause (Space)")} onClick={() => transport.toggle()}>
           {playing ? "❚❚" : "▶"}
         </button>
-        <button className="btn btn-sm btn-secondary" title={t("1 frame forward (→)")} onClick={() => step(1)}>
+        {!simple && <><button className="btn btn-sm btn-secondary" title={t("1 frame forward (→)")} onClick={() => step(1)}>
           ›
-        </button>
-        <button className="btn btn-sm btn-secondary" title={t("Next cut")} onClick={() => jump(1)}>
+        </button></>}
+        {simple && <input className="pmv-super-seek" type="range" min={0} max={Math.max(0, projectDuration(project))} step={1 / fps} value={Math.min(time, projectDuration(project))} aria-label={t("Preview position")} onChange={(e) => transport.seek(+e.target.value)} />}
+        {!simple && <button className="btn btn-sm btn-secondary" title={t("Next cut")} onClick={() => jump(1)}>
           ⏭
-        </button>
+        </button>}
         <span className="pmv-mono">
           {formatTime(time)} / {formatTime(projectDuration(project))}
         </span>
-        <span className="pmv-mono pmv-dim">{formatBarBeat(time, project.beatGrid)}</span>
-        <LocalMediaBadge />
+        {!simple && <><span className="pmv-mono pmv-dim">{formatBarBeat(time, project.beatGrid)}</span><LocalMediaBadge /></>}
       </div>
       {audioLimited && <div className="pmv-li-meta" role="status">{t("Audio amplification is unavailable: preview clip audio is limited to 100 %. The render keeps the full level.")}</div>}
     </div>

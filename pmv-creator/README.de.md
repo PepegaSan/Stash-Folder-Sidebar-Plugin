@@ -6,6 +6,52 @@ Deterministischer PMV-Editor direkt in [Stash](https://github.com/stashapp/stash
 
 Architektur, Datenmodell und Render-Pipeline: **[docs/KONZEPT.md](docs/KONZEPT.md)** · Projektformat: [schema/pmv-project.schema.json](schema/pmv-project.schema.json) · Erstnutzer-Test in echtem Stash 0.31: [docs/TESTBERICHT.md](docs/TESTBERICHT.md) · Änderungen: [CHANGELOG.md](CHANGELOG.md)
 
+## Super einfach
+
+Oben unter **Ansicht** kannst du jederzeit zwischen **Super einfach**, **Einfach**
+und **Erweitert** wechseln. **Super einfach** führt dich durch drei Schritte:
+**Lied wählen → PMV-Vorschlag erstellen → ansehen und fertigstellen**. Sichtbar ist
+jeweils nur der aktuelle Schritt. Ist schon ein Lied oder ein Schnitt vorhanden,
+siehst du beim Öffnen in Schritt 1 **Neues PMV starten** und **Vorhandenes Projekt
+fortsetzen**. Beim Fortsetzen kommst du mit einem Lied zur Materialauswahl,
+mit einem fertigen Schnitt zur Vorschau. Ein neues PMV lässt das alte gespeichert.
+
+**Timeline leeren** findest du direkt über der Timeline, in **Super einfach** bei
+der Vorschau unter **Ich möchte etwas anpassen**. Es entfernt Videoclips,
+Splitscreens und Timeline-Marken. Lied, Projektszenen und „Meine Clips“ bleiben.
+Mit **↶** (Strg+Z) oder **Vorherigen Schnitt wiederherstellen** holst du den Schnitt zurück.
+
+Der Vorschlag verwendet vorhandene Projektszenen oder sonst die Bibliothek,
+ganze Videos als Material, die ganze Liedlänge, automatische Schnitte und dezenten
+Zoom. In Schritt 2 kannst du direkt **Meinen PMV-Vorschlag erstellen** wählen
+oder eine von zwei Fragen öffnen:
+
+- **Welche Videos kommen infrage?** Tags und Performer durchsuchen deine Bibliothek.
+  Du kannst den Quellenpool auf 1–500 Videos begrenzen. Ohne Eingabe bleiben es bis zu
+  40 Bibliotheksvideos bzw. alle Projektszenen. Die Clip-Varianz (Standard: 100 %)
+  steuert, wie stark der Generator bisher unbenutzte Stellen bevorzugt.
+- **Wie soll der Schnitt aussehen?** Wähle Vollbild, zwei Videos nebeneinander oder
+  beides im Wechsel. Zwischen Vollbild-Clips sind harte Schnitte (Standard),
+  Überblenden, Schwarzblenden oder wechselnde Übergänge möglich. Splitscreens
+  verwenden harte Schnitte.
+
+Die Antworten bleiben pro Projekt in diesem Browser erhalten. Die Anzahl der
+Schnitte ergibt sich weiterhin aus dem Lied, unabhängig von der Höchstzahl an Quellen.
+
+**Speichern & Pause** sichert sofort und stoppt die Vorschau. Ein laufender
+Vorschlag wird angehalten; sein später eintreffendes Ergebnis ersetzt das Projekt
+nicht. Beim Wiederöffnen geht es mit dem gespeicherten Projekt weiter. Ist der
+Server nicht erreichbar, wird eine erfolgreiche Browser-Sicherung als solche
+angezeigt; kann auch sie nicht gespeichert werden, bleibt das Projekt offen und
+lässt sich herunterladen. Während Musik hochgeladen bzw. vorbereitet wird, wartet
+der Pause-Knopf auf deren Abschluss. Die Materialauswahl wird pro Projekt in diesem
+Browser gemerkt.
+
+Die Ausgabe zeigt zunächst den vorbereiteten Renderweg und den Startknopf.
+**Ausgabe anpassen** öffnet die bisherigen Optionen. Ein bereits gewählter PC-Helfer
+bleibt erhalten. **Einfach** und **Erweitert** funktionieren wie bisher; die zuletzt
+gewählte Ansicht wird in diesem Browser gemerkt.
+
 ## Installation
 
 Voraussetzungen: Stash mit Plugin-UI-API (`PluginApi.register.route`, `runPluginOperation`; aktuelle Versionen, getestet mit 0.31). Auf dem Stash-Server Python ≥ 3.8 (*Einstellungen → System → Python-Pfad*) und FFmpeg ≥ 4.4 – das von Stash mitgelieferte FFmpeg wird automatisch gefunden. Marker-Endzeiten nutzt das Plugin, wenn der Server `end_seconds` kennt, sonst eine einstellbare Standardlänge.

@@ -25,6 +25,7 @@ import { useAudioAnalysis, useListen, useSprites, useTransportTime } from "../ho
 import { LayoutIcon, layoutLabel } from "../LayoutFields";
 import { reviewCut } from "../review";
 import { Waveform } from "./Waveform";
+import { ClearTimelineButton } from "./ClearTimelineButton";
 
 const HEAD_W = 120;
 const RULER_H = 30;
@@ -347,6 +348,7 @@ export function Timeline() {
         <span className="pmv-spacer" />
         <SourceToggle />
         <ReplaceAllButton />
+        <ClearTimelineButton />
         <ClipActions />
         <span className="pmv-spacer" />
         {ui.advanced && (

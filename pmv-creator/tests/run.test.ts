@@ -48,6 +48,17 @@ const { collectPools, runGenerator } = await import("../src/ui/generator/run");
 const used = async (o: Partial<ClipOptions>) => (await collectPools({ ...defaultSettings("trk").clips, ...o }, project(), 1)).sources.map((s) => s.sceneId);
 
 describe("generator material", () => {
+  it("caps the project pool only when requested and backfills excluded scenes", async () => {
+    const cap = { source: "project" as const, tags: [PMV], limit: 1 };
+    expect(await used(cap)).toEqual(["1", "2"]);
+    fetchedIds.length = 0;
+    const sampled = await used({ ...cap, limitProjectScenes: true });
+    expect(sampled).toHaveLength(1);
+    expect(["1", "2"]).toContain(sampled[0]);
+    expect(fetchedIds[0]).toHaveLength(1);
+    expect(await used({ ...cap, limitProjectScenes: true })).toEqual(sampled);
+    expect(await used({ source: "project", limit: 1, limitProjectScenes: true })).toEqual(["1"]);
+  });
   beforeEach(() => { filters.length = 0; fetchedIds.length = 0; markerQueries = 0; });
 
   it.each(["filter", "project", "watched", "saved"] as const)("%s: legacy marker flags cannot shrink a long video to its five-second marker", async (source) => {

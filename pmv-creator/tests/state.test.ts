@@ -4,6 +4,24 @@ import { editorReducer, initialEditorState } from "../src/state/reducer";
 import { clip, project } from "./helpers";
 
 describe("editorReducer", () => {
+  it("clears the cut in one undo step, preserves project material and respects locked tracks", () => {
+    const p = project([clip("1", 0, 2)]);
+    p.markers = [{ id: "m", time: 1, label: "Beat" }];
+    p.layouts = [{ id: "l", start: 0, duration: 2, kind: "duo", dir: "cols" }];
+    const s = initialEditorState(p);
+    const after = editorReducer(s, { type: "timeline/clear" });
+    expect(after.present.tracks.every((tr) => tr.clips.length === 0)).toBe(true);
+    expect(after.present.layouts).toEqual([]);
+    expect(after.present.markers).toEqual([]);
+    expect(after.present.audio).toBe(p.audio);
+    expect(after.present.bin).toBe(p.bin);
+    expect(after.present.sources).toBe(p.sources);
+    expect(editorReducer(after, { type: "timeline/clear" })).toBe(after);
+    expect(editorReducer(after, { type: "undo" }).present).toBe(p);
+    const locked = initialEditorState({ ...p, tracks: p.tracks.map((tr) => ({ ...tr, locked: true })) });
+    expect(editorReducer(locked, { type: "timeline/clear" })).toBe(locked);
+  });
+
   it("records undoable edits and ignores no-ops", () => {
     const a = clip("1", 0, 2);
     const p = project([a]);

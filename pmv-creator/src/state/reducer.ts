@@ -9,7 +9,7 @@ import { type GenerationResult, type GeneratorSettings, applyGeneration } from "
 import type { ClipSource } from "../generator/material";
 import type { StashRef } from "../stash/types";
 import { type MaterialChange, applyMaterial } from "../generator/reroll";
-import { readAdvanced, readWaveforms } from "./prefs";
+import { readAdvanced, readSuperSimple, readWaveforms } from "./prefs";
 import type { EffectSettings } from "../model/effects";
 import type { LayoutRange } from "../model/layouts";
 import type { AudioTrack, BeatGrid, Clip, CutTemplate, Exclusion, OutputSettings, PmvProject, Snippet, SourceMedia, TimelineMarker, Track, Transition } from "../model/project";
@@ -65,6 +65,7 @@ export type EditAction =
   | { type: "clip/split"; clipId: string; time: number }
   | { type: "clip/delete"; clipId: string; ripple: boolean }
   | { type: "track/add" }
+  | { type: "timeline/clear" }
   | { type: "track/remove"; trackId: string }
   | { type: "track/update"; trackId: string; patch: Partial<Pick<Track, "name" | "muted" | "locked">> }
   | { type: "sources/add"; sources: SourceMedia[] }
@@ -93,8 +94,17 @@ export type EditAction =
 const addSources = (p: PmvProject, sources: SourceMedia[]): PmvProject =>
   sources.length ? { ...p, sources: { ...p.sources, ...Object.fromEntries(sources.map((s) => [s.sceneId, s])) } } : p;
 
+export function canClearTimeline(p: PmvProject): boolean {
+  return !p.tracks.some((tr) => tr.locked && tr.clips.length) &&
+    (p.markers.length > 0 || p.layouts.length > 0 || p.tracks.some((tr) => tr.clips.length > 0));
+}
+
 export function applyEdit(p: PmvProject, a: EditAction): PmvProject {
   switch (a.type) {
+    case "timeline/clear":
+      return canClearTimeline(p)
+        ? { ...p, tracks: p.tracks.map((tr) => tr.clips.length ? { ...tr, clips: [] } : tr), layouts: [], markers: [] }
+        : p;
     case "clip/insert":
       return insertClip(a.sources ? addSources(p, a.sources) : p, a.trackId, a.clip, a.mode);
     case "clip/move":
@@ -278,6 +288,8 @@ export interface UiState {
   generator: { source?: ClipSource } | null;
   /** All settings and tools visible (off = simple mode). */
   advanced: boolean;
+  /** One guided task at a time instead of the editing workspace. */
+  superSimple: boolean;
   /** 〰: the clips' sound drawn over the clips on the timeline. */
   waveforms: boolean;
   /** Open "several PMVs at once" dialog with the generator settings it starts from (null = the last used ones). */
@@ -324,12 +336,13 @@ export const DEFAULT_UI: UiState = {
   saveState: "saved",
   generator: null,
   advanced: readAdvanced(),
+  superSimple: readSuperSimple(),
   waveforms: readWaveforms(),
   batch: null,
 };
 
 export function initialEditorState(project: PmvProject, ui: Partial<UiState> = {}): EditorState {
-  return { past: [], present: project, future: [], ui: { ...DEFAULT_UI, ...ui }, lastEdit: null };
+  return { past: [], present: project, future: [], ui: { ...DEFAULT_UI, advanced: readAdvanced(), superSimple: readSuperSimple(), ...ui }, lastEdit: null };
 }
 
 function fixSelection(ui: UiState, p: PmvProject): UiState {
@@ -354,7 +367,7 @@ export function editorReducer(state: EditorState, action: Action, now: number = 
       return { ...state, past: [...state.past, state.present], present, future, lastEdit: null, ui: fixSelection(state.ui, present) };
     }
     case "project/load":
-      return initialEditorState(action.project, { ...state.ui, selectedClipId: null, selectedLayoutId: null, selectedSnippetId: null, activeSceneId: null, swapFrom: null, clipTask: null, sceneOut: null, saveState: "saved" });
+      return initialEditorState(action.project, { ...state.ui, selectedClipId: null, selectedLayoutId: null, selectedSnippetId: null, activeSceneId: null, swapFrom: null, clipTask: null, clipPreset: null, sceneOut: null, saveState: "saved" });
     case "ui": {
       const ui = { ...state.ui, ...action.patch };
       // a clip or a split screen is selected, never both (Del takes away what is selected)
