@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.22 (2026-11-02)
+
+- Super simple now lets you match all or any selected tags and all or any selected performers independently. Each rule is remembered per project and defaults to All.
+
 ## 0.9.21 (2026-11-02)
 
 - Step 2 of Super simple now offers two optional questions: choose candidate videos

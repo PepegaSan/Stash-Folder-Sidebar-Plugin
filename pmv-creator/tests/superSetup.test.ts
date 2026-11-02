@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createProject } from "../src/model/project";
 import { FULL_ONLY, withLayouts } from "../src/generator/layouts";
+import { buildSceneFilter } from "../src/generator/material";
 import { applyMood, defaultSettings } from "../src/generator/generate";
 import { readSuperSimple, rememberSuperSimple } from "../src/state/prefs";
 import { emptySuperDraft, loadSuperDraft, saveSuperDraft, superSettings } from "../src/ui/superSetup";
@@ -65,6 +66,19 @@ describe("super simple setup", () => {
     localStorage.setItem("pmv-creator:super-draft:a", JSON.stringify({ source: "library", tags, performers: [] }));
     expect(loadSuperDraft("a")).toEqual({ ...emptySuperDraft(), source: "library", tags });
   });
+
+  it.each([["all", "any"], ["any", "all"], ["all", "all"], ["any", "any"]] as const)(
+    "restores tag matching %s and performer matching %s independently in the Stash query", (tagMode, perfMode) => {
+      const tags = [{ id: "1", name: "A" }, { id: "2", name: "B" }];
+      const performers = [{ id: "3", name: "C" }, { id: "4", name: "D" }];
+      saveSuperDraft("filters", { ...emptySuperDraft(), tags, tagMode, performers, perfMode });
+      const { clips } = superSettings(project(), loadSuperDraft("filters"));
+      expect(clips.source).toBe("filter");
+      expect(buildSceneFilter(clips, null)).toMatchObject({
+        tags: { value: ["1", "2"], modifier: tagMode === "all" ? "INCLUDES_ALL" : "INCLUDES" },
+        performers: { value: ["3", "4"], modifier: perfMode === "all" ? "INCLUDES_ALL" : "INCLUDES" },
+      });
+    });
 
   it("passes only the chosen sources, variance, layouts and transitions to the generator", () => {
     const draft = { ...emptySuperDraft(), limit: 7, variance: 35, layout: "both" as const, transition: "fadeblack" as const };

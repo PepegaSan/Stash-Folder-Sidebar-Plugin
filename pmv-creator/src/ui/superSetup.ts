@@ -1,5 +1,6 @@
 import { applyMood, defaultSettings, fieldCapacity, type GeneratorSettings } from "../generator/generate";
 import { withLayouts } from "../generator/layouts";
+import type { AllAny } from "../generator/material";
 import type { PmvProject } from "../model/project";
 import type { StashRef } from "../stash/types";
 import { t } from "../i18n";
@@ -7,14 +8,16 @@ import { t } from "../i18n";
 export interface SuperDraft {
   source: "auto" | "library";
   tags: StashRef[];
+  tagMode: AllAny;
   performers: StashRef[];
+  perfMode: AllAny;
   limit: number | null;
   variance: number;
   layout: "full" | "duo" | "both";
   transition: "none" | "fade" | "fadeblack" | "mix";
 }
 export const LIBRARY_LIMIT = 40;
-export const emptySuperDraft = (): SuperDraft => ({ source: "auto", tags: [], performers: [], limit: null, variance: 100, layout: "full", transition: "none" });
+export const emptySuperDraft = (): SuperDraft => ({ source: "auto", tags: [], tagMode: "all", performers: [], perfMode: "all", limit: null, variance: 100, layout: "full", transition: "none" });
 const refs = (value: unknown): StashRef[] => Array.isArray(value) ? value.filter((r) => r && typeof r.id === "string" && typeof r.name === "string").slice(0, 100) : [];
 
 export function loadSuperDraft(id: string, preset?: { tags: StashRef[]; performers: StashRef[] } | null): SuperDraft {
@@ -22,6 +25,7 @@ export function loadSuperDraft(id: string, preset?: { tags: StashRef[]; performe
   try {
     const raw = JSON.parse(localStorage.getItem("pmv-creator:super-draft:" + id) ?? "null") as Partial<SuperDraft> | null;
     if (raw) d = { source: raw.source === "library" ? "library" : "auto", tags: refs(raw.tags), performers: refs(raw.performers),
+      tagMode: raw.tagMode === "any" ? "any" : "all", perfMode: raw.perfMode === "any" ? "any" : "all",
       limit: typeof raw.limit === "number" && Number.isFinite(raw.limit) ? Math.max(1, Math.min(500, Math.round(raw.limit))) : null,
       variance: typeof raw.variance === "number" && Number.isFinite(raw.variance) ? Math.max(0, Math.min(100, Math.round(raw.variance / 5) * 5)) : d.variance,
       layout: raw.layout === "duo" || raw.layout === "both" ? raw.layout : "full",
@@ -46,7 +50,8 @@ export function superSettings(project: PmvProject, draft: SuperDraft): Generator
   const layout = guidedLayout(project, draft);
   const transition = layout === "duo" ? "none" : draft.transition;
   return { ...s,
-    clips: { ...s.clips, source: fromProject ? "project" : "filter", tags: draft.tags, performers: draft.performers, limit: draft.limit ?? LIBRARY_LIMIT,
+    clips: { ...s.clips, source: fromProject ? "project" : "filter", tags: draft.tags, tagMode: draft.tagMode,
+      performers: draft.performers, perfMode: draft.perfMode, limit: draft.limit ?? LIBRARY_LIMIT,
       ...(fromProject && draft.limit !== null ? { limitProjectScenes: true } : {}) },
     select: { ...s.select, variance: draft.variance },
     style: { ...s.style, layouts: withLayouts(layout === "both" ? ["full", "duo"] : [layout]),

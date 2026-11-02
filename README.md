@@ -606,6 +606,8 @@ Use **View** at the top to switch between **Super simple**, **Simple** and **Adv
 
 In step 2, two optional questions let you set tags, performers, a limit on candidate videos and clip variance, then choose full screen, a two-way split or both and the transitions between full-screen clips. Leave both closed for the original defaults: up to 40 library videos (or all project scenes), 100% clip variance, full screen and hard cuts.
 
+Under **Which videos should be considered?**, tags and performers each have their own **All / Any** choice. **Any** requires at least one selected value in that group. If you use both groups, the video must satisfy both. The default is **All** for each.
+
 Deterministic PMV (music video) editor inside Stash: pick scenes and markers, arrange them on a beat grid, fine-tune every
 clip and render frame-exactly with FFmpeg (or record the preview in the browser), or hand the cut to DaVinci Resolve & Co.
 as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the timeline by criteria; everything stays editable.

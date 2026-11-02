@@ -1,10 +1,22 @@
 import React from "react";
 import { fieldCapacity } from "../generator/generate";
+import type { AllAny } from "../generator/material";
 import { t } from "../i18n";
 import type { PmvProject } from "../model/project";
 import { findPerformers, findTags } from "../stash/queries";
 import { RefPicker } from "./common";
 import { guidedLayout, LIBRARY_LIMIT, usesProjectScenes, type SuperDraft } from "./superSetup";
+
+function MatchRule({ label, value, change }: { label: string; value: AllAny; change: (v: AllAny) => void }) {
+  return <div className="pmv-row pmv-wrap" role="group" aria-label={label}>
+    <span>{label}</span>
+    <div className="pmv-seg">
+      {(["all", "any"] as const).map((mode) =>
+        <button key={mode} type="button" aria-pressed={value === mode} className={value === mode ? "is-on" : ""}
+          onClick={() => change(mode)}>{mode === "all" ? t("All") : t("Any")}</button>)}
+    </div>
+  </div>;
+}
 
 export function SuperQuestions({ project, draft, change }: { project: PmvProject; draft: SuperDraft; change: (d: SuperDraft) => void }) {
   const patch = (values: Partial<SuperDraft>) => change({ ...draft, ...values });
@@ -24,9 +36,11 @@ export function SuperQuestions({ project, draft, change }: { project: PmvProject
           <option value="auto">{t("Project scenes")}</option><option value="library">{t("Videos from your library")}</option>
         </select></label>}
         <div><p>{t("Which tags or performers should match?")}</p>
+          <MatchRule label={t("Tags")} value={draft.tagMode} change={(tagMode) => patch({ tagMode })} />
           <RefPicker placeholder={t("Tags (optional)")} value={draft.tags} search={findTags} onChange={(tags) => patch({ source: "library", tags })} />
+          <MatchRule label={t("Performers")} value={draft.perfMode} change={(perfMode) => patch({ perfMode })} />
           <RefPicker placeholder={t("Performers (optional)")} value={draft.performers} search={findPerformers} onChange={(performers) => patch({ source: "library", performers })} />
-          <small>{t("These filters search your Stash library.")}</small>
+          <small>{t("Any: one match in that group is enough. If you choose tags and performers, both groups must match.")}</small>
         </div>
         <label>{t("How many source videos at most?")}
           <input className="form-control form-control-sm" type="number" min="1" max="500" step="1" value={draft.limit ?? ""}

@@ -35,6 +35,10 @@ side by side, or a mix. Between full-screen clips you can use hard cuts (default
 crossfades, fades through black or mixed transitions; split screens use hard cuts.
 Answers are remembered per project in this browser. You can keep both questions closed.
 
+Tags and performers each have their own **All / Any** choice. **All** requires every
+selected value in that group; **Any** requires at least one. If you filter by both
+tags and performers, both groups must match. Both default to **All**.
+
 **Save & pause** checkpoints immediately and pauses playback. A pending suggestion
 is discarded when its result arrives after pausing; existing project work remains.
 Server failure falls back to a confirmed browser copy. If both fail, the project

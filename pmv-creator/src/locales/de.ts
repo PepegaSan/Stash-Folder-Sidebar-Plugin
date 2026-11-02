@@ -43,6 +43,8 @@ const de: Record<string, string> = {
   "Which videos should be considered?": "Welche Videos kommen infrage?",
   "Up to {n} videos · {v}% clip variance": "Bis zu {n} Videos · {v} % Clip-Varianz",
   "Which tags or performers should match?": "Welche Tags oder Performer sollen vorkommen?",
+  "Any": "Beliebig",
+  "Any: one match in that group is enough. If you choose tags and performers, both groups must match.": "Beliebig: Ein Treffer in der Gruppe reicht. Wählst du Tags und Performer, müssen beide Gruppen passen.",
   "These filters search your Stash library.": "Mit diesen Filtern suchst du in deiner Stash-Bibliothek.",
   "How many source videos at most?": "Wie viele Quellvideos höchstens?",
   "All project scenes ({n})": "Alle Projektszenen ({n})",

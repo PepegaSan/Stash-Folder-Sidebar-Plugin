@@ -27,6 +27,9 @@ Zoom. In Schritt 2 kannst du direkt **Meinen PMV-Vorschlag erstellen** wählen
 oder eine von zwei Fragen öffnen:
 
 - **Welche Videos kommen infrage?** Tags und Performer durchsuchen deine Bibliothek.
+  Für Tags und Performer wählst du getrennt **Alle** (Standard) oder **Beliebig**.
+  Bei **Beliebig** genügt ein Treffer aus der jeweiligen Auswahl. Wenn du beide
+  Gruppen verwendest, muss ein Video sowohl bei den Tags als auch bei den Performern passen.
   Du kannst den Quellenpool auf 1–500 Videos begrenzen. Ohne Eingabe bleiben es bis zu
   40 Bibliotheksvideos bzw. alle Projektszenen. Die Clip-Varianz (Standard: 100 %)
   steuert, wie stark der Generator bisher unbenutzte Stellen bevorzugt.
