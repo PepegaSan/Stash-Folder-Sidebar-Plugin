@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.23 (2026-11-05)
+
+- Generator: the hint under **Clip variance** now also appears when the start point is set to *continue where a video stopped*. With that setting, as with *beginning*, the slider has no effect; the hint switches back to random start points.
+- Checked the clip-variance slider across its whole range: reuse of source ranges falls steadily from 0 % to 100 %, and every step changes the cut. A new regression test keeps it that way.
+
 ## 0.9.22 (2026-11-02)
 
 - Super simple now lets you match all or any selected tags and all or any selected performers independently. Each rule is remembered per project and defaults to All.

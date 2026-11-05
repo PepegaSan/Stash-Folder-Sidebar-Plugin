@@ -614,7 +614,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.19-informational)
+![Version](https://img.shields.io/badge/version-0.9.23-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -660,6 +660,15 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.23
+
+- Generator: the hint under **Clip variance** also appears when the start point is *continue where a video stopped* – with that setting, as with *beginning*, the slider has no effect; the hint switches back to random start points
+- Checked the clip-variance slider across its whole range: reuse of source ranges falls steadily from 0 % to 100 % and every step changes the cut (new regression test)
+
+### PMV Creator 0.9.12 – 0.9.22
+
+- Clip-variance slider, clip audio up to 200 % in the preview, explicit *Whole videos / Markers only / Selected ranges* material, render-helper download and startup fixes, the optional **Super simple** view with save & pause, and all/any matching for tags and performers – details in [pmv-creator/CHANGELOG.md](pmv-creator/CHANGELOG.md)
 
 ### PMV Creator 0.9.11
 

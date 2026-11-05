@@ -75,6 +75,44 @@ describe("source variance within one PMV", () => {
     expect(run(100).map((c) => c.sourceIn)).toEqual(high.map((c) => c.sourceIn));
   });
 
+  it("changes the cut at every slider step with default settings and lowers reuse monotonically from 0 to 100 %", () => {
+    // typical material: 8 videos of 10 minutes, 120 cuts of 2 s, random start points, no motion maps
+    const cuts = slots(120, 2);
+    const pool = [Array.from({ length: 8 }, (_, i) => item(48, 552, `s${i}`))];
+    const overlapSec = (clips: Clip[]) => {
+      let sum = 0;
+      clips.forEach((c, i) => {
+        for (const prev of clips.slice(0, i)) {
+          if (prev.sceneId !== c.sceneId) continue;
+          const o = Math.min(c.sourceIn + c.duration * c.speed, prev.sourceIn + prev.duration * prev.speed) - Math.max(c.sourceIn, prev.sourceIn);
+          if (o > 1e-6) sum += o;
+        }
+      });
+      return sum;
+    };
+    const levels = [0, 5, 25, 50, 75, 95, 100];
+    const seeds = [1, 2, 3, 4, 5, 6, 7, 8];
+    const mean: number[] = [];
+    const keys = new Map<number, string[]>();
+    for (const variance of levels) {
+      let total = 0;
+      keys.set(variance, []);
+      for (const seed of seeds) {
+        const clips = fillSlots(project(), cuts, cuts.map(() => 0), pool, options({ seed, variance }), noMaps);
+        expect(clips).toHaveLength(120);
+        total += overlapSec(clips);
+        keys.get(variance)!.push(clips.map((c) => `${c.sceneId}@${c.sourceIn.toFixed(3)}`).join("|"));
+      }
+      mean.push(total / seeds.length);
+    }
+    // 100 %: no reuse at all; 0 %: some; in between it never grows with the slider
+    expect(mean[mean.length - 1]).toBe(0);
+    expect(mean[0]).toBeGreaterThan(1);
+    for (let i = 1; i < mean.length; i++) expect(mean[i]).toBeLessThanOrEqual(mean[i - 1] + 0.5);
+    // every step below 100 % gives another cut than 100 % for every seed – a change of the slider is never a no-op
+    for (const variance of levels.slice(0, -1)) keys.get(variance)!.forEach((k, i) => expect(k).not.toBe(keys.get(100)![i]));
+  });
+
   it("shares usage across split-screen fields and tag stages, even with duplicate candidates", () => {
     const cuts = slots(50, 5).flatMap((s) => [{ ...s, group: 0 }, { ...s, group: 1 }]);
     const groups = fillGroups(project(), cuts, cuts.map((_, i) => i % 2), [[item()], [item()]], options(), noMaps);

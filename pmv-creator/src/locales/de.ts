@@ -479,6 +479,7 @@ const de: Record<string, string> = {
   "Cutting to the beat… {percent}%": "Schnitt auf den Beat… {percent}%",
   "Low: allow repeats. High: prefer unused parts of each video throughout the PMV. 100%: reuse only when no unused part fits. Markers and selected ranges limit the available material.": "Niedrig: Wiederholungen erlauben. Hoch: im gesamten PMV bevorzugt unbenutzte Stellen jedes Videos wählen. 100%: erst wiederverwenden, wenn kein unbenutzter Ausschnitt mehr passt. Marker und ausgewählte Bereiche begrenzen das verfügbare Material.",
   "Start point is set to beginning. Use random start points for more variance.": "Startpunkt steht auf Anfang. Für mehr Varianz zufällige Startpunkte verwenden.",
+  "Start point is set to continue where a video stopped – the variance slider has no effect then. Use random start points for more variance.": "Startpunkt steht auf „weiter, wo ein Video aufgehört hat“ – der Varianz-Regler wirkt dann nicht. Für mehr Varianz zufällige Startpunkte verwenden.",
   "The same scene not within the last 24 clips, the same performer preferably not within the last 4": "Dieselbe Szene nicht innerhalb der letzten 24 Clips, derselbe Performer möglichst nicht innerhalb der letzten 4",
   "Follow the scenes' timeline": "Dem Verlauf der Szenen folgen",
   "The start of the song uses the beginnings of the scenes, the end their endings (±12 %)": "Der Anfang des Songs nutzt die Anfänge der Szenen, das Ende ihre Enden (±12 %)",

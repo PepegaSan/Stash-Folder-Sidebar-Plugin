@@ -338,8 +338,10 @@ export function GeneratorDialog() {
               {c.skipPercent > 0 && <button className="btn btn-sm btn-link" onClick={() => setClips({ skipPercent: 0 })}>{t("Use full duration")}</button>}
             </div>
           )}
-          {s.select.offset === "start" && !s.select.followTimeline && !s.select.paceMatch && (
-            <button className="btn btn-sm btn-link" onClick={() => setSelect({ offset: "random" })}>{t("Start point is set to beginning. Use random start points for more variance.")}</button>
+          {s.select.offset !== "random" && !s.select.followTimeline && !s.select.paceMatch && (
+            <button className="btn btn-sm btn-link" onClick={() => setSelect({ offset: "random" })}>
+              {s.select.offset === "start" ? t("Start point is set to beginning. Use random start points for more variance.") : t("Start point is set to continue where a video stopped – the variance slider has no effect then. Use random start points for more variance.")}
+            </button>
           )}
         </div>
         {clipPreset && <div className="pmv-li-meta">{t("Clips with {name} – change it below.", { name: clipPreset.label })}</div>}
