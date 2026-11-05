@@ -614,7 +614,7 @@ as OTIO/EDL. A generator in the style of the Pepega PMV Generator fills the time
 Works in classic Stash and in Stash UI.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20%2B%20task%20plugin-blue)
-![Version](https://img.shields.io/badge/version-0.9.23-informational)
+![Version](https://img.shields.io/badge/version-0.9.24-informational)
 
 ![PMV Creator](pmv-creator/docs/screenshots/pmv-creator.png)
 
@@ -660,6 +660,10 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### PMV Creator 0.9.24
+
+- **Search in My clips**: a search field filters the open project's saved selection by clip label, video title, file path, scene ID, tags, performers and studio (all words must match, case is ignored); the list names its project and shows how many clips match, and switching projects resets the search. Filtering changes neither the collection nor the generator's input – *Generate from these* still uses all saved clips
 
 ### PMV Creator 0.9.23
 

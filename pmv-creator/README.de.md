@@ -6,6 +6,24 @@ Deterministischer PMV-Editor direkt in [Stash](https://github.com/stashapp/stash
 
 Architektur, Datenmodell und Render-Pipeline: **[docs/KONZEPT.md](docs/KONZEPT.md)** · Projektformat: [schema/pmv-project.schema.json](schema/pmv-project.schema.json) · Erstnutzer-Test in echtem Stash 0.31: [docs/TESTBERICHT.md](docs/TESTBERICHT.md) · Änderungen: [CHANGELOG.md](CHANGELOG.md)
 
+## Meine Clips
+
+**Meine Clips** ist die gespeicherte Auswahl des geöffneten PMV-Projekts. Die Suche
+filtert sofort nach Clipname, Videotitel, Dateipfad, Szene-ID, Tags, Performern und
+Studio. Mehrere Suchwörter müssen alle vorkommen; Groß-/Kleinschreibung spielt keine
+Rolle. Gespeicherte Videotitel, Dateipfade und Clip-Tags funktionieren auch ohne
+erreichbare Stash-Szenendaten. Die Anzeige nennt das Projekt und die Trefferzahl.
+Beim Öffnen eines anderen Projekts wird die Suche zurückgesetzt. Die Suche
+verändert weder die Sammlung noch das Material für den Generator.
+
+Einträge entstehen aus hinzugefügten Markern oder I/O-Bereichen und aus
+Generatorläufen, wenn **Verwendete Segmente in „Meine Clips“** aktiv ist
+(standardmäßig eingeschaltet). Weitere Läufe ergänzen die Sammlung und verwenden
+bereits gespeicherte gleiche Marker oder Bereiche erneut. Sie ersetzen sie nicht
+durch die aktuelle Timeline. Neue Projekte starten leer; Duplikate und
+Serienprojekte mit Material aus **Projektszenen** oder **Meine Clips** übernehmen die
+bisherige Auswahl. Deshalb können verschiedene Projekte ähnliche Listen haben.
+
 ## Super einfach
 
 Oben unter **Ansicht** kannst du jederzeit zwischen **Super einfach**, **Einfach**

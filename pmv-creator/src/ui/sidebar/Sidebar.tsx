@@ -37,7 +37,7 @@ export function Sidebar() {
         ) : tab === "markers" ? (
           <MarkerBrowser />
         ) : (
-          <BinPanel />
+          <BinPanel key={state.present.id} />
         )}
       </div>
     </div>

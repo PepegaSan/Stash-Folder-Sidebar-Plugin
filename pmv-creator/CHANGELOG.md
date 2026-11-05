@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.24 (2026-11-05)
+
+- **Search in My clips**: a search field filters the open project's saved selection by clip label, video title, file path, scene ID, tags, performers and studio. All words must match and case is ignored; saved titles, paths and clip tags work without live scene data. The list names its project and shows how many clips match, and switching projects resets the search.
+- Filtering changes neither the collection nor the generator's input: *Generate from these* still uses all saved clips, and moving or removing a clip while filtered acts on that clip in the full list. A short *Where do these clips come from?* note explains how entries get there.
+
 ## 0.9.23 (2026-11-05)
 
 - Generator: the hint under **Clip variance** now also appears when the start point is set to *continue where a video stopped*. With that setting, as with *beginning*, the slider has no effect; the hint switches back to random start points.

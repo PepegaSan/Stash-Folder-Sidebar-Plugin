@@ -4,6 +4,16 @@ Deterministic PMV (music video) editor inside [Stash](https://github.com/stashap
 
 *Deutsch: [README.de.md](README.de.md)*
 
+**My clips:** This is the open project's saved selection. Search by clip label,
+video title, file path, scene ID, tags, performer or studio; all search words must
+match, ignoring case. Saved source metadata remains searchable without live scene
+data. The list shows its project and match count, and search resets on project
+switches. Filtering does not change the collection or the generator's input.
+Entries come from manually added markers/ranges and generator runs with **Used
+segments into My clips** enabled (the default). Further runs keep the collection
+and reuse matching markers/ranges. New projects start empty; duplicates and batch
+projects using project scenes or My clips inherit the selection.
+
 Architecture, data model and render pipeline: **[docs/KONZEPT.md](docs/KONZEPT.md)** (German) · project format: [schema/pmv-project.schema.json](schema/pmv-project.schema.json) · first-user test in a real Stash 0.31: [docs/TESTBERICHT.md](docs/TESTBERICHT.md) (German) · changes: [CHANGELOG.md](CHANGELOG.md)
 
 **Generator clip variance:** The slider runs from 0 to 100% (default 100%). High values prefer unused, distant source ranges. The visible **Use material → Whole videos** choice is the default, including for older settings with marker flags. **Markers only**, or **Selected ranges only** under My clips, requires an explicit choice. In whole-video mode My clips chooses the source video IDs; its old snippets do not restrict source times. Intro/credits trimming is visible in both views and **Use full duration** disables it. The completed run reports its effective mode and available source time. The same seed and settings remain reproducible.

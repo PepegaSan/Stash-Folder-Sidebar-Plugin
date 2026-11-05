@@ -1,5 +1,5 @@
 /** The culled selection ("bin"): drag to the timeline, append, replace, reorder, generate from it. */
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { overlapsExclusion } from "../../culling/culling";
 import { t, tn } from "../../i18n";
 import type { Snippet } from "../../model/project";
@@ -19,8 +19,21 @@ export function BinPanel() {
   const { state, dispatch, transport } = useEditor();
   const project = state.present;
   const ui = state.ui;
+  const [query, setQuery] = useState("");
   const scenes = useScenes([...new Set(project.bin.map((s) => s.sceneId))]);
-  const total = project.bin.reduce((n, s) => n + (s.out - s.in), 0);
+  const searching = query.trim().length > 0;
+  const visible = useMemo(() => {
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return project.bin.map((s, i) => ({ s, i })).filter(({ s }) => {
+      const source = project.sources[s.sceneId];
+      const scene = scenes[s.sceneId];
+      const text = [s.label, s.sceneId, ...s.tags, source?.title, source?.path, scene?.title,
+        scene?.studio?.name, ...(scene?.performers.map((p) => p.name) ?? []),
+        ...(scene?.tags.map((tag) => tag.name) ?? [])].join(" ").toLowerCase();
+      return words.every((word) => text.includes(word));
+    });
+  }, [project.bin, project.sources, scenes, query]);
+  const total = visible.reduce((n, { s }) => n + (s.out - s.in), 0);
 
   const append = (s: Snippet) => {
     const action = insertAction(project, ui, s, transport.time);
@@ -31,23 +44,43 @@ export function BinPanel() {
 
   return (
     <div className="pmv-panel">
+      <div className="pmv-li-meta">{t("Saved selection for project: {name}", { name: project.name })}</div>
       <div className="pmv-row">
-        <span className="pmv-li-meta">
-          {tn(project.bin.length, "{n} clips", "1 clip")} · {formatTime(total)}
+        <input
+          type="search"
+          className="form-control form-control-sm"
+          aria-label={t("Search My clips")}
+          placeholder={t("Clip, video, tag or performer…")}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.stopPropagation()}
+        />
+        {query && <button className="btn btn-sm btn-secondary" title={t("Clear search")} onClick={() => setQuery("")}>✕</button>}
+      </div>
+      <div className="pmv-row">
+        <span className="pmv-li-meta" role="status">
+          {searching ? t("{shown} of {total} clips", { shown: visible.length, total: project.bin.length }) : tn(project.bin.length, "{n} clips", "1 clip")} · {formatTime(total)}
         </span>
         <span className="pmv-spacer" />
         <button
           className="btn btn-sm btn-secondary"
           disabled={!project.bin.length}
-          title={t("Open the generator with these clips as its source")}
+          title={t("Open the generator with all clips saved in this project")}
           onClick={() => dispatch({ type: "ui", patch: { generator: { source: "bin" } } })}
         >
           ⚡ {t("Generate from these")}
         </button>
       </div>
+      {searching && <div className="pmv-li-meta">{t("Search filters this list. The generator still uses all saved clips.")}</div>}
+      <details className="pmv-li-meta">
+        <summary>{t("Where do these clips come from?")}</summary>
+        <p>{t("Markers and ranges you add are saved here. Generator runs also add their used segments when “Used segments into My clips” is enabled (on by default).")}</p>
+        <p>{t("Generating again keeps the saved selection. A new project starts empty; duplicated projects and batch projects using project material inherit the selection.")}</p>
+      </details>
       <ul className="pmv-list">
         {project.bin.length === 0 && <li className="pmv-empty">{t("Empty. Open a scene under “Scenes” and pick markers (+) or ranges (I/O, Shift+drag).")}</li>}
-        {project.bin.map((s, i) => {
+        {project.bin.length > 0 && visible.length === 0 && <li className="pmv-empty">{t("No clips match your search.")}</li>}
+        {visible.map(({ s, i }) => {
           const scene = scenes[s.sceneId];
           const excluded = overlapsExclusion(project.exclusions, s.sceneId, s.in, s.out);
           const selected = ui.selectedSnippetId === s.id;

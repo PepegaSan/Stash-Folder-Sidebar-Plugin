@@ -3,6 +3,17 @@
  * survive the translation. `npm run i18n:check` reports keys that are missing here.
  */
 const de: Record<string, string> = {
+  "Saved selection for project: {name}": "Gespeicherte Auswahl für Projekt: {name}",
+  "Search My clips": "Meine Clips durchsuchen",
+  "Clip, video, tag or performer…": "Clip, Video, Tag oder Performer …",
+  "Clear search": "Suche zurücksetzen",
+  "{shown} of {total} clips": "{shown} von {total} Clips",
+  "Open the generator with all clips saved in this project": "Generator mit allen in diesem Projekt gespeicherten Clips öffnen",
+  "Search filters this list. The generator still uses all saved clips.": "Die Suche filtert diese Liste. Der Generator verwendet weiterhin alle gespeicherten Clips.",
+  "Where do these clips come from?": "Woher kommen diese Clips?",
+  "Markers and ranges you add are saved here. Generator runs also add their used segments when “Used segments into My clips” is enabled (on by default).": "Hier werden von dir hinzugefügte Marker und Bereiche gespeichert. Generatorläufe ergänzen ihre verwendeten Segmente, wenn „Verwendete Segmente in Meine Clips“ aktiv ist (standardmäßig eingeschaltet).",
+  "Generating again keeps the saved selection. A new project starts empty; duplicated projects and batch projects using project material inherit the selection.": "Erneutes Generieren behält die gespeicherte Auswahl. Ein neues Projekt startet leer; Projektduplikate und Serienprojekte mit Projektmaterial übernehmen die Auswahl.",
+  "No clips match your search.": "Keine Clips passen zu deiner Suche.",
   // --- super simple guided view
   "Preview position": "Vorschaustelle",
   "No usable video track": "Keine freie Videospur verfügbar",
