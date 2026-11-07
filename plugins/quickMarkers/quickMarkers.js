@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.15.0";
+  const PLUGIN_VERSION = "1.15.1";
   const Guide = window.QuickMarkersGuide;
   const guideText = (en, de) => browserLang() === "de" ? de : en;
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
@@ -315,7 +315,7 @@
     const key = String(value == null ? "" : value)
       .trim()
       .toLowerCase();
-    // Shift+1–9 are reserved for selecting the active preset.
+    // Shift+1–9 are reserved for preset slots (select or create, depending on the view).
     if (!key || PRESET_SELECT_KEY_RE.test(key)) return DEFAULT_INSTANT_KEY;
     return key;
   }
@@ -365,7 +365,7 @@
         primaryTag: primaryTag,
         tags: normalizePresetTags(p.tags, primaryTag),
         title: (p.title || label).trim(),
-        // Default shared hotkeys; Shift+1–9 select presets (not instant).
+        // Default shared hotkeys; Shift+1–9 use preset slots.
         rangeInKey: (p.rangeInKey || "shift+i").trim().toLowerCase(),
         rangeOutKey: (p.rangeOutKey || "shift+o").trim().toLowerCase(),
         instantKey: normalizeInstantKey(p.instantKey),
@@ -1454,7 +1454,7 @@
           return;
         }
         try {
-          await createAt(preset, t, null);
+          if (await createAt(preset, t, null)) Guide.rememberInstant(preset);
         } catch (e) {
           Toast.error(formatError(e));
         }
@@ -1585,6 +1585,7 @@
           keysToUnbind.push(key);
           Mousetrap.bind(key, function (e) {
             if (e && e.preventDefault) e.preventDefault();
+            if (e && e.repeat) return false;
             fn(e);
             return false;
           });
@@ -1615,7 +1616,7 @@
           }
         }
 
-        // Shift+1–9 select whichever preset owns that slot.
+        // Slot keys create immediately only in Instant only; other views select.
         const slotToIndex = {};
         config.presets.forEach(function (preset, index) {
           const slot = normalizeSelectSlot(preset.selectSlot, index);
@@ -1628,7 +1629,8 @@
             if (presetIndex == null) return;
             bind("shift+" + slot, function (e) {
               if (e && e.preventDefault) e.preventDefault();
-              selectPreset(presetIndex);
+              if (config.panelView === "instant") onInstant(config.presets[presetIndex]);
+              else selectPreset(presetIndex);
             });
           })(n);
         }
@@ -1649,6 +1651,14 @@
             onInstant(preset);
           });
         });
+
+        // Reserve Shift+M for repeat in Instant only, even with custom instant keys.
+        if (config.panelView === "instant") {
+          bind("shift+m", function () {
+            const preset = Guide.instantPreset(config);
+            if (preset) onInstant(preset);
+          });
+        }
 
         bind("shift+]", function (e) {
           if (e && e.preventDefault) e.preventDefault();
@@ -1779,6 +1789,12 @@
             )
           : null
       ) : null;
+    }
+
+    function renderInstantHint() {
+      return instantOnly && showHotkeys ? React.createElement("p", { className: "quick-markers-hint" },
+        React.createElement("kbd", null, "shift+m"), " · ",
+        guideText("Repeat last instant preset", "Letztes Instant-Preset wiederholen")) : null;
     }
 
     function renderGuide() {
@@ -1955,7 +1971,7 @@
                             (!instantOnly && isActive ? " active" : ""),
                           "aria-pressed": instantOnly ? undefined : isActive,
                           disabled: saving,
-                          title: instantOnly ? guideText("Create instant marker", "Sofort-Marker setzen") : showHotkeys && selectKey
+                          title: instantOnly ? (showHotkeys && selectKey ? selectKey + ": " : "") + guideText("Create instant marker", "Sofort-Marker setzen") : showHotkeys && selectKey
                             ? "Click or " +
                               selectKey +
                               " = select. Double-click = instant marker"
@@ -1980,6 +1996,7 @@
                     })
                   ),
                   renderTransferTools(),
+                  renderInstantHint(),
                   status && !guided
                     ? React.createElement(
                         "p",
@@ -2123,7 +2140,7 @@
                             "quick-markers-touch-preset" +
                             (!instantOnly && isActive ? " active" : ""),
                           disabled: saving,
-                          title: instantOnly ? guideText("Create instant marker", "Sofort-Marker setzen") : preset.label,
+                          title: instantOnly ? (showHotkeys && preset.selectSlot ? "shift+" + preset.selectSlot + ": " : "") + guideText("Create instant marker", "Sofort-Marker setzen") : preset.label,
                           onClick: function () {
                             if (instantOnly) onInstant(preset);
                             else selectPreset(index);
@@ -2133,7 +2150,8 @@
                       );
                     })
                   ),
-                  renderTransferTools()
+                  renderTransferTools(),
+                  renderInstantHint()
                 ) : null)
               : null
           ), touchHost)

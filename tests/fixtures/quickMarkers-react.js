@@ -41,7 +41,7 @@ window.PluginApi={React,ReactDOM:{createPortal:(node,host)=>({type:'portal',prop
 };
 function findComponent(node){if(node?.type?.name==='QuickMarkersSceneHook')return node;for(const c of node?.children||[]){const result=findComponent(c);if(result)return result;}}
 window.mountClassic=id=>{for(const cell of cells)cell?.cleanup?.();cells=[];const node=findComponent(patch({scene:{id}},null));component=node.type;props=node.props;render();};
-window.testClassicKey=key=>keys[key]?.({preventDefault(){}});
+window.testClassicKey=(key,repeat=false)=>keys[key]?.({repeat,preventDefault(){}});
 
 window.mountClassicSettings=()=>{
   for(const cell of cells)cell?.cleanup?.();cells=[];

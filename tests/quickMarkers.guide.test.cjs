@@ -27,6 +27,31 @@ test('only an explicitly chosen preset overrides the configured default', () => 
   assert.equal(createStore(disk).selected(config, 'scene'), 0);
 });
 
+test('instant history survives reload without changing a draft or the normal selection', () => {
+  const disk = storage(), guide = createStore(disk);
+  const other = {...preset,id:'b',label:'Favourite'};
+  const config = {presets:[preset,other],defaultPresetIndex:0};
+  guide.choose(preset);
+  const pending = guide.begin('scene',preset,12.345);
+  guide.rememberInstant(other);
+  const restored = createStore(disk);
+  assert.equal(restored.instantPreset(config).id,'b');
+  assert.equal(restored.selected(config),0);
+  assert.deepEqual(restored.draft('scene'),pending);
+  assert.equal(restored.instantPreset({presets:[preset,{...other,primaryTag:'Edited'}]}).primaryTag,'Edited');
+  assert.equal(restored.instantPreset({presets:[preset]}).id,'a');
+});
+
+test('instant repeat falls back to the chosen/default preset and works without storage', () => {
+  const guide = createStore(null), other = {...preset,id:'b'};
+  const config = {presets:[preset,other],defaultPresetIndex:1};
+  assert.equal(guide.instantPreset(config).id,'b');
+  guide.choose(preset);
+  assert.equal(guide.instantPreset(config).id,'a');
+  guide.rememberInstant(other);
+  assert.equal(guide.instantPreset(config).id,'b');
+});
+
 test('changing a pending preset keeps its start, and restoring selects that preset', () => {
   const guide = createStore(storage());
   guide.begin('scene', preset, 0);

@@ -146,7 +146,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.15.0-informational)
+![Version](https://img.shields.io/badge/version-1.15.1-informational)
 
 In Stash UI, open **Settings → Plugins → Quick Markers** to create or edit marker presets in the **Presets** section.
 
@@ -164,7 +164,7 @@ Under **Settings → Plugins → Quick Markers → Panel view**, choose:
 
 - **Guided** (default): the step-by-step start/end guide; **Adjust** opens the other controls.
 - **Classic**: presets and In / Out / Instant immediately visible, without the guide.
-- **Instant only**: click or tap any preset once to create its instant marker at the current playhead. No selection or confirmation click is needed, and a pending range remains unchanged.
+- **Instant only**: click or tap any preset once, or press its assigned **Shift+1–9** slot, to create its instant marker at the current playhead. **Shift+M** repeats the last successfully used instant preset (including clicks and custom instant shortcuts), remembered across scenes and reloads. Until the first instant marker, it uses the selected/default preset. No selection or confirmation click is needed, and a pending range remains unchanged.
 
 **Show transfer tools** and **Show hotkey hints** independently control the copy/paste/same-video tools and the displayed keyboard hints. Hiding hints does not disable shortcuts. These preferences are saved with the plugin settings and apply after scene changes and reloads in classic Stash, its touch bar, and Stash UI (including the on-video panel).
 
@@ -202,11 +202,13 @@ touch bar and Stash UI.
 
 | Key | Action |
 |-----|--------|
-| `shift+1` … `shift+9` | **Select** the preset assigned to that slot (`selectSlot` in settings — not always list order) |
+| `shift+1` … `shift+9` | Use the assigned preset slot (`selectSlot`, not list order): select in Guided/Classic, create immediately in Instant only |
 | `shift+i` | **In** point (active preset) |
 | `shift+o` | **Out** + create range marker (active preset) |
-| `shift+m` | Instant marker at playhead (**active** preset; Shift+M, not Ctrl+M) |
+| `shift+m` | Instant marker at playhead: active preset in Guided/Classic; last successful instant preset in Instant only |
 | `shift+[` / `shift+]` | Previous / next active preset |
+
+In **Instant only**, Shift+1–9 creates a marker immediately using the preset assigned to that slot. Shift+M is reserved for repeat in this view; other custom instant shortcuts keep working. These actions never change a pending range.
 
 **Note:** Plain `i` / `o` / `m` are used by Stash. `shift+m` is free in Stash and browsers. Assign up to nine presets to Shift+1–9 via **Select hotkey** when editing a preset (useful if you have more than nine).
 
@@ -308,8 +310,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.15.0`.
-6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.15.0** next to Quick Markers.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.15.1`.
+6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.15.1** next to Quick Markers.
 
 If an old version number appears, the old plugin files are still active.
 

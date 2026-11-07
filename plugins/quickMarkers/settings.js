@@ -56,8 +56,8 @@ export const STRINGS_DE = {
   "Instant only": "Nur Instant",
   "Show transfer tools": "Transfer-Werkzeuge anzeigen",
   "Show hotkey hints": "Tastenkürzel anzeigen",
-  "In Instant only, clicking a preset immediately creates a marker. Hotkeys keep working in every view.":
-    "In Nur Instant setzt ein Klick auf ein Preset sofort einen Marker. Tastenkürzel funktionieren in jeder Ansicht.",
+  "In Instant only, click a preset or press Shift+1–9 to create a marker. Shift+M repeats the last instant preset.":
+    "In Nur Instant setzen ein Preset-Klick oder Shift+1–9 sofort einen Marker. Shift+M wiederholt das letzte Instant-Preset.",
   "Drag the panel header to move it; double-click resets it.": "Ziehbar am Panel-Kopf; Doppelklick setzt zurück.",
   "Top left": "Oben links",
   "Top right": "Oben rechts",
@@ -114,7 +114,7 @@ export const STRINGS_DE = {
   "{what}: {key} – Enter to change": "{what}: {key} – Enter zum Ändern",
   "Click a field and press the combination. Esc cancels, Backspace resets.":
     "Feld anklicken und die Kombination drücken. Esc bricht ab, Rücktaste setzt zurück.",
-  "{what}: Shift+1–9 are kept for selecting presets.": "{what}: Shift+1–9 sind für die Preset-Auswahl reserviert.",
+  "{what}: Shift+1–9 are reserved for preset slots.": "{what}: Shift+1–9 sind für die Preset-Plätze reserviert.",
   "{what}: Shift+[ / ] also switch the preset.": "{what}: Shift+[ / ] wechseln auch das Preset.",
   "{what}: without Shift or Ctrl the key also keeps its normal function in the player.":
     "{what}: Ohne Shift oder Strg behält die Taste auch ihre normale Funktion im Player.",
@@ -156,8 +156,8 @@ export const STRINGS_DE = {
   "How presets work": "So funktionieren Presets",
   "A preset is one kind of marker: its primary tag becomes the marker's primary tag, the more tags are added to the marker. Every tag must exist in Stash — missing ones are shown in red, + on the chip creates them.":
     "Ein Preset ist eine Art von Marker: Sein Haupt-Tag wird zum Haupt-Tag des Markers, die weiteren Tags kommen dazu. Jeder Tag muss in Stash existieren – fehlende werden rot angezeigt, + am Chip legt sie an.",
-  "While watching, Shift+1–9 (the select key) or Shift+[ / ] pick the active preset. In, Out and Instant always work for the active preset, so usually every preset keeps Shift+I / O / M.":
-    "Beim Schauen wählen Shift+1–9 (die Auswahl-Taste) oder Shift+[ / ] das aktive Preset. In, Out und Sofort gelten immer für das aktive Preset, daher behalten meist alle Presets Shift+I / O / M.",
+  "In Guided and Classic, Shift+1–9 selects a preset and Shift+M uses the active preset. In Instant only, Shift+1–9 creates a marker directly and Shift+M repeats the last successfully used instant preset. Custom instant keys still work; Shift+M is reserved for repeat in Instant only.":
+    "In Geführt und Klassisch wählt Shift+1–9 ein Preset; Shift+M verwendet das aktive Preset. In Nur Instant setzt Shift+1–9 direkt einen Marker und Shift+M wiederholt das zuletzt erfolgreich verwendete Instant-Preset. Eigene Instant-Tasten funktionieren weiter; Shift+M ist in Nur Instant für Wiederholen reserviert.",
   "The order here is the order of the preset chips on the scene page. Drag the handle on the left to change it.":
     "Die Reihenfolge hier ist die der Preset-Chips auf der Szenenseite. Zum Ändern links am Griff ziehen.",
   "Changes apply to markers created afterwards; existing markers keep their tags (edit them in Stash under Markers).":
@@ -246,7 +246,7 @@ export function mountSettings(el, env) {
     const what = Object.fromEntries(KEY_FIELDS.map(([f, label]) => [f, t(label)]));
     KEY_FIELDS.forEach(([f]) => {
       const k = d[f];
-      if (SELECT_KEY_RE.test(k)) out.push({ field: f, block: true, text: t("{what}: Shift+1–9 are kept for selecting presets.", { what: what[f] }) });
+      if (SELECT_KEY_RE.test(k)) out.push({ field: f, block: true, text: t("{what}: Shift+1–9 are reserved for preset slots.", { what: what[f] }) });
       else if (k === "shift+[" || k === "shift+]") out.push({ field: f, block: false, text: t("{what}: Shift+[ / ] also switch the preset.", { what: what[f] }) });
       else if (k.split("+").length < 2) out.push({ field: f, block: false, text: t("{what}: without Shift or Ctrl the key also keeps its normal function in the player.", { what: what[f] }) });
     });
@@ -792,7 +792,7 @@ export function mountSettings(el, env) {
     const appearance = `<section class="qms-card qms-general" aria-label="${esc(t("Panel view"))}">
       <div class="qms-field"><label class="qms-label" for="qms-view">${esc(t("Panel view"))}</label>
         <select id="qms-view" class="${C.field}" data-set="panelView" data-focus="set:view">${[["guided", "Guided"], ["classic", "Classic"], ["instant", "Instant only"]].map(([v, label]) => `<option value="${v}"${v === view ? " selected" : ""}>${esc(t(label))}</option>`).join("")}</select>
-        <small class="qms-hint">${esc(t("In Instant only, clicking a preset immediately creates a marker. Hotkeys keep working in every view."))}</small>
+        <small class="qms-hint">${esc(t("In Instant only, click a preset or press Shift+1–9 to create a marker. Shift+M repeats the last instant preset."))}</small>
       </div>
       <div class="qms-field">
         <label class="qms-check"><input type="checkbox" data-set="showTransferTools" data-focus="set:transfer"${c.showTransferTools !== false ? " checked" : ""}> ${esc(t("Show transfer tools"))}</label>
@@ -872,7 +872,7 @@ export function mountSettings(el, env) {
             <div class="qms-help" data-help>
               <h4>${esc(t("How presets work"))}</h4>
               <p>${esc(t("A preset is one kind of marker: its primary tag becomes the marker's primary tag, the more tags are added to the marker. Every tag must exist in Stash — missing ones are shown in red, + on the chip creates them."))}</p>
-              <p>${esc(t("While watching, Shift+1–9 (the select key) or Shift+[ / ] pick the active preset. In, Out and Instant always work for the active preset, so usually every preset keeps Shift+I / O / M."))}</p>
+              <p>${esc(t("In Guided and Classic, Shift+1–9 selects a preset and Shift+M uses the active preset. In Instant only, Shift+1–9 creates a marker directly and Shift+M repeats the last successfully used instant preset. Custom instant keys still work; Shift+M is reserved for repeat in Instant only."))}</p>
               <p>${esc(t("The order here is the order of the preset chips on the scene page. Drag the handle on the left to change it."))}</p>
               <p>${esc(t("Changes apply to markers created afterwards; existing markers keep their tags (edit them in Stash under Markers)."))}</p>
             </div>

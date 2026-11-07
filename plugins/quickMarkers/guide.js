@@ -66,6 +66,15 @@
       const index = config.presets.findIndex((p) => p.id === id);
       return index >= 0 ? index : Math.min(config.defaultPresetIndex || 0, config.presets.length - 1);
     }
+    // Keep instant history separate from the selection and any pending range.
+    // Resolve the ID against current settings so edits/deletions cannot replay stale tags.
+    function rememberInstant(preset) {
+      if (preset) write("instantPreset", preset.id);
+    }
+    function instantPreset(config) {
+      const id = read("instantPreset");
+      return config.presets.find((p) => p.id === id) || config.presets[selected(config)] || null;
+    }
     function storageChanged(event) {
       if (event.storageArea !== storage || (event.key !== null && !event.key.startsWith(prefix))) return;
       const key = event.key?.slice(prefix.length);
@@ -81,7 +90,7 @@
         ? root.navigator.locks.request(prefix + "save." + sceneId, { ifAvailable: true }, (lock) => lock && saveCurrent())
         : saveCurrent();
     }
-    return { draft, begin, clear, choose, selected, storageChanged, withDraft,
+    return { draft, begin, clear, choose, selected, rememberInstant, instantPreset, storageChanged, withDraft,
       subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
       canFinish: (start, end) => Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start + .05,
       lock: (sceneId) => { if (saving.has(String(sceneId))) return false; saving.add(String(sceneId)); notify(sceneId); return true; },

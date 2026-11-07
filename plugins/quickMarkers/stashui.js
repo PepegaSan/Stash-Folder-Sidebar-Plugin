@@ -2,7 +2,7 @@
 // Stash UI imports /plugin/quickMarkers/assets/stashui.js and calls the default export.
 // Classic Stash never loads this file; quickMarkers.js is the classic-UI side.
 // The preset format and hotkeys match quickMarkers.js — keep both in sync.
-import "./guide.js?v=1.15.0";
+import "./guide.js?v=1.15.1";
 const Guide = globalThis.QuickMarkersGuide;
 
 const PLUGIN_ID = "quickMarkers";
@@ -44,6 +44,7 @@ const STRINGS_DE = {
   "Adjust · presets & tools": "Anpassen · Presets & Werkzeuge",
   "Adjust": "Anpassen",
   "Create instant marker": "Sofort-Marker setzen",
+  "Repeat last instant preset": "Letztes Instant-Preset wiederholen",
   "Show simple view": "Einfach anzeigen",
   "No video player active.": "Kein Videoplayer aktiv.",
   "Pause": "Pause",
@@ -218,7 +219,7 @@ function normalizeSelectSlot(value, index) {
 
 function normalizeInstantKey(value) {
   const key = String(value == null ? "" : value).trim().toLowerCase();
-  // Shift+1–9 are reserved for selecting the active preset.
+  // Shift+1–9 are reserved for preset slots (select or create, depending on the view).
   if (!key || PRESET_SELECT_KEY_RE.test(key)) return DEFAULT_INSTANT_KEY;
   return key;
 }
@@ -1411,6 +1412,7 @@ export default function setup(stashui) {
             sceneMarkerCreate(input: $input) { id title seconds end_seconds stream preview screenshot primary_tag { id name } tags { id name } }
           }`, { input });
           if (!marker?.id) throw Error(t("Marker was not saved."));
+          if (!clearsIn && to == null) Guide.rememberInstant(preset);
           if (clearsIn) Guide.clear(sceneId, expectedId);
           const range = to != null ? formatTime(from) + " – " + formatTime(to) : formatTime(from);
           status = preset.label + " @ " + range;
@@ -1491,14 +1493,17 @@ export default function setup(stashui) {
         const keys = eventKeys(e);
         const hit = (combo) => comboMatches(parseCombo(combo), e, keys);
         const preset = active();
+        const instantOnly = config.panelView === "instant";
+        const bySlot = presets().findIndex((p) => p.selectSlot && hit("shift+" + p.selectSlot));
         let run = null;
-        if (preset && hit(preset.rangeInKey)) run = onIn;
+        if (instantOnly && hit("shift+m")) run = () => onInstant(Guide.instantPreset(config));
+        else if (instantOnly && bySlot >= 0) run = () => onInstant(presets()[bySlot]);
+        else if (preset && hit(preset.rangeInKey)) run = onIn;
         else if (preset && hit(preset.rangeOutKey)) run = onOut;
         else if (preset && !PRESET_SELECT_KEY_RE.test(preset.instantKey) && hit(preset.instantKey)) run = () => onInstant(preset);
         else if (hit("shift+]")) run = () => select((activeIndex() + 1) % presets().length);
         else if (hit("shift+[")) run = () => select((activeIndex() - 1 + presets().length) % presets().length);
         else {
-          const bySlot = presets().findIndex((p) => p.selectSlot && hit("shift+" + p.selectSlot));
           if (bySlot >= 0) run = () => select(bySlot);
           else {
             const other = presets().find((p) => p !== preset && p.instantKey && !PRESET_SELECT_KEY_RE.test(p.instantKey) && (!preset || p.instantKey !== preset.instantKey) && hit(p.instantKey));
@@ -1547,9 +1552,9 @@ export default function setup(stashui) {
             </div>`;
         const presetsHtml = `<div class="qm-x-presets" role="group" aria-label="${esc(t("Presets"))}">
               ${presets()
-                .map((p, i) => `<button type="button" ${instantOnly ? "" : `aria-pressed="${p.id === preset.id}"`} ${disabled} class="kb-chip qm-x-chip${!instantOnly && p.id === preset.id ? " is-on" : ""}" data-qm-preset="${i}" title="${esc(t(instantOnly ? "Create instant marker" : "Active preset — click to select"))}">${esc(p.label)}${config.showHotkeys !== false && p.selectSlot ? `<kbd>⇧${p.selectSlot}</kbd>` : ""}</button>`)
+                .map((p, i) => `<button type="button" ${instantOnly ? "" : `aria-pressed="${p.id === preset.id}"`} ${disabled} class="kb-chip qm-x-chip${!instantOnly && p.id === preset.id ? " is-on" : ""}" data-qm-preset="${i}" title="${instantOnly && config.showHotkeys !== false && p.selectSlot ? `Shift+${p.selectSlot}: ` : ""}${esc(t(instantOnly ? "Create instant marker" : "Active preset — click to select"))}">${esc(p.label)}${config.showHotkeys !== false && p.selectSlot ? `<kbd>⇧${p.selectSlot}</kbd>` : ""}</button>`)
                 .join("")}
-            </div>`;
+            </div>${instantOnly && config.showHotkeys !== false ? `<small class="kb-hint"><kbd>Shift+M</kbd> · ${esc(t("Repeat last instant preset"))}</small>` : ""}`;
         const toolsHtml = config.showTransferTools !== false ? `<div class="qm-x-tools">
               <button type="button" class="kb-btn is-ghost" data-qm="copy" title="${esc(t("Copy all markers of this scene (times, titles, tags)"))}">${ui.icon("copies")}${esc(t("Copy"))}</button>
               <button type="button" class="kb-btn is-ghost" data-qm="paste"${clip ? "" : " disabled"} title="${esc(clip ? t("Paste {n} markers from {title}", { n: clip.markers.length, title: clip.sceneTitle }) : t("Copy the markers of another scene first"))}">${ui.icon("download")}${esc(t("Paste"))}${clip ? `<small>${clip.markers.length}</small>` : ""}</button>

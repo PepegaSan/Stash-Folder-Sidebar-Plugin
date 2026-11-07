@@ -49,6 +49,14 @@ async function settings(page, mode, view, hideExtras = true) {
 async function mount(page, mode, id) {
   await page.evaluate(({mode,id})=>window[mode==='classic'?'mountClassic':'mountStashUI'](id),{mode,id});
 }
+async function key(page, mode, combo) {
+  await page.evaluate(()=>document.activeElement?.blur());
+  if(mode==='classic') await page.evaluate(combo=>testClassicKey(combo),combo);
+  else await page.keyboard.press(combo.replace('shift+', 'Shift+').replace(/\+(\d)$/, '+Digit$1'));
+}
+async function saved(page, count) {
+  await page.waitForFunction(count=>testState.markers.length===count && !QuickMarkersGuide.busy('scene-a'),count);
+}
 async function screenshot(page, name) {
   if (!process.env.TEST_OUTPUT) return;
   await fs.mkdir(process.env.TEST_OUTPUT,{recursive:true});
@@ -56,6 +64,82 @@ async function screenshot(page, name) {
 }
 
 for (const mode of ['classic','stashui']) {
+  test(`${mode}: instant slot keys create directly, repeat follows clicks across reloads, and a pending range stays unchanged`, async () => {
+    const {page,context,errors}=await open(mode);
+    try {
+      await main(page).click();
+      const draft=await page.evaluate(()=>QuickMarkersGuide.draft('scene-a'));
+      await settings(page,mode,'instant',false);
+      await mount(page,mode,'scene-a');
+      await page.getByRole('button',{name:/^Favourite/}).waitFor();
+      assert.match(await page.getByRole('button',{name:/^Favourite/}).getAttribute('title'),/shift\+2:.*Sofort-Marker/i);
+      await position(page,15);
+      await key(page,mode,'shift+2'); await saved(page,1);
+      await position(page,18.25);
+      await key(page,mode,'shift+m'); await saved(page,2);
+      await position(page,22);
+      await page.getByRole('button',{name:/^Compilation/}).click(); await saved(page,3);
+      await position(page,25);
+      await key(page,mode,'shift+m'); await saved(page,4);
+      assert.deepEqual(await page.evaluate(()=>testState.markers.map(m=>[m.primary_tag_id,m.seconds,m.end_seconds??null])),
+        [['Favourite',15,null],['Favourite',18.25,null],['Compilation',22,null],['Compilation',25,null]]);
+      assert.deepEqual(await page.evaluate(()=>QuickMarkersGuide.draft('scene-a')),draft);
+      await key(page,mode,'shift+2'); await saved(page,5);
+      await page.reload();
+      await page.getByRole('button',{name:/^Favourite/}).waitFor();
+      await key(page,mode,'shift+m'); await saved(page,1);
+      assert.equal(await page.evaluate(()=>testState.markers[0].primary_tag_id),'Favourite');
+      assert.deepEqual(await page.evaluate(()=>QuickMarkersGuide.draft('scene-a')),draft);
+      assert.deepEqual(errors,[]);
+    } finally {await context.close();}
+  });
+
+  test(`${mode}: instant repeat honors custom shortcuts and assigned slot 9, ignoring failures, busy keys and auto-repeat`, async () => {
+    const {page,context,errors}=await open(mode);
+    try {
+      await settings(page,mode,'instant');
+      await page.evaluate(()=>saveTestConfig({...testConfig,presets:testConfig.presets.map((p,i)=>({...p,instantKey:i===0?'shift+c':i===1?'shift+f':'shift+g',selectSlot:i===1?9:p.selectSlot}))}));
+      await page.reload(); await page.getByRole('button',{name:'Favourite',exact:true}).waitFor();
+      await key(page,mode,'shift+m'); await saved(page,1); // No history: selected/default preset.
+      await key(page,mode,'shift+f'); await saved(page,2);
+      await key(page,mode,'shift+m'); await saved(page,3);
+      await page.evaluate(()=>{testState.fail=true;});
+      await key(page,mode,'shift+1');
+      await page.waitForFunction(()=>!testState.fail && !QuickMarkersGuide.busy('scene-a'));
+      await key(page,mode,'shift+m'); await saved(page,4);
+      await page.evaluate(()=>{testState.hold=true;});
+      await key(page,mode,'shift+1');
+      await page.waitForFunction(()=>!!window.releaseSave);
+      await key(page,mode,'shift+9'); // Ignored while saving; must not change the repeat preset.
+      await page.evaluate(()=>{testState.hold=false;releaseSave();}); await saved(page,5);
+      await key(page,mode,'shift+m'); await saved(page,6);
+      await key(page,mode,'shift+9'); await saved(page,7);
+      if(mode==='classic') await page.evaluate(()=>testClassicKey('shift+1',true));
+      else await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'!',code:'Digit1',shiftKey:true,repeat:true,bubbles:true})));
+      await key(page,mode,'shift+m'); await saved(page,8);
+      assert.deepEqual(await page.evaluate(()=>testState.markers.map(m=>m.primary_tag_id)),
+        ['Compilation','Favourite','Favourite','Favourite','Compilation','Compilation','Favourite','Favourite']);
+      assert.deepEqual(errors,[]);
+    } finally {await context.close();}
+  });
+
+  test(`${mode}: Guided and Classic keep slot selection and active-preset instant shortcuts`, async () => {
+    const {page,context,errors}=await open(mode);
+    try {
+      for(const view of ['guided','classic']) {
+        await settings(page,mode,view);
+        await mount(page,mode,'scene-a');
+        await page.locator(mode==='classic'?'.quick-markers-panel':'.qm-x').waitFor();
+        const before=await page.evaluate(()=>testState.markers.length);
+        await key(page,mode,'shift+2');
+        assert.equal(await page.evaluate(()=>testState.markers.length),before);
+        await key(page,mode,'shift+m'); await saved(page,before+1);
+        assert.equal(await page.evaluate(()=>testState.markers.at(-1).primary_tag_id),'Favourite');
+      }
+      assert.deepEqual(errors,[]);
+    } finally {await context.close();}
+  });
+
   test(`${mode}: saved classic/instant views survive scenes and reloads, and hidden hints do not disable hotkeys`, async () => {
     const {page, context, errors} = await open(mode);
     try {
