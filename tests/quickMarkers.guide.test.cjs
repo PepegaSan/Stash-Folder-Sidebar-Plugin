@@ -1,11 +1,44 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createStore } = require('../plugins/quickMarkers/guide.js');
+const vm = require('node:vm');
+const fs = require('node:fs');
 const preset = { id: 'a', label: 'Compilation', primaryTag: 'Compilation', title: 'Compilation', tags: [] };
 function storage() {
   const values = new Map();
   return { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v) };
 }
+
+test('loading the new guide upgrades an existing legacy singleton without losing drafts, locks or listeners', () => {
+  for (const disk of [storage(), null]) {
+    const legacy = createStore(disk);
+    delete legacy.rememberInstant;
+    delete legacy.instantPreset;
+    const other = {...preset,id:'b',label:'Favourite'};
+    const config = {presets:[preset,other],defaultPresetIndex:0};
+    legacy.choose(other);
+    const pending = legacy.begin('scene',preset,12.345);
+    legacy.lock('scene');
+    let events=0, addedListeners=0;
+    legacy.subscribe(()=>events++);
+    const root = {QuickMarkersGuide:legacy,localStorage:disk,addEventListener:()=>addedListeners++};
+    const source=fs.readFileSync(require.resolve('../plugins/quickMarkers/guide.js'),'utf8');
+    vm.runInNewContext(source,{window:root});
+    assert.equal(root.QuickMarkersGuide,legacy);
+    assert.equal(legacy.instantPreset(config).id,'b');
+    assert.deepEqual(legacy.draft('scene'),pending);
+    assert.equal(legacy.busy('scene'),true);
+    assert.equal(legacy.lock('scene'),false);
+    legacy.unlock('scene');
+    assert.equal(events,1);
+    legacy.rememberInstant(preset);
+    const remember=legacy.rememberInstant;
+    vm.runInNewContext(source,{window:root});
+    assert.equal(legacy.rememberInstant,remember);
+    assert.equal(legacy.instantPreset(config).id,'a');
+    assert.equal(addedListeners,0);
+  }
+});
 
 test('a draft, its exact preset and subsecond start survive a new session', () => {
   const disk = storage();

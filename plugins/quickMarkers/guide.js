@@ -1,7 +1,7 @@
 // Shared by classic Stash and Stash UI. Drafts stay in this browser, per scene.
 (function (root) {
   "use strict";
-  function createStore(storage) {
+  function createStore(storage, previousStore) {
     const prefix = "quickMarkers.guide.";
     const memory = new Map();
     const unsaved = new Set();
@@ -73,7 +73,8 @@
     }
     function instantPreset(config) {
       const id = read("instantPreset");
-      return config.presets.find((p) => p.id === id) || config.presets[selected(config)] || null;
+      const fallback = previousStore ? previousStore.selected(config) : selected(config);
+      return config.presets.find((p) => p.id === id) || config.presets[fallback] || null;
     }
     function storageChanged(event) {
       if (event.storageArea !== storage || (event.key !== null && !event.key.startsWith(prefix))) return;
@@ -102,6 +103,15 @@
   if (!root.QuickMarkersGuide) {
     root.QuickMarkersGuide = createStore(storage);
     root.addEventListener?.("storage", root.QuickMarkersGuide.storageChanged);
+  } else if (typeof root.QuickMarkersGuide.rememberInstant !== "function" ||
+             typeof root.QuickMarkersGuide.instantPreset !== "function") {
+    // Classic Stash may have initialized an older, cached guide before Stash UI's
+    // versioned import. Extend that same object: replacing it would split existing
+    // subscribers, in-memory drafts and save locks between the two interfaces.
+    const existing = root.QuickMarkersGuide;
+    const history = createStore(storage, existing);
+    existing.rememberInstant = history.rememberInstant;
+    existing.instantPreset = history.instantPreset;
   }
   if (typeof module !== "undefined" && module.exports) module.exports = { createStore };
 })(typeof window !== "undefined" ? window : globalThis);

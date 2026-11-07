@@ -341,6 +341,27 @@ test('Stash UI: classic and instant controls work directly on the video with the
   } finally {await context.close();}
 });
 
+test('Stash UI: a cached legacy guide is upgraded before instant clicks and shortcuts save markers', async () => {
+  const context=await browser.newContext({locale:'de-DE'}), page=await context.newPage(), errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  try {
+    await page.goto(origin+'/tests/fixtures/quickMarkers.html?mode=stashui&legacyGuide=1');
+    await page.getByRole('button',{name:'Ende markieren & speichern',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>legacyGuide===QuickMarkersGuide && legacyGuide.busy('background-scene')),true);
+    const draft=await page.evaluate(()=>QuickMarkersGuide.draft('scene-a'));
+    await settings(page,'stashui','instant');
+    await mount(page,'stashui','scene-a');
+    await page.getByRole('button',{name:'Favourite',exact:true}).click(); await saved(page,1);
+    await key(page,'stashui','shift+m'); await saved(page,2);
+    await key(page,'stashui','shift+1'); await saved(page,3);
+    assert.deepEqual(await page.evaluate(()=>testState.markers.map(m=>m.primary_tag_id)),['Favourite','Favourite','Compilation']);
+    assert.deepEqual(await page.evaluate(()=>QuickMarkersGuide.draft('scene-a')),draft);
+    assert.equal(await page.evaluate(()=>testState.toasts.some(t=>/not a function|TypeError/.test(t))),false);
+    assert.equal(await page.getByRole('alert').count(),0);
+    assert.deepEqual(errors,[]);
+  } finally {await context.close();}
+});
+
 test('classic touch: saved instant view creates one marker with a single tap', async () => {
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,locale:'de-DE'});
   const page=await context.newPage();

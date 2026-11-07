@@ -7,6 +7,14 @@
 <h1>Quick Markers · Testvideo</h1><main><section class="VideoPlayer"><div class="video-wrapper"><span>Isolierter Test · keine Bibliotheksdaten</span></div><p>Testposition: <input aria-label="Testposition" id="position" type="number" value="12" step="0.1"> Sekunden</p></section><aside><h2>Quick Markers</h2><div id="root"></div></aside></main>
 <script src="/tests/fixtures/quickMarkers-host.js"></script><script src="/plugins/quickMarkers/guide.js"></script>
 <script type="module">
+// Simulate classic Stash loading the pre-1.15.1 singleton before Stash UI imports its guide.
+if(new URLSearchParams(location.search).has('legacyGuide')) {
+  window.legacyGuide=window.QuickMarkersGuide;
+  legacyGuide.begin('scene-a',testConfig.presets[0],12);
+  legacyGuide.lock('background-scene');
+  delete legacyGuide.rememberInstant;
+  delete legacyGuide.instantPreset;
+}
 if(new URLSearchParams(location.search).get('mode')==='classic') {
   await import('/tests/fixtures/quickMarkers-react.js');
   await import('/plugins/quickMarkers/quickMarkers.js');

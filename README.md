@@ -146,7 +146,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.15.1-informational)
+![Version](https://img.shields.io/badge/version-1.15.2-informational)
 
 In Stash UI, open **Settings → Plugins → Quick Markers** to create or edit marker presets in the **Presets** section.
 
@@ -310,8 +310,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.15.1`.
-6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.15.1** next to Quick Markers.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.15.2`.
+6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.15.2** next to Quick Markers.
 
 If an old version number appears, the old plugin files are still active.
 
@@ -674,6 +674,10 @@ Full manual, workflow, shortcuts, CLI and troubleshooting: [pmv-creator/README.m
 ---
 
 ## Changelog
+
+### Quick Markers 1.15.2
+
+- Fix Stash UI instant markers and shortcuts after an update when an older shared guide is already loaded (`Guide.rememberInstant is not a function`). Existing drafts and save locks are preserved.
 
 ### PMV Creator 0.9.24
 
