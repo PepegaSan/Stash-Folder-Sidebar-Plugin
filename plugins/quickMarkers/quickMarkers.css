@@ -68,6 +68,8 @@
   z-index: 1025;
   width: max-content;
   max-width: min(24rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 6rem);
+  overflow-y: auto;
   padding: 0.6rem 0.7rem 0.7rem;
   color: var(--qm-text);
   font-family: var(--qm-font);
@@ -307,6 +309,8 @@
   background: rgba(255, 255, 255, 0.04);
   color: inherit;
   cursor: pointer;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   transition: background 0.15s, border-color 0.15s;
 }
 

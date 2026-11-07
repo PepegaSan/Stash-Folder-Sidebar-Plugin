@@ -1,6 +1,6 @@
 // Minimal hooks/DOM adapter for exercising the classic plugin's real component and callbacks.
 // Stash UI is tested with its native DOM implementation; classic host APIs are mocked here.
-let cells=[],cursor=0,effects=[],component,props,scheduled=false,patch;
+let cells=[],cursor=0,effects=[],component,props,scheduled=false,patch,settingsPatch;
 const eq=(a,b)=>a&&b&&a.length===b.length&&a.every((x,i)=>Object.is(x,b[i]));
 function schedule(){if(!scheduled){scheduled=true;queueMicrotask(()=>{scheduled=false;render();});}}
 const React={Fragment:Symbol('fragment'),createElement:(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity)}),
@@ -24,17 +24,28 @@ function dom(node){
   for(const child of node.children)el.append(dom(child));return el;
 }
 function render(){if(!component)return;cursor=0;effects=[];const tree=component(props);document.getElementById('root').replaceChildren(dom(tree));for(const effect of effects)effect();}
-const configData={configuration:{plugins:{quickMarkers:{presetsJson:JSON.stringify(testConfig)}}}};
+let cachedConfig, cachedData;
+const configData=()=>{
+  if(cachedConfig!==testConfig){cachedConfig=testConfig;cachedData={configuration:{plugins:{quickMarkers:{presetsJson:JSON.stringify(testConfig)}}}};}
+  return cachedData;
+};
 const toast={success:text=>testState.toasts.push(text),error:text=>testState.toasts.push(text)};
 const create=({variables})=>testGql('sceneMarkerCreate',variables);
 const find=async({variables})=>({data:await testGql('findTags',variables)});
 const keys={};
 window.PluginApi={React,ReactDOM:{createPortal:(node,host)=>({type:'portal',props:{host},children:[node]})},
-  GQL:{useConfigurationQuery:()=>({data:configData}),useFindTagsLazyQuery:()=>[find],useSceneMarkerCreateMutation:()=>[create]},
-  hooks:{useToast:()=>toast},utils:{InteractiveUtils:{getPlayer:()=>({currentTime:t=>t==null?testVideo.currentTime:(testVideo.currentTime=t),pause:()=>testVideo.pause()})}},
+  GQL:{useConfigurationQuery:()=>({data:configData()}),useFindTagsLazyQuery:()=>[find],useSceneMarkerCreateMutation:()=>[create]},
+  hooks:{useToast:()=>toast,useSettings:()=>({plugins:configData().configuration.plugins,interface:{language:'de'},loading:false,savePluginSettings:(_,settings)=>saveTestConfig(JSON.parse(settings.presetsJson))})},utils:{InteractiveUtils:{getPlayer:()=>({currentTime:t=>t==null?testVideo.currentTime:(testVideo.currentTime=t),pause:()=>testVideo.pause()})}},
   libraries:{Mousetrap:{bind:(key,fn)=>keys[key]=fn,unbind:key=>delete keys[key]}},
-  patch:{after:(name,fn)=>{if(name==='ScenePage')patch=fn;},before:()=>{},instead:()=>{}}
+  patch:{after:(name,fn)=>{if(name==='ScenePage')patch=fn;},before:()=>{},instead:(name,fn)=>{if(name==='PluginSettings')settingsPatch=fn;}}
 };
 function findComponent(node){if(node?.type?.name==='QuickMarkersSceneHook')return node;for(const c of node?.children||[]){const result=findComponent(c);if(result)return result;}}
 window.mountClassic=id=>{for(const cell of cells)cell?.cleanup?.();cells=[];const node=findComponent(patch({scene:{id}},null));component=node.type;props=node.props;render();};
 window.testClassicKey=key=>keys[key]?.({preventDefault(){}});
+
+window.mountClassicSettings=()=>{
+  for(const cell of cells)cell?.cleanup?.();cells=[];
+  const tree=settingsPatch({pluginID:'quickMarkers'},()=>null);
+  const find=node=>node?.type?.name==='QuickMarkersSettings'?node:(node?.children||[]).map(find).find(Boolean);
+  const node=find(tree);component=node.type;props=node.props;render();
+};

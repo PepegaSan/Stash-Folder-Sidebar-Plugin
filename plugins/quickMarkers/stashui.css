@@ -51,6 +51,8 @@
 .qm-x-guide-error { color: var(--danger, #db3737); overflow-wrap: anywhere; margin: 0; }
 .qm-x-advanced { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .qm-x-advanced[hidden] { display: none; }
+.qm-x-compact .qm-x-advanced { padding-top: 0; border-top: 0; }
+.qm-x-video-body .qm-x-tools { margin-inline: 0; }
 
 .qm-x-actions {
   display: flex;
@@ -103,6 +105,10 @@
 
 .qm-x-chip {
   cursor: pointer;
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .qm-x-chip kbd {

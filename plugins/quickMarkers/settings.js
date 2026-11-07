@@ -50,6 +50,14 @@ export const STRINGS_DE = {
   "Make {label} the default preset": "{label} zum Standard-Preset machen",
   "Default preset saved": "Standard-Preset gespeichert",
   "Panel position": "Panel-Position",
+  "Panel view": "Panelansicht",
+  Guided: "Geführt",
+  Classic: "Klassisch",
+  "Instant only": "Nur Instant",
+  "Show transfer tools": "Transfer-Werkzeuge anzeigen",
+  "Show hotkey hints": "Tastenkürzel anzeigen",
+  "In Instant only, clicking a preset immediately creates a marker. Hotkeys keep working in every view.":
+    "In Nur Instant setzt ein Klick auf ein Preset sofort einen Marker. Tastenkürzel funktionieren in jeder Ansicht.",
   "Drag the panel header to move it; double-click resets it.": "Ziehbar am Panel-Kopf; Doppelklick setzt zurück.",
   "Top left": "Oben links",
   "Top right": "Oben rechts",
@@ -777,13 +785,24 @@ export function mountSettings(el, env) {
       </div>${open ? editorHtml(p) : ""}`;
   }
 
-  // Only classic Stash has panel and touch settings; the default preset is the ★ in the list
+  // View preferences are shared by both interfaces; placement and touch are classic-only.
   function generalHtml() {
-    if (stashui) return "";
     const c = S.config;
+    const view = ["guided", "classic", "instant"].includes(c.panelView) ? c.panelView : "guided";
+    const appearance = `<section class="qms-card qms-general" aria-label="${esc(t("Panel view"))}">
+      <div class="qms-field"><label class="qms-label" for="qms-view">${esc(t("Panel view"))}</label>
+        <select id="qms-view" class="${C.field}" data-set="panelView" data-focus="set:view">${[["guided", "Guided"], ["classic", "Classic"], ["instant", "Instant only"]].map(([v, label]) => `<option value="${v}"${v === view ? " selected" : ""}>${esc(t(label))}</option>`).join("")}</select>
+        <small class="qms-hint">${esc(t("In Instant only, clicking a preset immediately creates a marker. Hotkeys keep working in every view."))}</small>
+      </div>
+      <div class="qms-field">
+        <label class="qms-check"><input type="checkbox" data-set="showTransferTools" data-focus="set:transfer"${c.showTransferTools !== false ? " checked" : ""}> ${esc(t("Show transfer tools"))}</label>
+        <label class="qms-check"><input type="checkbox" data-set="showHotkeys" data-focus="set:hotkeys"${c.showHotkeys !== false ? " checked" : ""}> ${esc(t("Show hotkey hints"))}</label>
+      </div>
+    </section>`;
+    if (stashui) return appearance;
     const pos = c.panelPosition || "top-left";
     const touch = c.touchControls || "auto";
-    return `<section class="qms-card qms-general" aria-label="${esc(t("General"))}">
+    return appearance + `<section class="qms-card qms-general" aria-label="${esc(t("General"))}">
         <div class="qms-field"><label class="qms-label" for="qms-pos">${esc(t("Panel position"))}</label>
           <select id="qms-pos" class="${C.field}" data-set="panelPosition" data-focus="set:pos">${POSITIONS.map(([v, l]) => `<option value="${v}"${v === pos ? " selected" : ""}>${esc(t(l))}</option>`).join("")}</select>
           <label class="qms-check"><input type="checkbox" data-set="panelCollapsed" data-focus="set:collapsed"${c.panelCollapsed === true ? " checked" : ""}> ${esc(t("Start collapsed"))}</label>
@@ -1005,7 +1024,7 @@ export function mountSettings(el, env) {
     const n = e.target;
     const key = n.dataset.set;
     if (!key) return;
-    const value = key === "panelCollapsed" ? n.checked : key === "defaultPresetIndex" ? Number(n.value) : n.value;
+    const value = n.type === "checkbox" ? n.checked : key === "defaultPresetIndex" ? Number(n.value) : n.value;
     persist(Object.assign({}, S.config, { [key]: value }), t("Saved"));
   });
 

@@ -146,7 +146,7 @@ Copy `folders.json.example` to `folders.json` and edit:
 Create **scene markers** from the scene player with **presets** (e.g. tag `Compilation`) — no marker dialog.
 
 ![Stash](https://img.shields.io/badge/Stash-UI%20plugin-blue)
-![Version](https://img.shields.io/badge/version-1.14.5-informational)
+![Version](https://img.shields.io/badge/version-1.15.0-informational)
 
 In Stash UI, open **Settings → Plugins → Quick Markers** to create or edit marker presets in the **Presets** section.
 
@@ -158,7 +158,19 @@ In Stash UI, open **Settings → Plugins → Quick Markers** to create or edit m
 - **Tags must exist** in Stash before use (e.g. create tag `Compilation` under **Tags**)
 - Copy `presets.json.example` → `presets.json` in the plugin folder, or configure under **Settings → Plugins → Quick Markers**
 
-## Simple view (default)
+## Panel views
+
+Under **Settings → Plugins → Quick Markers → Panel view**, choose:
+
+- **Guided** (default): the step-by-step start/end guide; **Adjust** opens the other controls.
+- **Classic**: presets and In / Out / Instant immediately visible, without the guide.
+- **Instant only**: click or tap any preset once to create its instant marker at the current playhead. No selection or confirmation click is needed, and a pending range remains unchanged.
+
+**Show transfer tools** and **Show hotkey hints** independently control the copy/paste/same-video tools and the displayed keyboard hints. Hiding hints does not disable shortcuts. These preferences are saved with the plugin settings and apply after scene changes and reloads in classic Stash, its touch bar, and Stash UI (including the on-video panel).
+
+**Deutsch:** Unter **Einstellungen → Plugins → Quick Markers → Panelansicht** stehen **Geführt**, **Klassisch** und **Nur Instant** zur Auswahl. **Transfer-Werkzeuge anzeigen** und **Tastenkürzel anzeigen** lassen sich separat ausschalten.
+
+## Guided view (default)
 
 On a mouse desktop, the floating panel remains available even when the touch bar is enabled. In Stash UI, the Quick Markers panel on the video lets you start, finish or discard a range even with the player controls hidden or in fullscreen. Drag its title to place it anywhere in the picture. This browser remembers the position across scenes and reloads. Click the title to fold or unfold it. Double-click the dotted grip to put it back at the top left. The full guide is also available in the player details. The **Quick Markers** button in the player opens it, and **Manage presets** opens the preset editor.
 
@@ -296,8 +308,8 @@ Copy `plugins/quickMarkers/` to `~/.stash/plugins/quickMarkers/`, add `presets.j
 2. **Settings → Plugins → Reload plugins** (wait until it finishes).
 3. Click **Reload UI** on the plugin row (or fully close the browser tab and open Stash again).
 4. Optional (Docker): restart the Stash container.
-5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.14.5`.
-6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.14.5** next to Quick Markers.
+5. Verify: open browser **F12 → Console** — you should see `[Quick Markers] loaded v1.15.0`.
+6. Open **Settings → Plugins → Quick Markers** — the heading must show **v1.15.0** next to Quick Markers.
 
 If an old version number appears, the old plugin files are still active.
 

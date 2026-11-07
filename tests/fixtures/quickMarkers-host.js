@@ -5,11 +5,23 @@ window.testConfig = { defaultPresetIndex: 0, panelCollapsed: new URLSearchParams
   { id:'favourite', label:'Favourite', primaryTag:'Favourite', title:'Favourite', rangeInKey:'shift+i',rangeOutKey:'shift+o',instantKey:'shift+m',selectSlot:2 },
   { id:'missing', label:'Missing tag', primaryTag:'Missing', title:'Missing', rangeInKey:'shift+i',rangeOutKey:'shift+o',instantKey:'shift+m',selectSlot:3 }
 ] };
+const savedConfig = localStorage.getItem('test.config');
+if (savedConfig) window.testConfig = JSON.parse(savedConfig);
+window.saveTestConfig = config => { window.testConfig = config; localStorage.setItem('test.config', JSON.stringify(config)); };
+const nativeFetch = window.fetch;
+window.fetch = async (url, options) => {
+  if (url === '/graphql') {
+    const {query, variables} = JSON.parse(options.body);
+    return new Response(JSON.stringify({data:await testGql(query,variables)}),{status:200});
+  }
+  return nativeFetch(url,options);
+};
 window.testVideo = Object.assign(new EventTarget(), { currentTime:12, pause(){ testState.paused=true; } });
 document.getElementById('position').oninput=e=>{ testVideo.currentTime=Number(e.target.value);testVideo.dispatchEvent(new Event('timeupdate')); };
 window.testGql = async (query,vars) => {
+  if(query.includes('configurePlugin')) {saveTestConfig(JSON.parse(vars.i.presetsJson)); return {configurePlugin:vars.i};}
   if(query.includes('configuration')) return {configuration:{plugins:{quickMarkers:{presetsJson:JSON.stringify(testConfig)}}}};
-  if(query.includes('findTags')) {const name=(vars.tf||vars.tag_filter).name?.value; return {findTags:{tags:testState.tags.filter(x=>x===name).map(x=>({id:x,name:x}))}};}
+  if(query.includes('findTags')) {const name=Object.values(vars.tf||vars.tag_filter||{})[0]?.value; return {findTags:{tags:testState.tags.filter(x=>!name||x===name).map(x=>({id:x,name:x}))}};}
   if(query.includes('tagCreate')) {testState.tags.push(vars.i.name);return {tagCreate:{id:vars.i.name}};}
   if(query.includes('sceneMarkerCreate')) {
     if(testState.hold) await new Promise(resolve=>window.releaseSave=resolve);
@@ -33,16 +45,21 @@ if (new URLSearchParams(location.search).has('player')) {
   side.querySelector('details[data-xslot]').append(root);
   screen.querySelector('[data-panel]').onclick = () => { side.hidden = !player.classList.toggle('has-panel'); };
 }
-const dictionaries={};let sceneSlot;let currentController;
+const dictionaries={};let sceneSlot,settingsSlot;let currentController;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-window.testStashUI={ has:x=>x==='slot:scene.info', ui:{esc,icon:()=>'',toast:(text,type,action)=>{testState.toasts.push(text);testState.action=action;},errorToast:e=>testState.toasts.push(e.message)},
+window.testStashUI={ has:x=>x==='slot:scene.info'||x==='slot:settings.section', ui:{esc,icon:()=>'',toast:(text,type,action)=>{testState.toasts.push(text);testState.action=action;},errorToast:e=>testState.toasts.push(e.message)},
   store:{get:(key,fallback)=>JSON.parse(localStorage.getItem('test.stashui.'+key))??fallback,set:(key,value)=>localStorage.setItem('test.stashui.'+key,JSON.stringify(value))},
   t:(text,vars)=>{let s=dictionaries.de?.[text]||text;for(const [k,v] of Object.entries(vars||{}))s=s.replaceAll('{'+k+'}',v);return s;},
-  addStrings:(lang,strings)=>{dictionaries[lang]=strings;},on:()=>{},gql:testGql,addSlot:(name,slot)=>{sceneSlot=slot;}
+  addStrings:(lang,strings)=>{dictionaries[lang]={...dictionaries[lang],...strings};},on:()=>{},gql:testGql,addSlot:(name,slot)=>{if(name==='scene.info')sceneSlot=slot;else if(name==='settings.section')settingsSlot=slot;}
 };
 window.mountStashUI=id=>{
   currentController?.abort();currentController=new AbortController();
   const item = window.testPlayerItem = {id,scene_markers:[],files:[{duration:120}]};
   sceneSlot.mount(document.getElementById('root'),{id,kind:'scene',item,signal:currentController.signal,video:testVideo,time:()=>testVideo.currentTime,
     reload:()=>{testState.reloads++;if(!new URLSearchParams(location.search).has('staleReload')) mountStashUI(id);}});
+};
+
+window.mountStashSettings=()=>{
+  currentController?.abort();currentController=new AbortController();
+  settingsSlot.mount(document.getElementById('root'),{signal:currentController.signal});
 };

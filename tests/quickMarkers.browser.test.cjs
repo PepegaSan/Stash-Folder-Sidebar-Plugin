@@ -11,7 +11,8 @@ const root = path.resolve(__dirname, '..');
 before(async () => {
   server = http.createServer(async (req, res) => {
     try {
-      const file = path.resolve(root, '.' + new URL(req.url, 'http://localhost').pathname);
+      const pathname = new URL(req.url, 'http://localhost').pathname.replace('/plugin/quickMarkers/assets/', '/plugins/quickMarkers/');
+      const file = path.resolve(root, '.' + pathname);
       if (!file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
       const content = await fs.readFile(file);
       res.writeHead(200, { 'Content-Type': ({'.js':'text/javascript','.html':'text/html','.css':'text/css'})[path.extname(file)] || 'application/octet-stream' }).end(content);
@@ -26,6 +27,7 @@ after(async () => { await browser?.close(); await new Promise(resolve => server?
 async function open(mode, extra = '') {
   const context = await browser.newContext({ viewport:{width:1180,height:800}, locale:'de-DE' });
   const page = await context.newPage();
+  page.setDefaultTimeout(5000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin + '/tests/fixtures/quickMarkers.html?mode=' + mode + extra);
@@ -34,11 +36,83 @@ async function open(mode, extra = '') {
 }
 const position = async (page, at) => page.locator('#position').fill(String(at));
 const main = page => page.getByRole('button', { name:/^(Anfang markieren|Ende markieren & speichern|Wird gespeichert …)$/ });
+async function settings(page, mode, view, hideExtras = true) {
+  await page.evaluate(mode => window[mode === 'classic' ? 'mountClassicSettings' : 'mountStashSettings'](), mode);
+  await page.evaluate(() => { const side = document.querySelector('[data-side]'); if(side) {side.hidden=false; side.querySelectorAll('details').forEach(el=>el.open=true);} });
+  await page.getByRole('combobox', {name:'Panelansicht',exact:true}).selectOption(view);
+  if (hideExtras) {
+    await page.getByLabel('Transfer-Werkzeuge anzeigen', {exact:true}).uncheck();
+    await page.getByLabel('Tastenkürzel anzeigen', {exact:true}).uncheck();
+  }
+  await page.waitForFunction(({view, hideExtras}) => testConfig.panelView === view && (!hideExtras || (testConfig.showTransferTools === false && testConfig.showHotkeys === false)), {view, hideExtras});
+}
 async function mount(page, mode, id) {
   await page.evaluate(({mode,id})=>window[mode==='classic'?'mountClassic':'mountStashUI'](id),{mode,id});
 }
+async function screenshot(page, name) {
+  if (!process.env.TEST_OUTPUT) return;
+  await fs.mkdir(process.env.TEST_OUTPUT,{recursive:true});
+  await page.screenshot({path:path.join(process.env.TEST_OUTPUT,name+'.png'),fullPage:true});
+}
 
 for (const mode of ['classic','stashui']) {
+  test(`${mode}: saved classic/instant views survive scenes and reloads, and hidden hints do not disable hotkeys`, async () => {
+    const {page, context, errors} = await open(mode);
+    try {
+      await settings(page, mode, 'classic');
+      await mount(page, mode, 'scene-b');
+      const instant = page.getByRole('button',{name:/^(\+ Instant|Sofort)$/});
+      await instant.waitFor();
+      await screenshot(page, mode+'-classic');
+      assert.equal(await page.locator('.quick-markers-guide,.qm-x-guide').count(), 0);
+      assert.equal(await page.locator('.quick-markers-tools,.qm-x-tools,kbd').count(), 0);
+      await position(page, 13.75);
+      await instant.click();
+      await page.waitForFunction(()=>testState.markers.length === 1);
+      assert.equal(await page.evaluate(()=>testState.markers[0].primary_tag_id), 'Compilation');
+      await settings(page, mode, 'instant');
+      await page.reload();
+      const preset = page.getByRole('button',{name:'Favourite',exact:true});
+      await preset.waitFor();
+      await page.setViewportSize({width:390,height:844});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+      await screenshot(page, mode+'-instant');
+      assert.equal(await page.getByRole('button',{name:/^(Out|In|Anfang markieren)$/}).count(), 0);
+      assert.equal(await page.locator('.quick-markers-tools,.qm-x-tools,kbd').count(), 0);
+      await position(page, 27.125);
+      await preset.click();
+      await page.waitForFunction(()=>testState.markers.length === 1);
+      assert.deepEqual(await page.evaluate(()=>testState.markers.map(m=>({scene:m.scene_id,tag:m.primary_tag_id,time:m.seconds,end:m.end_seconds??null}))),
+        [{scene:'scene-a',tag:'Favourite',time:27.125,end:null}]);
+      await mount(page,mode,'scene-c');
+      await page.getByRole('button',{name:'Favourite',exact:true}).waitFor();
+      if(mode==='classic') await page.evaluate(()=>testClassicKey('shift+m'));
+      else await page.keyboard.press('Shift+M');
+      await page.waitForFunction(()=>testState.markers.length === 2);
+      assert.equal(await page.evaluate(()=>testState.markers[1].scene_id),'scene-c');
+      assert.deepEqual(errors,[]);
+    } finally { await context.close(); }
+  });
+
+  test(`${mode}: instant presets keep a pending range intact and prevent duplicate saves while busy`, async () => {
+    const {page,context,errors}=await open(mode);
+    try {
+      await main(page).click();
+      await settings(page,mode,'instant');
+      await mount(page,mode,'scene-a');
+      await position(page,30);
+      await page.evaluate(()=>{testState.hold=true;});
+      await page.getByRole('button',{name:'Favourite',exact:true}).click();
+      await page.waitForFunction(()=>!!window.releaseSave);
+      assert.equal(await page.getByRole('button',{name:'Favourite',exact:true}).isDisabled(),true);
+      await page.evaluate(()=>releaseSave());
+      await page.waitForFunction(()=>testState.markers.length===1);
+      assert.deepEqual(await page.evaluate(()=>({start:QuickMarkersGuide.draft('scene-a').start,tag:QuickMarkersGuide.draft('scene-a').preset.primaryTag})),{start:12,tag:'Compilation'});
+      assert.equal(await page.evaluate(()=>testState.markers[0].primary_tag_id),'Favourite');
+      assert.deepEqual(errors,[]);
+    } finally {await context.close();}
+  });
+
   test(`${mode}: a second open tab follows the draft, preset and discard without reloading`, async () => {
     const {page, context} = await open(mode);
     try {
@@ -162,6 +236,44 @@ for (const mode of ['classic','stashui']) {
     } finally { await context.close(); }
   });
 }
+
+test('Stash UI: classic and instant controls work directly on the video with the sidebar closed', async () => {
+  const {page,context,errors}=await open('stashui');
+  try {
+    await settings(page,'stashui','classic');
+    await page.goto(page.url()+'&player=1');
+    const panel=page.locator('.qm-x-video-panel');
+    await panel.locator('[data-qm="instant"]').click();
+    await page.waitForFunction(()=>testState.markers.length===1);
+    assert.equal(await page.locator('[data-side]').isVisible(),false);
+    await settings(page,'stashui','instant');
+    await page.reload();
+    await panel.getByRole('button',{name:'Favourite',exact:true}).click();
+    await page.waitForFunction(()=>testState.markers.length===1);
+    assert.equal(await page.evaluate(()=>testState.markers[0].primary_tag_id),'Favourite');
+    assert.equal(await panel.locator('[data-qm="guide"],.qm-x-tools,kbd').count(),0);
+    await screenshot(page,'stashui-video-instant');
+    assert.deepEqual(errors,[]);
+  } finally {await context.close();}
+});
+
+test('classic touch: saved instant view creates one marker with a single tap', async () => {
+  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,locale:'de-DE'});
+  const page=await context.newPage();
+  try {
+    await page.goto(origin+'/tests/fixtures/quickMarkers.html?mode=classic');
+    await main(page).waitFor();
+    await settings(page,'classic','instant');
+    await page.evaluate(()=>saveTestConfig({...testConfig,touchControls:'on'}));
+    await page.reload();
+    const bar=page.locator('.quick-markers-touch-bar');
+    await bar.getByRole('button',{name:'Favourite',exact:true}).tap();
+    await page.waitForFunction(()=>testState.markers.length===1);
+    assert.equal(await page.evaluate(()=>testState.markers[0].primary_tag_id),'Favourite');
+    assert.equal(await page.locator('.quick-markers-panel,.quick-markers-guide,.quick-markers-touch-actions,.quick-markers-tools').count(),0);
+    await screenshot(page,'classic-touch-instant');
+  } finally {await context.close();}
+});
 
 test('Stash UI: the video guide works with controls hidden and shares its draft across sidebar remounts', async () => {
   const {page, context} = await open('stashui', '&player=1');

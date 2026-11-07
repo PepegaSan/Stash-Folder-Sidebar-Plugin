@@ -2,7 +2,7 @@
   "use strict";
 
   const PLUGIN_ID = "quickMarkers";
-  const PLUGIN_VERSION = "1.14.5";
+  const PLUGIN_VERSION = "1.15.0";
   const Guide = window.QuickMarkersGuide;
   const guideText = (en, de) => browserLang() === "de" ? de : en;
   const PANEL_OPEN_STORAGE_KEY = "quickMarkers.panelOpen";
@@ -396,6 +396,9 @@
     return {
       presets: normalized,
       defaultPresetIndex: defaultIndex,
+      panelView: ["guided", "classic", "instant"].includes(parsed.panelView) ? parsed.panelView : "guided",
+      showTransferTools: parsed.showTransferTools !== false,
+      showHotkeys: parsed.showHotkeys !== false,
       panelPosition: panelPosition,
       panelCollapsed: panelCollapsed,
       touchControls: touchControls,
@@ -405,6 +408,9 @@
   function presetsToJson(config) {
     const root = {
       defaultPresetIndex: config.defaultPresetIndex,
+      panelView: config.panelView || "guided",
+      showTransferTools: config.showTransferTools !== false,
+      showHotkeys: config.showHotkeys !== false,
       presets: config.presets.map(function (p) {
           const o = {
             id: p.id,
@@ -1669,6 +1675,13 @@
 
     if (!configReady || !config || !activePreset) return null;
 
+    const panelView = config.panelView || "guided";
+    const instantOnly = panelView === "instant";
+    const guided = panelView === "guided";
+    const showControls = !guided || advanced;
+    const showHotkeys = config.showHotkeys !== false;
+    const actionTitle = (label, key) => label + (showHotkeys ? " (" + (key || "—") + ")" : "");
+
     const panelPosition = normalizePanelPosition(
       config.panelPosition || "top-left"
     );
@@ -1698,6 +1711,74 @@
       const player = utils.InteractiveUtils && utils.InteractiveUtils.getPlayer();
       if (player && typeof player.pause === "function") player.pause();
       setStatus(guideText("Paused. Your start stays here for later.", "Pause. Dein Anfang bleibt für später erhalten."));
+    }
+
+    function renderTransferTools() {
+      return config.showTransferTools !== false ? React.createElement(
+        "div",
+        { className: "quick-markers-tools" },
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "quick-markers-tool",
+            title: "Copy all markers of this scene (times, titles, tags)",
+            onClick: onCopyMarkers,
+          },
+          "⧉ Copy"
+        ),
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "quick-markers-tool",
+            disabled: !clip,
+            title: clip
+              ? "Paste " + clip.markers.length + " markers from " + clip.sceneTitle
+              : "Copy the markers of another scene first",
+            onClick: function () {
+              setTransferMode("paste");
+            },
+          },
+          "Paste",
+          clip
+            ? React.createElement(
+                "span",
+                { className: "quick-markers-tool-count" },
+                clip.markers.length
+              )
+            : null
+        ),
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "quick-markers-tool",
+            title: "Copy markers to scenes with the same video (phash)",
+            onClick: function () {
+              setTransferMode("same");
+            },
+          },
+          "Same videos…"
+        ),
+        undo
+          ? React.createElement(
+              "button",
+              {
+                type: "button",
+                className: "quick-markers-tool",
+                title: "Remove the markers of the last transfer",
+                onClick: onUndoTransfer,
+              },
+              "↶ Undo",
+              React.createElement(
+                "span",
+                { className: "quick-markers-tool-count" },
+                undo.ids.length + undo.restore.length
+              )
+            )
+          : null
+      ) : null;
     }
 
     function renderGuide() {
@@ -1774,30 +1855,30 @@
                 { className: "quick-markers-title" },
                 "Quick Markers"
               ),
-              !panelOpen ? React.createElement("button", { type: "button", className: "quick-markers-action", disabled: saving, onClick: guidedAction },
+              !panelOpen && guided ? React.createElement("button", { type: "button", className: "quick-markers-action", disabled: saving, onClick: guidedAction },
                 inPoint != null ? guideText("End & save", "Ende & speichern") : guideText("Mark start", "Anfang markieren")) : null,
-              React.createElement(
+              !instantOnly ? React.createElement(
                 "span",
                 { className: "quick-markers-active" },
                 activePreset.label
-              ),
+              ) : null,
               inPoint != null
                 ? React.createElement(
                     "span",
                     {
                       className: "quick-markers-rec",
-                      title: "Recording — press " + (activePreset.rangeOutKey || "Out") + " to save",
+                      title: showHotkeys ? "Recording — press " + (activePreset.rangeOutKey || "Out") + " to save" : "Recording",
                     },
                     formatTime(inPoint)
                   )
                 : null
             ),
             panelOpen
-              ? React.createElement(React.Fragment, null, renderGuide(),
-                advanced ? React.createElement(
+              ? React.createElement(React.Fragment, null, guided ? renderGuide() : null,
+                showControls ? React.createElement(
                   React.Fragment,
                   null,
-                  React.createElement(
+                  !instantOnly ? React.createElement(
                     "div",
                     { className: "quick-markers-actions" },
                     React.createElement(
@@ -1807,7 +1888,7 @@
                         className:
                           "quick-markers-action quick-markers-action-in" +
                           (inPoint != null ? " active" : ""),
-                        title: "In point (" + (activePreset.rangeInKey || "—") + ")",
+                        title: actionTitle("In point", activePreset.rangeInKey),
                         onClick: function () {
                           onRangeIn(activePreset);
                         },
@@ -1824,7 +1905,7 @@
                         type: "button",
                         className: "quick-markers-action",
                         disabled: inPoint == null,
-                        title: "Out point + save range (" + (activePreset.rangeOutKey || "—") + ")",
+                        title: actionTitle("Out point + save range", activePreset.rangeOutKey),
                         onClick: function () {
                           onRangeOut(activePreset);
                         },
@@ -1836,7 +1917,7 @@
                       {
                         type: "button",
                         className: "quick-markers-action quick-markers-action-instant",
-                        title: "Instant marker (" + (activePreset.instantKey || "—") + ")",
+                        title: actionTitle("Instant marker", activePreset.instantKey),
                         onClick: function () {
                           onInstant(activePreset);
                         },
@@ -1856,7 +1937,7 @@
                           "×"
                         )
                       : null
-                  ),
+                  ) : null,
                   React.createElement(
                     "div",
                     { className: "quick-markers-presets" },
@@ -1871,22 +1952,24 @@
                           type: "button",
                           className:
                             "quick-markers-preset-btn" +
-                            (isActive ? " active" : ""),
-                          "aria-pressed": isActive,
-                          title: selectKey
+                            (!instantOnly && isActive ? " active" : ""),
+                          "aria-pressed": instantOnly ? undefined : isActive,
+                          disabled: saving,
+                          title: instantOnly ? guideText("Create instant marker", "Sofort-Marker setzen") : showHotkeys && selectKey
                             ? "Click or " +
                               selectKey +
                               " = select. Double-click = instant marker"
                             : "Click = select for In/Out. Double-click = instant marker",
                           onClick: function () {
-                            selectPreset(index);
+                            if (instantOnly) onInstant(preset);
+                            else selectPreset(index);
                           },
                           onDoubleClick: function () {
-                            if (preset.instantKey) onInstant(preset);
+                            if (!instantOnly && preset.instantKey) onInstant(preset);
                           },
                         },
                         preset.label,
-                        slot
+                        showHotkeys && slot
                           ? React.createElement(
                               "kbd",
                               { className: "quick-markers-key" },
@@ -1896,79 +1979,15 @@
                       );
                     })
                   ),
-                  React.createElement(
-                    "div",
-                    { className: "quick-markers-tools" },
-                    React.createElement(
-                      "button",
-                      {
-                        type: "button",
-                        className: "quick-markers-tool",
-                        title: "Copy all markers of this scene (times, titles, tags)",
-                        onClick: onCopyMarkers,
-                      },
-                      "⧉ Copy"
-                    ),
-                    React.createElement(
-                      "button",
-                      {
-                        type: "button",
-                        className: "quick-markers-tool",
-                        disabled: !clip,
-                        title: clip
-                          ? "Paste " + clip.markers.length + " markers from " + clip.sceneTitle
-                          : "Copy the markers of another scene first",
-                        onClick: function () {
-                          setTransferMode("paste");
-                        },
-                      },
-                      "Paste",
-                      clip
-                        ? React.createElement(
-                            "span",
-                            { className: "quick-markers-tool-count" },
-                            clip.markers.length
-                          )
-                        : null
-                    ),
-                    React.createElement(
-                      "button",
-                      {
-                        type: "button",
-                        className: "quick-markers-tool",
-                        title: "Copy markers to scenes with the same video (phash)",
-                        onClick: function () {
-                          setTransferMode("same");
-                        },
-                      },
-                      "Same videos…"
-                    ),
-                    undo
-                      ? React.createElement(
-                          "button",
-                          {
-                            type: "button",
-                            className: "quick-markers-tool",
-                            title: "Remove the markers of the last transfer",
-                            onClick: onUndoTransfer,
-                          },
-                          "↶ Undo",
-                          React.createElement(
-                            "span",
-                            { className: "quick-markers-tool-count" },
-                            undo.ids.length + undo.restore.length
-                          )
-                        )
-                      : null
-                  ),
-                  status
+                  renderTransferTools(),
+                  status && !guided
                     ? React.createElement(
                         "p",
-                        { className: "quick-markers-status" },
+                        { className: "quick-markers-status", role: "status" },
                         status
                       )
                     : null,
-                  React.createElement(
+                  showHotkeys && !instantOnly ? React.createElement(
                     "p",
                     { className: "quick-markers-hint" },
                     React.createElement("kbd", null, activePreset.rangeInKey || "—"),
@@ -1979,7 +1998,7 @@
                     " Instant · ",
                     React.createElement("kbd", null, "shift+1–9"),
                     " Preset"
-                  ),
+                  ) : null,
                   configError
                     ? React.createElement(
                         "p",
@@ -2031,11 +2050,11 @@
                   )
             ),
             touchBarOpen
-              ? React.createElement(React.Fragment, null, renderGuide(),
-                advanced ? React.createElement(
+              ? React.createElement(React.Fragment, null, guided ? renderGuide() : null,
+                showControls ? React.createElement(
                   React.Fragment,
                   null,
-                  React.createElement(
+                  !instantOnly ? React.createElement(
                     "div",
                     { className: "quick-markers-touch-actions" },
                     React.createElement(
@@ -2089,7 +2108,7 @@
                           "×"
                         )
                       : null
-                  ),
+                  ) : null,
                   React.createElement(
                     "div",
                     { className: "quick-markers-touch-presets" },
@@ -2102,15 +2121,19 @@
                           type: "button",
                           className:
                             "quick-markers-touch-preset" +
-                            (isActive ? " active" : ""),
+                            (!instantOnly && isActive ? " active" : ""),
+                          disabled: saving,
+                          title: instantOnly ? guideText("Create instant marker", "Sofort-Marker setzen") : preset.label,
                           onClick: function () {
-                            selectPreset(index);
+                            if (instantOnly) onInstant(preset);
+                            else selectPreset(index);
                           },
                         },
                         preset.label
                       );
                     })
-                  )
+                  ),
+                  renderTransferTools()
                 ) : null)
               : null
           ), touchHost)

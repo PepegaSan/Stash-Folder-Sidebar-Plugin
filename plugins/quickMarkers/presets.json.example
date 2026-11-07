@@ -1,5 +1,8 @@
 {
   "defaultPresetIndex": 0,
+  "panelView": "guided",
+  "showTransferTools": true,
+  "showHotkeys": true,
   "panelPosition": "top-left",
   "panelCollapsed": false,
   "touchControls": "auto",

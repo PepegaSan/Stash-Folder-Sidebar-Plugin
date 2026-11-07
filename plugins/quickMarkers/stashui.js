@@ -2,7 +2,7 @@
 // Stash UI imports /plugin/quickMarkers/assets/stashui.js and calls the default export.
 // Classic Stash never loads this file; quickMarkers.js is the classic-UI side.
 // The preset format and hotkeys match quickMarkers.js — keep both in sync.
-import "./guide.js?v=1.14.5";
+import "./guide.js?v=1.15.0";
 const Guide = globalThis.QuickMarkersGuide;
 
 const PLUGIN_ID = "quickMarkers";
@@ -43,6 +43,7 @@ const STRINGS_DE = {
   "Saved. You can stop here.": "Gespeichert. Du kannst hier aufhören.",
   "Adjust · presets & tools": "Anpassen · Presets & Werkzeuge",
   "Adjust": "Anpassen",
+  "Create instant marker": "Sofort-Marker setzen",
   "Show simple view": "Einfach anzeigen",
   "No video player active.": "Kein Videoplayer aktiv.",
   "Pause": "Pause",
@@ -270,12 +271,20 @@ function parsePresetsJson(text) {
   ["panelPosition", "panelCollapsed", "touchControls"].forEach((k) => {
     if (parsed[k] !== undefined && !Array.isArray(parsed)) extra[k] = parsed[k];
   });
-  return Object.assign(extra, { presets: normalized, defaultPresetIndex: defaultIndex });
+  return Object.assign(extra, {
+    presets: normalized, defaultPresetIndex: defaultIndex,
+    panelView: ["guided", "classic", "instant"].includes(parsed.panelView) ? parsed.panelView : "guided",
+    showTransferTools: parsed.showTransferTools !== false,
+    showHotkeys: parsed.showHotkeys !== false,
+  });
 }
 
 function presetsToJson(config) {
   const root = {
     defaultPresetIndex: config.defaultPresetIndex,
+    panelView: config.panelView || "guided",
+    showTransferTools: config.showTransferTools !== false,
+    showHotkeys: config.showHotkeys !== false,
     presets: config.presets.map((p) => {
       const o = { id: p.id, label: p.label, primaryTag: p.primaryTag, title: p.title };
       if (p.rangeInKey) o.rangeInKey = p.rangeInKey;
@@ -1525,7 +1534,30 @@ export default function setup(stashui) {
         const saving = busy || Guide.busy(sceneId);
         const disabled = saving ? "disabled" : "";
         const primaryLabel = t(saving ? "Saving…" : armed ? "Mark end & save" : "Mark start");
-        if (videoPanel) {
+        const guided = config.panelView === "guided";
+        const instantOnly = config.panelView === "instant";
+        const keyHint = key => config.showHotkeys !== false ? " · " + esc(prettyKey(key)) : "";
+        const actionsHtml = instantOnly ? "" : `<div class="qm-x-actions">
+              <button type="button" class="kb-btn qm-x-in" data-qm="in" ${disabled} title="${esc(t("Set the in point (start of the range)"))}${keyHint(preset && preset.rangeInKey)}">
+                <i class="qm-x-dot" aria-hidden="true"></i>${armed ? `<span data-qm-elapsed>${esc(formatTime(start))}</span>` : esc(t("In"))}
+              </button>
+              <button type="button" class="kb-btn" data-qm="out" ${armed ? disabled : "disabled"} title="${esc(t("Set the out point and save the range marker"))}${keyHint(preset && preset.rangeOutKey)}">${esc(t("Out"))}</button>
+              <button type="button" class="kb-btn is-primary" data-qm="instant" ${disabled} title="${esc(t("Marker at the current position"))}${keyHint(preset && preset.instantKey)}">${ui.icon("plus")}${esc(t("Instant"))}</button>
+              ${armed ? `<button type="button" class="kb-btn is-icon is-ghost" data-qm="discard" title="${esc(t("Discard in point"))}">${ui.icon("close")}</button>` : ""}
+            </div>`;
+        const presetsHtml = `<div class="qm-x-presets" role="group" aria-label="${esc(t("Presets"))}">
+              ${presets()
+                .map((p, i) => `<button type="button" ${instantOnly ? "" : `aria-pressed="${p.id === preset.id}"`} ${disabled} class="kb-chip qm-x-chip${!instantOnly && p.id === preset.id ? " is-on" : ""}" data-qm-preset="${i}" title="${esc(t(instantOnly ? "Create instant marker" : "Active preset — click to select"))}">${esc(p.label)}${config.showHotkeys !== false && p.selectSlot ? `<kbd>⇧${p.selectSlot}</kbd>` : ""}</button>`)
+                .join("")}
+            </div>`;
+        const toolsHtml = config.showTransferTools !== false ? `<div class="qm-x-tools">
+              <button type="button" class="kb-btn is-ghost" data-qm="copy" title="${esc(t("Copy all markers of this scene (times, titles, tags)"))}">${ui.icon("copies")}${esc(t("Copy"))}</button>
+              <button type="button" class="kb-btn is-ghost" data-qm="paste"${clip ? "" : " disabled"} title="${esc(clip ? t("Paste {n} markers from {title}", { n: clip.markers.length, title: clip.sceneTitle }) : t("Copy the markers of another scene first"))}">${ui.icon("download")}${esc(t("Paste"))}${clip ? `<small>${clip.markers.length}</small>` : ""}</button>
+              <button type="button" class="kb-btn is-ghost" data-qm="same" title="${esc(t("Copy markers to scenes with the same video"))}">${ui.icon("layers")}${esc(t("Same videos"))}</button>
+              ${undo ? `<button type="button" class="kb-btn is-ghost" data-qm="undo" title="${esc(t("Remove the markers of the last transfer"))}">${ui.icon("undo")}${esc(t("Undo"))}<small>${undo.ids.length + undo.restore.length}</small></button>` : ""}
+            </div>` : "";
+        const compactStatus = `${guideError ? `<p class="qm-x-guide-error" role="alert">${esc(guideError)}</p>` : ""}${status ? `<p class="kb-hint qm-x-status" role="status">${esc(status)}</p>` : ""}`;
+        if (videoPanel && guided) {
           videoPanel.querySelector(".qm-x-video-preset").textContent = armed ? preset.label + " · " + formatTime(start) : preset.label;
           videoPanel.querySelector('[data-qm="guide"]').textContent = primaryLabel;
           videoPanel.querySelector(".qm-x-video-actions").hidden = !armed;
@@ -1533,9 +1565,12 @@ export default function setup(stashui) {
           videoPanel.querySelector('[role="status"]').textContent = guideError || (draft?.persisted === false
             ? t("Browser storage is unavailable. Keep this page open to keep your start.") : status);
         }
+        if (videoPanel && !guided) {
+          videoPanel.querySelector(".qm-x-video-body").innerHTML = actionsHtml + presetsHtml + toolsHtml + compactStatus;
+        }
         el.innerHTML = `
-          <div class="qm-x${armed ? " is-armed" : ""}">
-            <div class="qm-x-guide">
+          <div class="qm-x${armed ? " is-armed" : ""}${guided ? "" : " qm-x-compact"}">
+            ${guided ? `<div class="qm-x-guide">
               <strong>${esc(t(armed ? "2 of 2 · Choose the end" : "1 of 2 · Choose the start"))}</strong>
               <p class="kb-hint">${esc(armed
                 ? t("Start at {time} · {label}. Watch or seek to the end of the moment.", { time: formatTime(start), label: preset.label })
@@ -1551,26 +1586,12 @@ export default function setup(stashui) {
                 ${stashui.has("slot:settings.section") ? `<a class="kb-btn is-ghost" href="#/settings/x:${PLUGIN_ID}:settings">${esc(t("Manage presets"))}</a>` : ""}
               </div>
             </div>
-            <div class="qm-x-advanced" ${advanced ? "" : "hidden"}>
-            <div class="qm-x-actions">
-              <button type="button" class="kb-btn qm-x-in" data-qm="in" title="${esc(t("Set the in point (start of the range)"))} · ${esc(prettyKey(preset && preset.rangeInKey))}">
-                <i class="qm-x-dot" aria-hidden="true"></i>${armed ? `<span data-qm-elapsed>${esc(formatTime(start))}</span>` : esc(t("In"))}
-              </button>
-              <button type="button" class="kb-btn" data-qm="out" ${armed ? "" : "disabled"} title="${esc(t("Set the out point and save the range marker"))} · ${esc(prettyKey(preset && preset.rangeOutKey))}">${esc(t("Out"))}</button>
-              <button type="button" class="kb-btn is-primary" data-qm="instant" title="${esc(t("Marker at the current position"))} · ${esc(prettyKey(preset && preset.instantKey))}">${ui.icon("plus")}${esc(t("Instant"))}</button>
-              ${armed ? `<button type="button" class="kb-btn is-icon is-ghost" data-qm="discard" title="${esc(t("Discard in point"))}">${ui.icon("close")}</button>` : ""}
-            </div>
-            <div class="qm-x-presets" role="listbox" aria-label="${esc(t("Presets"))}">
-              ${presets()
-                .map((p, i) => `<button type="button" role="option" aria-selected="${p.id === preset.id}" class="kb-chip qm-x-chip${p.id === preset.id ? " is-on" : ""}" data-qm-preset="${i}" title="${esc(t("Active preset — click to select"))}">${esc(p.label)}${p.selectSlot ? `<kbd>⇧${p.selectSlot}</kbd>` : ""}</button>`)
-                .join("")}
-            </div>
-            <div class="qm-x-tools">
-              <button type="button" class="kb-btn is-ghost" data-qm="copy" title="${esc(t("Copy all markers of this scene (times, titles, tags)"))}">${ui.icon("copies")}${esc(t("Copy"))}</button>
-              <button type="button" class="kb-btn is-ghost" data-qm="paste"${clip ? "" : " disabled"} title="${esc(clip ? t("Paste {n} markers from {title}", { n: clip.markers.length, title: clip.sceneTitle }) : t("Copy the markers of another scene first"))}">${ui.icon("download")}${esc(t("Paste"))}${clip ? `<small>${clip.markers.length}</small>` : ""}</button>
-              <button type="button" class="kb-btn is-ghost" data-qm="same" title="${esc(t("Copy markers to scenes with the same video"))}">${ui.icon("layers")}${esc(t("Same videos"))}</button>
-              ${undo ? `<button type="button" class="kb-btn is-ghost" data-qm="undo" title="${esc(t("Remove the markers of the last transfer"))}">${ui.icon("undo")}${esc(t("Undo"))}<small>${undo.ids.length + undo.restore.length}</small></button>` : ""}
-            </div>
+            ` : compactStatus}
+            <div class="qm-x-advanced" ${!guided || advanced ? "" : "hidden"}>
+            ${actionsHtml}
+            ${presetsHtml}
+            ${toolsHtml}
+
             </div>
           </div>`;
       }
@@ -1578,7 +1599,11 @@ export default function setup(stashui) {
       function onPanelClick(e) {
         const b = e.target.closest("button");
         if (!b || !e.currentTarget.contains(b)) return;
-        if (b.dataset.qmPreset != null) return select(Number(b.dataset.qmPreset));
+        if (b.dataset.qmPreset != null) {
+          if (Guide.busy(sceneId)) return;
+          const index = Number(b.dataset.qmPreset);
+          return config.panelView === "instant" ? onInstant(presets()[index]) : select(index);
+        }
         const action = b.dataset.qm;
         if (action === "adjust") { advanced = !advanced; paint(); }
         else if (Guide.busy(sceneId)) return;
